@@ -32,6 +32,83 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_jobs: {
+        Row: {
+          config: Json
+          created_at: string
+          discord_id: string
+          error: string | null
+          id: string
+          started_at: string | null
+          status: string
+          stopped_at: string | null
+          type: string
+          updated_at: string
+          worker_id: string | null
+        }
+        Insert: {
+          config: Json
+          created_at?: string
+          discord_id: string
+          error?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          stopped_at?: string | null
+          type: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          discord_id?: string
+          error?: string | null
+          id?: string
+          started_at?: string | null
+          status?: string
+          stopped_at?: string | null
+          type?: string
+          updated_at?: string
+          worker_id?: string | null
+        }
+        Relationships: []
+      }
+      bot_logs: {
+        Row: {
+          created_at: string
+          discord_id: string
+          id: number
+          job_id: string
+          level: string
+          message: string
+        }
+        Insert: {
+          created_at?: string
+          discord_id: string
+          id?: number
+          job_id: string
+          level: string
+          message: string
+        }
+        Update: {
+          created_at?: string
+          discord_id?: string
+          id?: number
+          job_id?: string
+          level?: string
+          message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "bot_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mc_accounts: {
         Row: {
           auth_type: string

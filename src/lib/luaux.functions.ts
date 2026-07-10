@@ -44,7 +44,7 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const addMcAccount = createServerFn({ method: "POST" })
-  .validator((input) =>
+  .inputValidator((input) =>
     z
       .object({
         label: z.string().min(1).max(60),
@@ -73,7 +73,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
   });
 
 export const deleteMcAccount = createServerFn({ method: "POST" })
-  .validator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
@@ -89,7 +89,7 @@ export const deleteMcAccount = createServerFn({ method: "POST" })
 const SUPPORTED_CURRENCIES = ["ltc", "sol", "usdttrc20", "usdcsol"] as const;
 
 export const createInvoice = createServerFn({ method: "POST" })
-  .validator((input) =>
+  .inputValidator((input) =>
     z
       .object({
         plan_id: z.string().min(1),
@@ -164,7 +164,7 @@ export const createInvoice = createServerFn({ method: "POST" })
   });
 
 export const getPayment = createServerFn({ method: "GET" })
-  .validator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
@@ -202,7 +202,7 @@ export const getVerificationKeys = createServerFn({ method: "GET" }).handler(asy
 });
 
 export const getPluginKeys = createServerFn({ method: "GET" })
-  .validator((d: unknown) => {
+  .inputValidator((d: unknown) => {
     const o = d as { plugin_id?: string };
     if (!o?.plugin_id) throw new Error("plugin_id required");
     return { plugin_id: String(o.plugin_id) };

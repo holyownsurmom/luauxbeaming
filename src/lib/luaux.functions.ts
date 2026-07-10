@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
-  const { getSessionUser, admin, ensureProfile } = await import("./luaux-server.server");
+  const { getSessionUser, getSessionData, admin, ensureProfile } = await import("./luaux-server.server");
   const user = await getSessionUser();
   if (!user) return { profile: null, plan: null };
   await ensureProfile(user);
@@ -21,7 +21,8 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
     !!profile?.active_plan_id &&
     !!profile?.plan_expires_at &&
     new Date(profile.plan_expires_at).getTime() > Date.now();
-  const isAdmin = profile?.role === "admin";
+  const sessionData = await getSessionData();
+  const isAdmin = sessionData.isAdmin === true;
   return { profile, plan, active: active || isAdmin, isAdmin };
 });
 

@@ -10,6 +10,7 @@ import {
   Languages,
   Sparkles,
   ChevronDown,
+  ShieldCheck,
 } from "lucide-react";
 import { getMyProfile } from "@/lib/luaux.functions";
 import { useSettings, type Theme } from "@/lib/settings-context";
@@ -25,7 +26,8 @@ type Tab =
   | "bot-hours"
   | "notifications"
   | "appearance"
-  | "language";
+  | "language"
+  | "admin";
 
 const ACCOUNT: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "profile", label: "Profile", icon: User },
@@ -36,6 +38,7 @@ const WORKSPACE: { id: Tab; label: string; icon: React.ComponentType<{ className
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "language", label: "Language & currency", icon: Languages },
+  { id: "admin", label: "Admin", icon: ShieldCheck },
 ];
 
 function SettingsPage() {
@@ -55,10 +58,17 @@ function SettingsPage() {
     active: boolean;
   } | null>(null);
   const [tab, setTab] = useState<Tab>("language");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPw, setAdminPw] = useState("");
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfile()
-      .then((r) => setData(r as never))
+      .then((r) => {
+        setData(r as never);
+        setIsAdmin((r as { isAdmin?: boolean }).isAdmin ?? false);
+      })
       .catch(() => setData({ profile: null, plan: null, active: false }));
   }, [fetchProfile]);
 
@@ -78,6 +88,7 @@ function SettingsPage() {
     notifications: s.t("notifications"),
     appearance: s.t("appearance"),
     language: s.t("language_currency"),
+    admin: "Admin",
   };
 
   return (
@@ -284,6 +295,60 @@ function SettingsPage() {
                   />
                 </div>
               </div>
+            </Panel>
+          )}
+
+          {tab === "admin" && (
+            <Panel title="Admin Access" subtitle="Enter the admin password to unlock all features.">
+              {isAdmin ? (
+                <div className="rounded-xl bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
+                  <ShieldCheck className="h-4 w-4 inline mr-1" />
+                  Admin mode active. All features unlocked.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="text-xs space-y-1">
+                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                      Admin Password
+                    </span>
+                    <input
+                      type="password"
+                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                      value={adminPw}
+                      onChange={(e) => { setAdminPw(e.target.value); setAdminError(null); }}
+                      placeholder="Enter admin password"
+                    />
+                  </label>
+                  {adminError && <div className="text-xs text-destructive">{adminError}</div>}
+                  <button
+                    onClick={async () => {
+                      setAdminLoading(true);
+                      setAdminError(null);
+                      try {
+                        const res = await fetch("/api/admin/login", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ password: adminPw }),
+                        });
+                        if (!res.ok) {
+                          const d = await res.json();
+                          throw new Error(d.error || "Wrong password");
+                        }
+                        setIsAdmin(true);
+                        setAdminPw("");
+                      } catch (e) {
+                        setAdminError(e instanceof Error ? e.message : "Failed");
+                      } finally {
+                        setAdminLoading(false);
+                      }
+                    }}
+                    disabled={adminLoading || !adminPw.trim()}
+                    className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {adminLoading ? "Checking..." : "Unlock Admin"}
+                  </button>
+                </div>
+              )}
             </Panel>
           )}
         </div>

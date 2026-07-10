@@ -14,12 +14,14 @@ type StoredUser = {
   avatar: string | null;
 };
 
+type SessionData = { user?: StoredUser; isAdmin?: boolean };
+
 export const Route = createFileRoute("/api/me")({
   server: {
     handlers: {
       GET: async () => {
-        const session = await useSession<{ user?: StoredUser }>(cfg());
-        return Response.json({ user: session.data.user ?? null });
+        const session = await useSession<SessionData>(cfg());
+        return Response.json({ user: session.data.user ?? null, isAdmin: session.data.isAdmin === true });
       },
     },
   },

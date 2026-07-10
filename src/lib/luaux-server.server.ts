@@ -8,7 +8,7 @@ export type LuauxSessionUser = {
   avatar: string | null;
 };
 
-type SessionData = { oauth_state?: string; user?: LuauxSessionUser };
+type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean };
 
 export const sessionConfig = () => ({
   password: process.env.SESSION_SECRET!,
@@ -19,6 +19,11 @@ export const sessionConfig = () => ({
 export async function getSessionUser(): Promise<LuauxSessionUser | null> {
   const session = await useSession<SessionData>(sessionConfig());
   return session.data.user ?? null;
+}
+
+export async function getSessionData(): Promise<SessionData> {
+  const session = await useSession<SessionData>(sessionConfig());
+  return session.data;
 }
 
 export async function requireUser(): Promise<LuauxSessionUser> {

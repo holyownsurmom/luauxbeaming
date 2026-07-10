@@ -9,13 +9,25 @@ export function admin() {
 
 export type SessionUser = { id: string; username: string; global_name: string | null; avatar: string | null };
 
+type SessionData = {
+  user?: SessionUser;
+  isAdmin?: boolean;
+};
+
+const cfg = () => ({
+  password: process.env.SESSION_SECRET!,
+  name: "luaux_session",
+  maxAge: 60 * 60 * 24 * 30,
+});
+
+export async function getSessionData(): Promise<SessionData> {
+  const session = await useSession<SessionData>(cfg());
+  return session.data;
+}
+
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const session = await useSession<{ user?: SessionUser }>({
-    password: process.env.SESSION_SECRET!,
-    name: "luaux_session",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-  return session.data.user ?? null;
+  const data = await getSessionData();
+  return data.user ?? null;
 }
 
 export async function requireUser(): Promise<SessionUser> {
@@ -24,26 +36,16 @@ export async function requireUser(): Promise<SessionUser> {
   return user;
 }
 
-export async function requireAdmin(): Promise<SessionUser & { isAdmin: true }> {
-  const user = await requireUser();
-  const db = admin();
-  const { data: profile } = await db
-    .from("profiles")
-    .select("role")
-    .eq("discord_id", user.id)
-    .maybeSingle();
-  if (profile?.role !== "admin") throw new Error("Forbidden");
-  return { ...user, isAdmin: true } as const;
+export async function isAdminSession(): Promise<boolean> {
+  const data = await getSessionData();
+  return data.isAdmin === true;
 }
 
-export async function isAdmin(discordId: string): Promise<boolean> {
-  const db = admin();
-  const { data } = await db
-    .from("profiles")
-    .select("role")
-    .eq("discord_id", discordId)
-    .maybeSingle();
-  return data?.role === "admin";
+export async function requireAdmin(): Promise<SessionUser & { isAdmin: true }> {
+  const user = await requireUser();
+  const admin = await isAdminSession();
+  if (!admin) throw new Error("Forbidden");
+  return { ...user, isAdmin: true } as const;
 }
 
 export function notFound(msg: string) {

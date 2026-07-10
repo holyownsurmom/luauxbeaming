@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getSessionUser, admin, isAdmin, unauthorized, forbidden } from "@/lib/api-helpers";
+import { getSessionUser, admin, isAdminSession, unauthorized, forbidden } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/mc/start")({
   server: {
@@ -9,9 +9,9 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         if (!user) return unauthorized();
 
         const db = admin();
-        const admin_ = await isAdmin(user.id);
+        const adminUser = await isAdminSession();
 
-        if (!admin_) {
+        if (!adminUser) {
           const { data: profile } = await db
             .from("profiles")
             .select("active_plan_id, plan_expires_at, bot_hours_remaining")

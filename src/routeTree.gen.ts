@@ -30,6 +30,8 @@ import { Route as ApiDiscordCallbackRouteImport } from './routes/api/discord.cal
 import { Route as ApiBotsStreamRouteImport } from './routes/api/bots/stream'
 import { Route as ApiBotsLogsRouteImport } from './routes/api/bots/logs'
 import { Route as ApiBotsAllStatusRouteImport } from './routes/api/bots/all-status'
+import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
+import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/public/nowpayments/webhook'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
@@ -146,6 +148,16 @@ const ApiBotsAllStatusRoute = ApiBotsAllStatusRouteImport.update({
   path: '/api/bots/all-status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminLogoutRoute = ApiAdminLogoutRouteImport.update({
+  id: '/api/admin/logout',
+  path: '/api/admin/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
+  id: '/api/admin/login',
+  path: '/api/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicNowpaymentsWebhookRoute =
   ApiPublicNowpaymentsWebhookRouteImport.update({
     id: '/api/public/nowpayments/webhook',
@@ -204,6 +216,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
@@ -234,6 +248,8 @@ export interface FileRoutesByTo {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
@@ -266,6 +282,8 @@ export interface FileRoutesById {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
@@ -299,6 +317,8 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
+    | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/bots/all-status'
     | '/api/bots/logs'
     | '/api/bots/stream'
@@ -329,6 +349,8 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard'
+    | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/bots/all-status'
     | '/api/bots/logs'
     | '/api/bots/stream'
@@ -360,6 +382,8 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
+    | '/api/admin/login'
+    | '/api/admin/logout'
     | '/api/bots/all-status'
     | '/api/bots/logs'
     | '/api/bots/stream'
@@ -381,6 +405,8 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiMeRoute: typeof ApiMeRoute
+  ApiAdminLoginRoute: typeof ApiAdminLoginRoute
+  ApiAdminLogoutRoute: typeof ApiAdminLogoutRoute
   ApiBotsAllStatusRoute: typeof ApiBotsAllStatusRoute
   ApiBotsLogsRoute: typeof ApiBotsLogsRoute
   ApiBotsStreamRoute: typeof ApiBotsStreamRoute
@@ -546,6 +572,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsAllStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/logout': {
+      id: '/api/admin/logout'
+      path: '/api/admin/logout'
+      fullPath: '/api/admin/logout'
+      preLoaderRoute: typeof ApiAdminLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/login': {
+      id: '/api/admin/login'
+      path: '/api/admin/login'
+      fullPath: '/api/admin/login'
+      preLoaderRoute: typeof ApiAdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/nowpayments/webhook': {
       id: '/api/public/nowpayments/webhook'
       path: '/api/public/nowpayments/webhook'
@@ -642,6 +682,8 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiMeRoute: ApiMeRoute,
+  ApiAdminLoginRoute: ApiAdminLoginRoute,
+  ApiAdminLogoutRoute: ApiAdminLogoutRoute,
   ApiBotsAllStatusRoute: ApiBotsAllStatusRoute,
   ApiBotsLogsRoute: ApiBotsLogsRoute,
   ApiBotsStreamRoute: ApiBotsStreamRoute,

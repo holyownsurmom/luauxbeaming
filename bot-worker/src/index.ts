@@ -6,9 +6,21 @@ import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 const WORKER_ID = process.env.WORKER_ID || `worker-${Date.now()}`;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "3000", 10);
 
-const runningJobs = new Map<string, AbortController>();
+if (!process.env.SITE_URL) {
+  console.error("[worker] ERROR: SITE_URL is not set!");
+  console.error("[worker] Current directory:", process.cwd());
+  console.error("[worker] Expected .env file at:", process.cwd() + "/.env");
+  console.error("[worker] Available env vars:", Object.keys(process.env).filter(k => k.startsWith("SITE") || k.startsWith("WORKER")).join(", ") || "none found");
+  process.exit(1);
+}
+
+if (!process.env.WORKER_SECRET) {
+  console.error("[worker] ERROR: WORKER_SECRET is not set!");
+  process.exit(1);
+}
 
 console.log(`[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms`);
+console.log(`[worker] SITE_URL=${process.env.SITE_URL}`);
 
 async function claimJob(job: {
   id: string;

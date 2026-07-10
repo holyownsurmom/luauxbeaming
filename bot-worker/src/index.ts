@@ -22,6 +22,8 @@ if (!process.env.WORKER_SECRET) {
 console.log(`[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms`);
 console.log(`[worker] SITE_URL=${process.env.SITE_URL}`);
 
+const runningJobs = new Map<string, AbortController>();
+
 async function claimJob(job: {
   id: string;
   discord_id: string;

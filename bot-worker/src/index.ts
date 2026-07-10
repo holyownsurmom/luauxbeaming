@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { pollJobs, updateJob, flushAllLogs } from "./api.js";
 import { runMcBot, type McJobConfig } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 
@@ -22,15 +22,6 @@ async function claimJob(job: {
 
   console.log(`[worker] claimed job ${job.id} (${job.type})`);
 
-  await db
-    .from("bot_jobs")
-    .update({
-      status: "running",
-      worker_id: WORKER_ID,
-      started_at: new Date().toISOString(),
-    })
-    .eq("id", job.id);
-
   try {
     if (job.type === "mc") {
       await runMcBot(
@@ -48,72 +39,24 @@ async function claimJob(job: {
       );
     }
 
-    const finalStatus = controller.signal.aborted ? "stopped" : "stopped";
-    await db
-      .from("bot_jobs")
-      .update({
-        status: finalStatus,
-        stopped_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
-
-    console.log(`[worker] job ${job.id} finished (${finalStatus})`);
+    if (!controller.signal.aborted) {
+      await updateJob(job.id, "completed");
+      console.log(`[worker] job ${job.id} finished (completed)`);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[worker] job ${job.id} crashed:`, msg);
-
-    await db
-      .from("bot_jobs")
-      .update({
-        status: "error",
-        error: msg,
-        stopped_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
+    await updateJob(job.id, "error", msg);
   } finally {
     runningJobs.delete(job.id);
   }
 }
 
-async function handleStopSignals() {
-  const { data: stoppingJobs } = await db
-    .from("bot_jobs")
-    .select("id")
-    .eq("status", "stopping");
-
-  if (!stoppingJobs?.length) return;
-
-  for (const job of stoppingJobs) {
-    const controller = runningJobs.get(job.id);
-    if (controller) {
-      console.log(`[worker] stopping job ${job.id}`);
-      controller.abort();
-    } else {
-      await db
-        .from("bot_jobs")
-        .update({
-          status: "stopped",
-          stopped_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-    }
-  }
-}
-
 async function poll() {
   try {
-    await handleStopSignals();
+    const jobs = await pollJobs(WORKER_ID);
 
-    const { data: pendingJobs } = await db
-      .from("bot_jobs")
-      .select("id, discord_id, type, config")
-      .eq("status", "pending")
-      .order("created_at", { ascending: true })
-      .limit(5);
-
-    if (!pendingJobs?.length) return;
-
-    for (const job of pendingJobs) {
+    for (const job of jobs) {
       claimJob(job);
     }
   } catch (err) {
@@ -124,22 +67,16 @@ async function poll() {
 setInterval(poll, POLL_INTERVAL);
 poll();
 
-process.on("SIGINT", async () => {
+async function shutdown() {
   console.log("[worker] shutting down...");
   for (const [id, controller] of runningJobs) {
     console.log(`[worker] aborting job ${id}`);
     controller.abort();
   }
   runningJobs.clear();
+  await flushAllLogs();
   process.exit(0);
-});
+}
 
-process.on("SIGTERM", async () => {
-  console.log("[worker] shutting down...");
-  for (const [id, controller] of runningJobs) {
-    console.log(`[worker] aborting job ${id}`);
-    controller.abort();
-  }
-  runningJobs.clear();
-  process.exit(0);
-});
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

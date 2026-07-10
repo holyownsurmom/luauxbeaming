@@ -75,7 +75,6 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
             };
             const meta = PLUGIN_META[plan.id];
             if (plan.kind === "plugin" && meta) {
-              // Generate a license key for this plugin
               const rand = (n: number) => {
                 const bytes = new Uint8Array(n);
                 crypto.getRandomValues(bytes);
@@ -95,7 +94,6 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
                 .select("id, key, expires_at")
                 .single();
 
-              // DM the user their key via the Discord bot
               try {
                 const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
                   method: "POST",
@@ -130,39 +128,37 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
                 console.warn(`[${plan.id}] DM failed`, e);
               }
             } else {
-            if (plan.kind === "hours") {
               const { data: profile } = await db
                 .from("profiles")
-                .select("bot_hours_remaining")
+                .select("plan_expires_at, bot_hours_remaining")
                 .eq("discord_id", pmt.discord_id)
                 .maybeSingle();
+
+              const now = Date.now();
+              const existingExpiry = profile?.plan_expires_at
+                ? new Date(profile.plan_expires_at).getTime()
+                : 0;
+
               const newHours = Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours);
+              const update: Record<string, unknown> = { bot_hours_remaining: newHours };
+
+              if (plan.kind === "hours") {
+                // Hours-only packs: add hours + set active plan with 90-day expiry
+                const base = Math.max(existingExpiry, now);
+                const expiryDays = plan.duration_days || 90;
+                update.active_plan_id = plan.id;
+                update.plan_expires_at = new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+              } else {
+                // Full plans: stack expiry + add hours
+                const base = Math.max(existingExpiry, now);
+                update.active_plan_id = plan.id;
+                update.plan_expires_at = new Date(base + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
+              }
+
               await db
                 .from("profiles")
-                .update({ bot_hours_remaining: newHours })
+                .update(update)
                 .eq("discord_id", pmt.discord_id);
-            } else {
-            const { data: profile } = await db
-              .from("profiles")
-              .select("plan_expires_at, bot_hours_remaining")
-              .eq("discord_id", pmt.discord_id)
-              .maybeSingle();
-            const now = Date.now();
-            const existingExpiry = profile?.plan_expires_at
-              ? new Date(profile.plan_expires_at).getTime()
-              : 0;
-            const base = Math.max(existingExpiry, now);
-            const newExpiry = new Date(base + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
-            const newHours = Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours);
-            await db
-              .from("profiles")
-              .update({
-                active_plan_id: plan.id,
-                plan_expires_at: newExpiry,
-                bot_hours_remaining: newHours,
-              })
-              .eq("discord_id", pmt.discord_id);
-            }
             }
           }
         }

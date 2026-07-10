@@ -33,6 +33,3 @@ CREATE INDEX IF NOT EXISTS bot_logs_user_idx ON public.bot_logs(discord_id, crea
 GRANT ALL ON public.bot_logs TO service_role;
 ALTER TABLE public.bot_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "service role only" ON public.bot_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- Admin role column on profiles
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';

@@ -44,7 +44,7 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
 });
 
 export const addMcAccount = createServerFn({ method: "POST" })
-  .inputValidator((input) =>
+  .validator((input) =>
     z
       .object({
         label: z.string().min(1).max(60),
@@ -73,7 +73,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
   });
 
 export const deleteMcAccount = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .validator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
@@ -89,7 +89,7 @@ export const deleteMcAccount = createServerFn({ method: "POST" })
 const SUPPORTED_CURRENCIES = ["ltc", "sol", "usdttrc20", "usdcsol"] as const;
 
 export const createInvoice = createServerFn({ method: "POST" })
-  .inputValidator((input) =>
+  .validator((input) =>
     z
       .object({
         plan_id: z.string().min(1),
@@ -118,7 +118,7 @@ export const createInvoice = createServerFn({ method: "POST" })
         pay_currency: data.pay_currency,
         order_id,
         order_description: `LuauX ${plan.name} plan`,
-        ipn_callback_url: "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook",
+        ipn_callback_url: process.env.IPN_CALLBACK_URL || "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook",
       }),
     });
     if (!npRes.ok) {
@@ -164,7 +164,7 @@ export const createInvoice = createServerFn({ method: "POST" })
   });
 
 export const getPayment = createServerFn({ method: "GET" })
-  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .validator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
@@ -202,7 +202,7 @@ export const getVerificationKeys = createServerFn({ method: "GET" }).handler(asy
 });
 
 export const getPluginKeys = createServerFn({ method: "GET" })
-  .inputValidator((d: unknown) => {
+  .validator((d: unknown) => {
     const o = d as { plugin_id?: string };
     if (!o?.plugin_id) throw new Error("plugin_id required");
     return { plugin_id: String(o.plugin_id) };

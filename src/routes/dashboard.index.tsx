@@ -30,14 +30,14 @@ type Plan = { id: string; name: string; max_bots: number; bot_hours: number };
 
 function Overview() {
   const fetchProfile = useServerFn(getMyProfile);
-  const [data, setData] = useState<{ profile: Profile | null; plan: Plan | null; active: boolean } | null>(null);
+  const [data, setData] = useState<{ profile: Profile | null; plan: Plan | null; active: boolean; isAdmin?: boolean } | null>(null);
 
   useEffect(() => {
-    fetchProfile().then((d) => setData(d as never));
+    fetchProfile().then((d) => setData(d as { profile: Profile | null; plan: Plan | null; active: boolean; isAdmin?: boolean }));
   }, [fetchProfile]);
 
   const active = data?.active ?? false;
-  const isAdmin = (data as any)?.isAdmin ?? false;
+  const isAdmin = data?.isAdmin ?? false;
   const profile = data?.profile;
   const plan = data?.plan;
   const displayName = profile?.global_name || profile?.username || "friend";

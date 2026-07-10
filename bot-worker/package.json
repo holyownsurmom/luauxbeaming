@@ -10,8 +10,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.1",
-    "discord.js": "^14.26.4",
     "mineflayer": "^4.37.1"
   },
   "devDependencies": {

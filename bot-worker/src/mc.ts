@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { createLogger, updateJob } from "./api.js";
 
 export type McJobConfig = {
   accountId: string;
@@ -27,25 +27,9 @@ export async function runMcBot(
   config: McJobConfig,
   abortSignal: AbortSignal
 ): Promise<void> {
-  const log = async (level: string, message: string) => {
-    await db.from("bot_logs").insert({
-      job_id: jobId,
-      discord_id: discordId,
-      level,
-      message,
-    });
-  };
-
-  const setStatus = async (status: string, error?: string) => {
-    const update: Record<string, unknown> = { status };
-    if (error) update.error = error;
-    if (status === "running") update.started_at = new Date().toISOString();
-    if (status === "stopped" || status === "error") update.stopped_at = new Date().toISOString();
-    await db.from("bot_jobs").update(update).eq("id", jobId);
-  };
+  const log = createLogger(jobId, discordId);
 
   await log("system", `Connecting to ${config.serverHost}:${config.serverPort}...`);
-  await setStatus("running");
 
   const mineflayer = await loadMineflayer();
 
@@ -86,7 +70,8 @@ export async function runMcBot(
     await log("system", "Stop signal received, disconnecting...");
   });
 
-  const bot = mineflayer.createBot(botOptions as never);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bot = (mineflayer as any).createBot(botOptions);
 
   bot.on("login", async () => {
     await log("info", `Logged in as ${bot.username}`);
@@ -94,7 +79,7 @@ export async function runMcBot(
 
   bot.on("spawn", async () => {
     await log("info", "Spawned in world");
-    await setStatus("running");
+    await updateJob(jobId, "running");
 
     if (config.messages.length > 0 && config.interval > 0) {
       const sendNext = async () => {
@@ -132,22 +117,20 @@ export async function runMcBot(
   bot.on("kicked", async (reason: string) => {
     await log("error", `Kicked: ${reason}`);
     cleanup();
-    await setStatus("error", reason);
+    await updateJob(jobId, "error", reason);
   });
 
   bot.on("end", async (reason: string) => {
     await log("system", `Disconnected: ${reason || "connection closed"}`);
     cleanup();
     if (!abortSignal.aborted) {
-      await setStatus("stopped");
+      await updateJob(jobId, "stopped");
     }
   });
 
   bot.on("death", async () => {
     await log("warn", "Bot died, respawning...");
   });
-
-  bot.on("error", () => {});
 
   return new Promise((resolve) => {
     const checkAbort = setInterval(() => {

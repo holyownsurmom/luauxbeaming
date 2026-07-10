@@ -1,4 +1,4 @@
-import { db } from "./supabase.js";
+import { createLogger, updateJob } from "./api.js";
 
 export type DiscordJobConfig = {
   token: string;
@@ -26,25 +26,11 @@ export async function runDiscordBot(
   config: DiscordJobConfig,
   abortSignal: AbortSignal
 ): Promise<void> {
-  const log = async (level: string, message: string) => {
-    await db.from("bot_logs").insert({
-      job_id: jobId,
-      discord_id: discordId,
-      level,
-      message,
-    });
-  };
+  const log = createLogger(jobId, discordId);
 
-  const setStatus = async (status: string, error?: string) => {
-    const update: Record<string, unknown> = { status };
-    if (error) update.error = error;
-    if (status === "running") update.started_at = new Date().toISOString();
-    if (status === "stopped" || status === "error") update.stopped_at = new Date().toISOString();
-    await db.from("bot_jobs").update(update).eq("id", jobId);
-  };
-
+  const startedAt = Date.now();
   await log("system", "Initializing Discord user-token client...");
-  await setStatus("running");
+  await updateJob(jobId, "running");
 
   let stopped = false;
 
@@ -62,14 +48,14 @@ export async function runDiscordBot(
     if (!meRes.ok) {
       const t = await meRes.text();
       await log("error", `Token invalid (${meRes.status}): ${t}`);
-      await setStatus("error", "Invalid token");
+      await updateJob(jobId, "error", "Invalid token");
       return;
     }
     me = await meRes.json();
     await log("info", `Logged in as ${me!.username} (${me!.id})`);
   } catch (e) {
     await log("error", `Token check failed: ${e instanceof Error ? e.message : String(e)}`);
-    await setStatus("error", "Token check failed");
+    await updateJob(jobId, "error", "Token check failed");
     return;
   }
 
@@ -81,14 +67,14 @@ export async function runDiscordBot(
     if (!chRes.ok) {
       const t = await chRes.text();
       await log("error", `Cannot access channel (${chRes.status}): ${t}`);
-      await setStatus("error", "Channel not accessible");
+      await updateJob(jobId, "error", "Channel not accessible");
       return;
     }
     const ch = await chRes.json();
     await log("info", `Target: #${ch.name || config.channelId}`);
   } catch (e) {
     await log("error", `Channel fetch failed: ${e instanceof Error ? e.message : String(e)}`);
-    await setStatus("error", "Channel check failed");
+    await updateJob(jobId, "error", "Channel check failed");
     return;
   }
 
@@ -148,7 +134,7 @@ export async function runDiscordBot(
 
         if (failCount > 20) {
           await log("error", "Too many failures, stopping");
-          await setStatus("error", "Too many send failures");
+          await updateJob(jobId, "error", "Too many send failures");
           stopped = true;
           return;
         }
@@ -172,15 +158,14 @@ export async function runDiscordBot(
 
   sendNext();
 
-  const runtimeMinutes = setInterval(() => {
+  const runtimeLog = setInterval(() => {
     if (!stopped) {
-      log("info", `Runtime: ${Math.floor(process.uptime() / 60)}m | Sent: ${sentCount} | Failed: ${failCount}`);
+      const botMinutes = Math.floor((Date.now() - startedAt) / 60000);
+      log("info", `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount}`);
     }
   }, 300000);
 
-  abortSignal.addEventListener("abort", () => clearInterval(runtimeMinutes), { once: true });
-
-  await setStatus("running");
+  abortSignal.addEventListener("abort", () => clearInterval(runtimeLog), { once: true });
 
   return new Promise((resolve) => {
     const checkAbort = setInterval(() => {

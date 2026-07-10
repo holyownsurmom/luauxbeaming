@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
@@ -38,6 +39,11 @@ import { Route as ApiBotsDiscordStopRouteImport } from './routes/api/bots/discor
 import { Route as ApiBotsDiscordStatusRouteImport } from './routes/api/bots/discord/status'
 import { Route as ApiBotsDiscordStartRouteImport } from './routes/api/bots/discord/start'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -185,6 +191,7 @@ const ApiBotsDiscordStartRoute = ApiBotsDiscordStartRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -245,6 +253,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -277,6 +286,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/sitemap.xml'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -306,6 +316,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/sitemap.xml'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/sitemap.xml'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -367,6 +379,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiMeRoute: typeof ApiMeRoute
   ApiBotsAllStatusRoute: typeof ApiBotsAllStatusRoute
   ApiBotsLogsRoute: typeof ApiBotsLogsRoute
@@ -386,6 +399,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -620,6 +640,7 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiMeRoute: ApiMeRoute,
   ApiBotsAllStatusRoute: ApiBotsAllStatusRoute,
   ApiBotsLogsRoute: ApiBotsLogsRoute,

@@ -533,7 +533,7 @@ function DiscordSpamPage() {
           <div className="px-5 pb-5 space-y-4 border-t border-border/60 pt-4">
             <label className="text-xs space-y-1">
               <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                Bot Token
+                User Token
               </span>
               <input
                 type="password"
@@ -543,7 +543,7 @@ function DiscordSpamPage() {
                 placeholder="MTI..."
               />
               <span className="text-[10px] text-muted-foreground">
-                Your Discord bot token. The bot must be in the target server.
+                Discord user token (from browser DevTools). Your account must be in the server.
               </span>
             </label>
 

@@ -41,12 +41,15 @@ async function pingMcServer(host: string, port = 25565): Promise<{
         return Buffer.from(bytes);
       };
 
+      const portBuf = Buffer.alloc(2);
+      portBuf.writeUInt16BE(port);
+
       const handshake = Buffer.concat([
         writeVarInt(0),
         writeVarInt(-1),
         writeVarInt(host.length),
         Buffer.from(host),
-        Buffer.alloc(2),
+        portBuf,
         writeVarInt(1),
       ]);
 

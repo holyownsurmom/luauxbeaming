@@ -103,7 +103,7 @@ function BotsPage() {
     };
     setActive(p.active);
     setIsAdmin(p.isAdmin ?? false);
-    setMaxBots(p.plan?.max_bots ?? 0);
+    setMaxBots(p.isAdmin ? 999 : (p.plan?.max_bots ?? 0));
     const a = (await fetchAccounts()) as Account[];
     setAccounts(a);
   };

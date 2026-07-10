@@ -21,7 +21,8 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
     !!profile?.active_plan_id &&
     !!profile?.plan_expires_at &&
     new Date(profile.plan_expires_at).getTime() > Date.now();
-  return { profile, plan, active };
+  const isAdmin = profile?.role === "admin";
+  return { profile, plan, active: active || isAdmin, isAdmin };
 });
 
 export const getPlans = createServerFn({ method: "GET" }).handler(async () => {

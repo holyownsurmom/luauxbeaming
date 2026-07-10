@@ -1,21 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-import { botManager } from "@/lib/bot-manager.server";
+import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/stream")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const session = await useSession<{ user?: { id: string } }>({
-          password: process.env.SESSION_SECRET!,
-          name: "luaux_session",
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        const user = session.data.user;
-        if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getSessionUser();
+        if (!user) return unauthorized();
 
         const encoder = new TextEncoder();
         let closed = false;
+        let lastTs = Date.now();
 
         const stream = new ReadableStream({
           start(controller) {
@@ -28,27 +23,50 @@ export const Route = createFileRoute("/api/bots/stream")({
 
             send({ type: "connected", userId: user.id });
 
-            const unsub = botManager.subscribeGlobal((entry) => {
-              const bot = botManager.get(entry.botId);
-              if (bot && bot.userId === user.id) {
-                send({ type: "log", ...entry });
-              }
-            });
+            const poll = async () => {
+              if (closed) return;
+              try {
+                const db = admin();
+                const sinceDate = new Date(lastTs).toISOString();
+                const { data: rows } = await db
+                  .from("bot_logs")
+                  .select("job_id, level, message, created_at")
+                  .eq("discord_id", user.id)
+                  .gt("created_at", sinceDate)
+                  .order("created_at", { ascending: true })
+                  .limit(100);
+
+                if (rows?.length) {
+                  for (const r of rows) {
+                    send({
+                      type: "log",
+                      ts: new Date(r.created_at).getTime(),
+                      level: r.level,
+                      msg: r.message,
+                      botId: r.job_id,
+                    });
+                  }
+                  lastTs = new Date(rows[rows.length - 1].created_at).getTime();
+                }
+              } catch {}
+            };
 
             const heartbeat = setInterval(() => {
               if (closed) {
                 clearInterval(heartbeat);
-                unsub();
                 return;
               }
               send({ type: "heartbeat", ts: Date.now() });
             }, 15000);
 
+            const pollInterval = setInterval(poll, 2000);
+            poll();
+
             const cleanup = () => {
               if (closed) return;
               closed = true;
               clearInterval(heartbeat);
-              unsub();
+              clearInterval(pollInterval);
               try { controller.close(); } catch {}
             };
 

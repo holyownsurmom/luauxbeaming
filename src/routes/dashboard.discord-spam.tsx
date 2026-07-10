@@ -17,7 +17,7 @@ import {
   Settings,
   Shield,
 } from "lucide-react";
-import { getPluginKeys, createInvoice, getPayment } from "@/lib/luaux.functions";
+import { getPluginKeys, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 
 export const Route = createFileRoute("/dashboard/discord-spam")({
@@ -64,8 +64,10 @@ function DiscordSpamPage() {
   const fetchKeys = useServerFn(getPluginKeys);
   const invoice = useServerFn(createInvoice);
   const getPay = useServerFn(getPayment);
+  const fetchProfile = useServerFn(getMyProfile);
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -95,10 +97,14 @@ function DiscordSpamPage() {
   const [showConfig, setShowConfig] = useState(true);
 
   useEffect(() => {
-    fetchKeys({ data: { plugin_id: "discord-spam" } })
-      .then((d) => setKeys(d as KeyRow[]))
-      .finally(() => setLoading(false));
-  }, [fetchKeys]);
+    Promise.all([
+      fetchKeys({ data: { plugin_id: "discord-spam" } }),
+      fetchProfile(),
+    ]).then(([k, p]) => {
+      setKeys(k as KeyRow[]);
+      setIsAdmin((p as { isAdmin?: boolean }).isAdmin ?? false);
+    }).finally(() => setLoading(false));
+  }, [fetchKeys, fetchProfile]);
 
   useEffect(() => {
     if (!payment) return;
@@ -117,7 +123,7 @@ function DiscordSpamPage() {
     return () => clearInterval(t);
   }, [payment, getPay, fetchKeys]);
 
-  const activeKey = keys.find(
+  const activeKey = isAdmin ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" } : keys.find(
     (k) => new Date(k.expires_at).getTime() > Date.now()
   );
 
@@ -447,6 +453,11 @@ function DiscordSpamPage() {
         <div className="flex-1">
           <h1 className="font-display text-4xl font-semibold tracking-tight">
             Discord Auto-Spam
+            {isAdmin && (
+              <span className="ml-3 inline-flex items-center rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-semibold brutal-border">
+                ADMIN
+              </span>
+            )}
           </h1>
           <p className="mt-1 text-muted-foreground">
             Multi-token channel spammer with rotation and a live console.
@@ -460,29 +471,38 @@ function DiscordSpamPage() {
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
             <span className="text-xs uppercase tracking-widest text-primary">
-              License active
+              {isAdmin ? "Admin mode" : "License active"}
             </span>
           </div>
-          <span className="text-[10px] text-muted-foreground">
-            Expires{" "}
-            {new Date(activeKey.expires_at).toLocaleDateString()}
-          </span>
+          {!isAdmin && (
+            <span className="text-[10px] text-muted-foreground">
+              Expires{" "}
+              {new Date(activeKey!.expires_at).toLocaleDateString()}
+            </span>
+          )}
         </div>
-        <div className="mt-3 flex items-center gap-2">
-          <code className="flex-1 rounded-lg bg-secondary/40 px-3 py-2 font-mono text-sm break-all">
-            {activeKey.key}
-          </code>
-          <button
-            onClick={() => copy(activeKey.key)}
-            className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
-          >
-            {copied === activeKey.key ? (
-              <Check className="h-4 w-4" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-          </button>
-        </div>
+        {!isAdmin && (
+          <div className="mt-3 flex items-center gap-2">
+            <code className="flex-1 rounded-lg bg-secondary/40 px-3 py-2 font-mono text-sm break-all">
+              {activeKey!.key}
+            </code>
+            <button
+              onClick={() => copy(activeKey!.key)}
+              className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
+            >
+              {copied === activeKey!.key ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        )}
+        {isAdmin && (
+          <div className="mt-3 text-xs text-muted-foreground">
+            Payment checks bypassed. All features unlocked.
+          </div>
+        )}
       </div>
 
       {/* Config Panel */}

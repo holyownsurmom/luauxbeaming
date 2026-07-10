@@ -1,41 +1,35 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-import { startMcBot, type McBotConfig } from "@/lib/bot-runtime/mc";
-import { createClient } from "@supabase/supabase-js";
+import { getSessionUser, admin, isAdmin, unauthorized, forbidden } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/mc/start")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const session = await useSession<{ user?: { id: string } }>({
-          password: process.env.SESSION_SECRET!,
-          name: "luaux_session",
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        const user = session.data.user;
-        if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getSessionUser();
+        if (!user) return unauthorized();
 
-        const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
+        const db = admin();
+        const admin_ = await isAdmin(user.id);
 
-        const { data: profile } = await db
-          .from("profiles")
-          .select("active_plan_id, plan_expires_at, bot_hours_remaining")
-          .eq("discord_id", user.id)
-          .maybeSingle();
+        if (!admin_) {
+          const { data: profile } = await db
+            .from("profiles")
+            .select("active_plan_id, plan_expires_at, bot_hours_remaining")
+            .eq("discord_id", user.id)
+            .maybeSingle();
 
-        const active =
-          !!profile?.active_plan_id &&
-          !!profile?.plan_expires_at &&
-          new Date(profile.plan_expires_at).getTime() > Date.now();
+          const active =
+            !!profile?.active_plan_id &&
+            !!profile?.plan_expires_at &&
+            new Date(profile.plan_expires_at).getTime() > Date.now();
 
-        if (!active) return Response.json({ error: "No active plan" }, { status: 403 });
-        if ((profile?.bot_hours_remaining ?? 0) <= 0) {
-          return Response.json({ error: "No bot hours remaining" }, { status: 403 });
+          if (!active) return forbidden("No active plan");
+          if ((profile?.bot_hours_remaining ?? 0) <= 0) {
+            return forbidden("No bot hours remaining");
+          }
         }
 
-        let body: McBotConfig;
+        let body;
         try {
           body = await request.json();
         } catch {
@@ -46,15 +40,20 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           return Response.json({ error: "Missing required fields: serverHost, serverPort, messages" }, { status: 400 });
         }
 
-        try {
-          const botId = await startMcBot(user.id, {
-            ...body,
-            label: body.label || body.serverHost,
-          });
-          return Response.json({ botId });
-        } catch (err) {
-          return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
-        }
+        const { data: job, error } = await db
+          .from("bot_jobs")
+          .insert({
+            discord_id: user.id,
+            type: "mc",
+            config: body,
+            status: "pending",
+          })
+          .select("id")
+          .single();
+
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+
+        return Response.json({ botId: job.id });
       },
     },
   },

@@ -1,19 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-import { stopMcBot } from "@/lib/bot-runtime/mc";
-import { botManager } from "@/lib/bot-manager.server";
+import { getSessionUser, admin, unauthorized, notFound } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/mc/stop")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const session = await useSession<{ user?: { id: string } }>({
-          password: process.env.SESSION_SECRET!,
-          name: "luaux_session",
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        const user = session.data.user;
-        if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getSessionUser();
+        if (!user) return unauthorized();
 
         let body: { botId?: string };
         try {
@@ -25,12 +18,26 @@ export const Route = createFileRoute("/api/bots/mc/stop")({
         const botId = body.botId;
         if (!botId) return Response.json({ error: "botId required" }, { status: 400 });
 
-        const bot = botManager.get(botId);
-        if (!bot || bot.userId !== user.id) {
-          return Response.json({ error: "Bot not found" }, { status: 404 });
+        const db = admin();
+        const { data: job } = await db
+          .from("bot_jobs")
+          .select("id, discord_id, status")
+          .eq("id", botId)
+          .maybeSingle();
+
+        if (!job || job.discord_id !== user.id) {
+          return notFound("Bot not found");
         }
 
-        await stopMcBot(botId);
+        if (job.status !== "running" && job.status !== "pending") {
+          return Response.json({ error: "Bot is not running" }, { status: 400 });
+        }
+
+        await db
+          .from("bot_jobs")
+          .update({ status: "stopping" })
+          .eq("id", botId);
+
         return Response.json({ ok: true });
       },
     },

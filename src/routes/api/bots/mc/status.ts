@@ -1,31 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-import { botManager } from "@/lib/bot-manager.server";
+import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/mc/status")({
   server: {
     handlers: {
       GET: async () => {
-        const session = await useSession<{ user?: { id: string } }>({
-          password: process.env.SESSION_SECRET!,
-          name: "luaux_session",
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        const user = session.data.user;
-        if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getSessionUser();
+        if (!user) return unauthorized();
 
-        const bots = botManager
-          .getAll(user.id)
-          .filter((b) => b.type === "mc")
-          .map((b) => ({
-            id: b.id,
-            status: b.status,
-            label: b.label,
-            error: b.error,
-            startedAt: b.startedAt,
-            config: b.config,
-            logCount: b.logs.length,
-          }));
+        const db = admin();
+        const { data: jobs } = await db
+          .from("bot_jobs")
+          .select("id, status, config, error, started_at, created_at")
+          .eq("discord_id", user.id)
+          .eq("type", "mc")
+          .in("status", ["pending", "running", "stopping", "error"])
+          .order("created_at", { ascending: false });
+
+        const bots = (jobs ?? []).map((j) => ({
+          id: j.id,
+          status: j.status,
+          label: (j.config as Record<string, unknown>)?.label || (j.config as Record<string, unknown>)?.serverHost || "MC Bot",
+          error: j.error,
+          startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
+          config: j.config,
+        }));
 
         return Response.json({ bots });
       },

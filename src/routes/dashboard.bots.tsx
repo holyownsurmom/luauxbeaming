@@ -58,6 +58,7 @@ function BotsPage() {
   const delAcc = useServerFn(deleteMcAccount);
 
   const [active, setActive] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [maxBots, setMaxBots] = useState(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -97,9 +98,11 @@ function BotsPage() {
   const reload = async () => {
     const p = (await fetchProfile()) as {
       active: boolean;
+      isAdmin?: boolean;
       plan: { max_bots: number } | null;
     };
     setActive(p.active);
+    setIsAdmin(p.isAdmin ?? false);
     setMaxBots(p.plan?.max_bots ?? 0);
     const a = (await fetchAccounts()) as Account[];
     setAccounts(a);
@@ -295,6 +298,11 @@ function BotsPage() {
         <div>
           <h1 className="font-display text-4xl font-semibold tracking-tight">
             MC Auto-Message
+            {isAdmin && (
+              <span className="ml-3 inline-flex items-center rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-semibold brutal-border">
+                ADMIN
+              </span>
+            )}
           </h1>
           <p className="mt-2 text-muted-foreground">
             Join any Minecraft server and auto-message with your accounts.

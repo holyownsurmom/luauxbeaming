@@ -8,8 +8,26 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   tanstackStart: {
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    build: {
+      rollupOptions: {
+        external: [
+          "mineflayer",
+          "discord.js",
+          "minecraft-protocol",
+          "minecraft-data",
+          "prismarine-chunk",
+          "prismarine-chunk列",
+          "prismarine-world",
+          "prismarine-registry",
+          "node-minecraft-protocol",
+        ],
+      },
+    },
+    optimizeDeps: {
+      exclude: ["mineflayer", "discord.js", "minecraft-protocol", "minecraft-data"],
+    },
   },
 });

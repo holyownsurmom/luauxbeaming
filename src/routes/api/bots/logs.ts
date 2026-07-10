@@ -1,40 +1,45 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-import { botManager, type LogEntry } from "@/lib/bot-manager.server";
+import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
 
 export const Route = createFileRoute("/api/bots/logs")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const session = await useSession<{ user?: { id: string } }>({
-          password: process.env.SESSION_SECRET!,
-          name: "luaux_session",
-          maxAge: 60 * 60 * 24 * 30,
-        });
-        const user = session.data.user;
-        if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await getSessionUser();
+        if (!user) return unauthorized();
 
         const url = new URL(request.url);
         const botId = url.searchParams.get("botId");
         const since = url.searchParams.get("since");
-        const sinceTs = since ? parseInt(since, 10) : undefined;
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "200", 10), 500);
+
+        const db = admin();
+        let query = db
+          .from("bot_logs")
+          .select("job_id, level, message, created_at")
+          .eq("discord_id", user.id)
+          .order("created_at", { ascending: true })
+          .limit(limit);
 
         if (botId) {
-          const bot = botManager.get(botId);
-          if (!bot || bot.userId !== user.id) {
-            return Response.json({ error: "Bot not found" }, { status: 404 });
-          }
-          const logs = botManager.getLogs(botId, sinceTs);
-          return Response.json({ logs });
+          query = query.eq("job_id", botId);
         }
 
-        const allBots = botManager.getAll(user.id);
-        const allLogs: LogEntry[] = [];
-        for (const bot of allBots) {
-          allLogs.push(...botManager.getLogs(bot.id, sinceTs));
+        if (since) {
+          const sinceDate = new Date(parseInt(since, 10)).toISOString();
+          query = query.gt("created_at", sinceDate);
         }
-        allLogs.sort((a, b) => a.ts - b.ts);
-        return Response.json({ logs: allLogs.slice(-200) });
+
+        const { data: rows } = await query;
+
+        const logs = (rows ?? []).map((r) => ({
+          ts: new Date(r.created_at).getTime(),
+          level: r.level,
+          msg: r.message,
+          botId: r.job_id,
+        }));
+
+        return Response.json({ logs });
       },
     },
   },

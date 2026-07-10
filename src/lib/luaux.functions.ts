@@ -50,7 +50,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
         label: z.string().min(1).max(60),
         auth_type: z.enum(["microsoft", "ssid", "offline"]),
         username: z.string().max(60).optional().nullable(),
-        ssid: z.string().max(500).optional().nullable(),
+        ssid: z.string().max(2000).optional().nullable(),
       })
       .parse(input),
   )

@@ -24,95 +24,30 @@ async function pingMcServer(host: string, port = 25565): Promise<{
   motd?: string;
   latency?: number;
 }> {
-  const net = await import("node:net");
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const socket = net.createConnection(port, host, () => {
-      const latency = Date.now() - start;
-
-      const writeVarInt = (val: number) => {
-        const bytes: number[] = [];
-        let v = val;
-        while (v > 0x7f) {
-          bytes.push((v & 0x7f) | 0x80);
-          v >>>= 7;
-        }
-        bytes.push(v & 0x7f);
-        return Buffer.from(bytes);
-      };
-
-      const portBuf = Buffer.alloc(2);
-      portBuf.writeUInt16BE(port);
-
-      const handshake = Buffer.concat([
-        writeVarInt(0),
-        writeVarInt(-1),
-        writeVarInt(host.length),
-        Buffer.from(host),
-        portBuf,
-        writeVarInt(1),
-      ]);
-
-      const packet = Buffer.concat([writeVarInt(handshake.length), handshake]);
-      socket.write(packet);
-
-      const statusReq = Buffer.concat([writeVarInt(1), writeVarInt(0)]);
-      socket.write(Buffer.concat([writeVarInt(statusReq.length), statusReq]));
-
-      let data = Buffer.alloc(0);
-      socket.on("data", (chunk: Buffer) => {
-        data = Buffer.concat([data, chunk]);
-        try {
-          let offset = 0;
-          const readVarInt = () => {
-            let result = 0;
-            let shift = 0;
-            while (offset < data.length) {
-              const byte = data[offset++];
-              result |= (byte & 0x7f) << shift;
-              if ((byte & 0x80) === 0) break;
-              shift += 7;
-            }
-            return result;
-          };
-
-          const len = readVarInt();
-          if (data.length < offset + len) return;
-          readVarInt();
-          const jsonLen = readVarInt();
-          const jsonStr = data.toString("utf8", offset, offset + jsonLen);
-          const parsed = JSON.parse(jsonStr);
-          socket.destroy();
-          resolve({
-            online: true,
-            version: parsed.version?.name,
-            players: parsed.players,
-            motd: parsed.description?.text || parsed.description?.extra?.map((e: { text: string }) => e.text).join(""),
-            latency,
-          });
-        } catch {
-          // partial data
-        }
-      });
-
-      socket.setTimeout(5000);
-      socket.on("timeout", () => {
-        socket.destroy();
-        resolve({ online: false });
-      });
-      socket.on("error", () => {
-        socket.destroy();
-        resolve({ online: false });
-      });
+  const start = Date.now();
+  try {
+    const res = await fetch(`https://api.mcsrvstat.us/2/${host}:${port}`, {
+      signal: AbortSignal.timeout(8000),
     });
+    const latency = Date.now() - start;
 
-    socket.on("error", () => {
-      resolve({ online: false });
-    });
+    if (!res.ok) return { online: false };
+    const data = await res.json();
 
-    setTimeout(() => {
-      socket.destroy();
-      resolve({ online: false });
-    }, 5000);
-  });
+    if (!data || data.online !== true) return { online: false };
+
+    return {
+      online: true,
+      version: data.version || undefined,
+      players: data.players
+        ? { online: data.players.online ?? 0, max: data.players.max ?? 0 }
+        : undefined,
+      motd: typeof data.motd === "string"
+        ? data.motd
+        : data.motd?.clean || data.motd?.html || undefined,
+      latency,
+    };
+  } catch {
+    return { online: false };
+  }
 }

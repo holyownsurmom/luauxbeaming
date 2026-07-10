@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { pollJobs, updateJob, flushAllLogs } from "./api.js";
 import { runMcBot, type McJobConfig } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";

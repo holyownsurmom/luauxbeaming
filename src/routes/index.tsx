@@ -95,7 +95,19 @@ function Index() {
     setAuthOpen(true);
   };
   const startDiscord = () => {
-    window.location.href = "/api/discord/login";
+    const url = "/api/discord/login";
+    try {
+      // Break out of the Lovable preview iframe so Discord OAuth (which
+      // blocks iframe embedding) loads at the top level and the session
+      // cookie is treated as first-party.
+      if (window.top && window.top !== window.self) {
+        window.top.location.href = new URL(url, window.location.origin).toString();
+        return;
+      }
+    } catch {
+      // Cross-origin top — fall through to same-window nav.
+    }
+    window.location.href = url;
   };
   const signOut = async () => {
     await fetch("/api/discord/logout", { method: "POST" });

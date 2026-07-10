@@ -35,7 +35,7 @@ export function admin() {
 
 export async function ensureProfile(user: LuauxSessionUser) {
   const db = admin();
-  await db.from("profiles").upsert(
+  const { error } = await db.from("profiles").upsert(
     {
       discord_id: user.id,
       username: user.username,
@@ -44,4 +44,7 @@ export async function ensureProfile(user: LuauxSessionUser) {
     },
     { onConflict: "discord_id" },
   );
+  if (error) {
+    console.error("[ensureProfile] upsert failed:", error.message, error.details, error.hint);
+  }
 }

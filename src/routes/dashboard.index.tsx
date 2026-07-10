@@ -37,6 +37,7 @@ function Overview() {
   }, [fetchProfile]);
 
   const active = data?.active ?? false;
+  const isAdmin = (data as any)?.isAdmin ?? false;
   const profile = data?.profile;
   const plan = data?.plan;
   const displayName = profile?.global_name || profile?.username || "friend";
@@ -61,11 +62,11 @@ function Overview() {
         <div>
           <div
             className={`inline-flex items-center gap-2 rounded-full brutal-border px-3 py-1 text-[10px] uppercase tracking-widest ${
-              active ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
+              isAdmin ? "bg-yellow-500/10 text-yellow-500" : active ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"
             }`}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-primary animate-pulse" : "bg-destructive"}`} />
-            {active ? `${plan?.name} · active` : "No plan · locked"}
+            <span className={`h-1.5 w-1.5 rounded-full ${isAdmin ? "bg-yellow-500 animate-pulse" : active ? "bg-primary animate-pulse" : "bg-destructive"}`} />
+            {isAdmin ? "ADMIN · all features unlocked" : active ? `${plan?.name} · active` : "No plan · locked"}
           </div>
           <h2 className="mt-4 font-display text-3xl font-semibold">
             {active ? "Your workspace is ready" : "Unlock your workspace"}

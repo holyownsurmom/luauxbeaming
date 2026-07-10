@@ -1,12 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
-import { sessionConfig, type SessionData } from "@/lib/session";
+
+const cfg = () => ({
+  password: process.env.SESSION_SECRET!,
+  name: "luaux_session",
+  maxAge: 60 * 60 * 24 * 30,
+});
+
+type SessionData = {
+  user?: { id: string; username: string; global_name: string | null; avatar: string | null };
+  isAdmin?: boolean;
+};
 
 export const Route = createFileRoute("/api/admin/login")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const session = await useSession<SessionData>(sessionConfig());
+        const session = await useSession<SessionData>(cfg());
         if (!session.data.user) {
           return Response.json({ error: "Not logged in" }, { status: 401 });
         }

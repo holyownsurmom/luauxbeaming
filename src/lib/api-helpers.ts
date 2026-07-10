@@ -1,6 +1,5 @@
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-import { sessionConfig, type SessionData, type SessionUser } from "./session";
 
 export function admin() {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -8,10 +7,21 @@ export function admin() {
   });
 }
 
-export type { SessionUser };
+export type SessionUser = { id: string; username: string; global_name: string | null; avatar: string | null };
+
+type SessionData = {
+  user?: SessionUser;
+  isAdmin?: boolean;
+};
+
+const cfg = () => ({
+  password: process.env.SESSION_SECRET!,
+  name: "luaux_session",
+  maxAge: 60 * 60 * 24 * 30,
+});
 
 export async function getSessionData(): Promise<SessionData> {
-  const session = await useSession<SessionData>(sessionConfig());
+  const session = await useSession<SessionData>(cfg());
   return session.data;
 }
 

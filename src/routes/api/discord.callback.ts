@@ -1,7 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-import { sessionConfig, type SessionData } from "@/lib/session";
+
+const cfg = () => ({
+  password: process.env.SESSION_SECRET!,
+  name: "luaux_session",
+  maxAge: 60 * 60 * 24 * 30,
+});
+
+type StoredUser = {
+  id: string;
+  username: string;
+  global_name: string | null;
+  avatar: string | null;
+};
+
+type SessionData = { oauth_state?: string; user?: StoredUser };
 
 export const Route = createFileRoute("/api/discord/callback")({
   server: {
@@ -10,7 +24,7 @@ export const Route = createFileRoute("/api/discord/callback")({
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-        const session = await useSession<SessionData>(sessionConfig());
+        const session = await useSession<SessionData>(cfg());
 
         if (!code || !state || state !== session.data.oauth_state) {
           return new Response("Invalid OAuth state", { status: 400 });

@@ -1,8 +1,20 @@
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-import { sessionConfig, type SessionData, type SessionUser } from "./session";
 
-export type LuauxSessionUser = SessionUser;
+export type LuauxSessionUser = {
+  id: string;
+  username: string;
+  global_name: string | null;
+  avatar: string | null;
+};
+
+type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean };
+
+export const sessionConfig = () => ({
+  password: process.env.SESSION_SECRET!,
+  name: "luaux_session",
+  maxAge: 60 * 60 * 24 * 30,
+});
 
 export async function getSessionUser(): Promise<LuauxSessionUser | null> {
   const session = await useSession<SessionData>(sessionConfig());

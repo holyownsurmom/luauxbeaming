@@ -414,6 +414,34 @@ function BotsPage() {
               </label>
             </div>
 
+            <div className="space-y-1.5">
+              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                Recommended Servers
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { host: "donutsmp.net", label: "DonutSMP" },
+                  { host: "catpvp.com", label: "CatPVP" },
+                  { host: "hugosmp.com", label: "HugoSMP" },
+                  { host: "minemen.club", label: "Minemen EU" },
+                  { host: "mcpvp.net", label: "MCPVP" },
+                ].map((s) => (
+                  <button
+                    key={s.host}
+                    type="button"
+                    onClick={() => setMcConfig({ ...mcConfig, serverHost: s.host })}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-mono transition-all duration-200 ${
+                      mcConfig.serverHost === s.host
+                        ? "bg-primary/15 border-primary/30 text-primary"
+                        : "bg-background border-border/60 text-muted-foreground hover:border-primary/20 hover:text-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 onClick={pingServer}

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { Zap, Shield, Clock, Radio, BarChart3, Rocket } from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
 
 export const Route = createFileRoute("/")({
@@ -34,42 +35,42 @@ const FEATURES = [
     label: "Automation",
     title: "Smart fleet",
     body: "Spin up dozens of bots with shared behavior profiles. Load balancing distributes tasks across the fleet automatically.",
-    icon: "⚡",
+    Icon: Zap,
   },
   {
     tag: "02",
     label: "Stealth",
     title: "Undetected",
     body: "Rotating proxies, humanlike movement and unique fingerprints for every session.",
-    icon: "🛡",
+    Icon: Shield,
   },
   {
     tag: "03",
     label: "Reliability",
     title: "24/7 uptime",
     body: "Bots run continuously. No manual restarts, no babysitting, no drama.",
-    icon: "⏱",
+    Icon: Clock,
   },
   {
     tag: "04",
     label: "Tooling",
     title: "Live console",
     body: "Watch bot output in real time. Chat, events, errors — streamed to your browser.",
-    icon: "📡",
+    Icon: Radio,
   },
   {
     tag: "05",
     label: "Scale",
     title: "Multi-account",
     body: "Manage hundreds of accounts from one unified command center.",
-    icon: "📊",
+    Icon: BarChart3,
   },
   {
     tag: "06",
     label: "Deploy",
     title: "Instant deploy",
     body: "Drop credentials and your fleet is beaming in under a minute. No config files.",
-    icon: "🚀",
+    Icon: Rocket,
   },
 ];
 
@@ -125,22 +126,18 @@ const REVIEWS = [
   {
     text: "went from beaming manually for hours to having 12 bots running while i sleep. its unfair.",
     name: "@prinsi_",
-    stars: 5,
   },
   {
     text: "excellent. can recommend to anyone tired of manual beams. setup took me 4 minutes.",
     name: "@cpvpary",
-    stars: 5,
   },
   {
     text: "wasn't sure at first. got 2 clean hits in under an hour. its really good.",
     name: "@s0wad",
-    stars: 4,
   },
   {
     text: "the live console is stupid good. i just leave it open on my second monitor.",
     name: "@korr1n",
-    stars: 5,
   },
 ];
 
@@ -587,7 +584,7 @@ function Index() {
                       {f.label}
                     </span>
                   </div>
-                  <div className="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300">{f.icon}</div>
+                  <div className="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300"><f.Icon className="h-8 w-8 text-primary" /></div>
                   <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
                   <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.body}</p>
                   <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 translate-x-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-2">
@@ -659,7 +656,7 @@ function Index() {
               <ul className="mt-6 space-y-3 text-sm">
                 {p.feats.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-muted-foreground">
-                    <span className="mt-0.5 text-primary text-xs">✓</span>
+                    <span className="mt-0.5 text-primary text-xs">+</span>
                     <span>{f}</span>
                   </li>
                 ))}
@@ -697,7 +694,7 @@ function Index() {
             <div className="flex items-center gap-4">
               <div className="font-display text-5xl font-semibold text-gradient-gold">4.7</div>
               <div className="text-xs uppercase tracking-widest">
-                <div className="text-primary text-lg">★★★★★</div>
+                <div className="text-primary font-display text-base tracking-wide">/5.0 rating</div>
                 <div className="mt-1 text-muted-foreground">based on 247 reviews</div>
               </div>
             </div>
@@ -710,11 +707,7 @@ function Index() {
               >
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
                 <div className="relative">
-                  <div className="text-primary text-sm">
-                    {"★".repeat(r.stars)}
-                    <span className="text-muted-foreground/20">{"★".repeat(5 - r.stars)}</span>
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-foreground/80">"{r.text}"</p>
+                  <p className="text-sm leading-relaxed text-foreground/80">"{r.text}"</p>
                   <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
                     <span className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] text-primary font-semibold">
                       {r.name[1]?.toUpperCase()}
@@ -906,7 +899,7 @@ function AuthModal({
               {me.avatar && <img src={me.avatar} alt="" className="h-10 w-10 rounded-full" />}
               <div className="text-left">
                 <div className="text-sm font-semibold">{me.global_name || me.username}</div>
-                <div className="text-[11px] text-muted-foreground">Auto-joined LuauX Discord ✓</div>
+                <div className="text-[11px] text-muted-foreground">Auto-joined LuauX Discord</div>
               </div>
             </div>
           ) : (

@@ -1,14 +1,6 @@
 import WebSocket from "ws";
 import { createLogger, updateJob } from "./api.js";
 
-// Type declarations for ws module
-declare module "ws" {
-  interface WebSocket {
-    on(event: "close", listener: (code: number, reason: Buffer) => void): this;
-    on(event: "error", listener: (err: Error) => void): this;
-  }
-}
-
 export type AutoReplyJobConfig = {
   token: string;
   messages: string[];
@@ -24,6 +16,28 @@ function randomBetween(min: number, max: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+const SUFFIXES = ["", " ", "  ", ".", "...", "!", " ~"];
+
+function variateMessage(msg: string): string {
+  if (Math.random() < 0.35) {
+    return msg + pickRandom(SUFFIXES);
+  }
+  return msg;
+}
+
+const TYPING_SPEEDS = [40, 50, 60, 70, 80, 90, 100];
+
+function typingDuration(msg: string): number {
+  const cpm = pickRandom(TYPING_SPEEDS);
+  const chars = msg.replace(/\s+/g, " ").length;
+  const base = (chars / cpm) * 60 * 1000;
+  return Math.max(1500, Math.min(base + randomBetween(-500, 1500), 10000));
 }
 
 export async function runDiscordAutoReplyBot(
@@ -45,7 +59,9 @@ export async function runDiscordAutoReplyBot(
     return;
   }
 
-  await log("system", "Initializing Discord Auto-Reply Gateway client...");
+  if (config.minDelay < 5) config.minDelay = 5;
+
+  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode)...");
   await updateJob(jobId, "running");
 
   let ws: WebSocket | null = null;
@@ -54,6 +70,8 @@ export async function runDiscordAutoReplyBot(
   let selfUserId: string | null = null;
   let lastSequence: number | null = null;
   let sessionId: string | null = null;
+  let replyCount = 0;
+  let recentReplyTimes: number[] = [];
 
   const sendPayload = (op: number, d: unknown) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -67,6 +85,13 @@ export async function runDiscordAutoReplyBot(
       if (stopped) return;
       sendPayload(1, lastSequence);
     }, intervalMs);
+  };
+
+  const shouldThrottle = (): boolean => {
+    const now = Date.now();
+    recentReplyTimes = recentReplyTimes.filter((t) => now - t < 60000);
+    if (recentReplyTimes.length >= 5) return true;
+    return false;
   };
 
   const connectGateway = () => {
@@ -88,12 +113,10 @@ export async function runDiscordAutoReplyBot(
           lastSequence = s;
         }
 
-        // Op 10: Hello
         if (op === 10) {
           const heartbeatInterval = d.heartbeat_interval;
           startHeartbeat(heartbeatInterval);
 
-          // Identify or Resume
           if (sessionId && lastSequence) {
             sendPayload(6, {
               token: config.token,
@@ -120,16 +143,14 @@ export async function runDiscordAutoReplyBot(
           }
         }
 
-        // Op 9: Invalid Session
         if (op === 9) {
           sessionId = null;
           lastSequence = null;
           log("warn", "Invalid gateway session, re-identifying...").catch(() => {});
-          await sleep(2000);
+          await sleep(randomBetween(2000, 5000));
           ws?.close();
         }
 
-        // Event Dispatch (Op 0)
         if (op === 0) {
           if (t === "READY") {
             selfUserId = d.user.id;
@@ -142,66 +163,96 @@ export async function runDiscordAutoReplyBot(
           }
 
           if (t === "MESSAGE_CREATE") {
-            // Check if it's a DM (no guild_id)
             if (!d.guild_id && d.author.id !== selfUserId && !d.author.bot) {
               const channelId = d.channel_id;
               const authorTag = `@${d.author.username}`;
               await log("chat", `DM from ${authorTag}: "${d.content}"`);
 
-              // Choose random reply message
-              const reply = config.messages[Math.floor(Math.random() * config.messages.length)];
-
-              const delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
-
-              if (config.typing) {
-                // Send typing
-                await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
-                  method: "POST",
-                  headers: { Authorization: config.token },
-                }).catch(() => {});
-                await log(
-                  "info",
-                  `Typing simulation active... replying in ${(delay / 1000).toFixed(1)}s`,
-                );
-              } else {
-                await log("info", `Replying in ${(delay / 1000).toFixed(1)}s`);
+              if (shouldThrottle()) {
+                await log("info", "Throttled (5+ replies in 60s), skipping this message");
+                return;
               }
 
-              setTimeout(async () => {
-                if (stopped) return;
+              const reply = variateMessage(
+                config.messages[Math.floor(Math.random() * config.messages.length)],
+              );
+
+              let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
+              if (replyCount < 3) {
+                delay = randomBetween(8000, 20000);
+              } else if (Math.random() < 0.12) {
+                delay = randomBetween(30000, 90000);
+                await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
+              }
+
+              if (config.typing) {
+                const typingTime = typingDuration(reply);
                 try {
-                  const res = await fetch(
-                    `https://discord.com/api/v9/channels/${channelId}/messages`,
-                    {
-                      method: "POST",
-                      headers: {
-                        Authorization: config.token,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({ content: reply }),
-                    },
-                  );
-                  if (res.ok) {
-                    await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
-                  } else {
-                    const text = await res.text();
-                    await log("error", `Failed to send auto-reply: ${text}`);
-                  }
-                } catch (e) {
-                  await log(
-                    "error",
-                    `Error sending auto-reply: ${e instanceof Error ? e.message : String(e)}`,
-                  );
+                  await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
+                    method: "POST",
+                    headers: { Authorization: config.token },
+                  });
+                } catch {
+                  /* ignore */
                 }
-              }, delay);
+                await log(
+                  "info",
+                  `Typing simulation... replying in ${(typingTime / 1000).toFixed(1)}s`,
+                );
+                await sleep(typingTime);
+                if (stopped) return;
+              } else {
+                await log("info", `Replying in ${(delay / 1000).toFixed(1)}s`);
+                await sleep(delay);
+                if (stopped) return;
+              }
+
+              try {
+                const res = await fetch(
+                  `https://discord.com/api/v9/channels/${channelId}/messages`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: config.token,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ content: reply }),
+                  },
+                );
+                if (res.ok) {
+                  replyCount++;
+                  recentReplyTimes.push(Date.now());
+                  await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
+                } else if (res.status === 429) {
+                  const body = await res.text();
+                  let retryAfter = 30000;
+                  try {
+                    const parsed = JSON.parse(body);
+                    if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 5000;
+                  } catch {
+                    /* ignore */
+                  }
+                  await log("warn", `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s`);
+                  await sleep(retryAfter);
+                } else {
+                  const text = await res.text();
+                  await log("error", `Failed to send auto-reply: ${text}`);
+                }
+              } catch (e) {
+                await log(
+                  "error",
+                  `Error sending auto-reply: ${e instanceof Error ? e.message : String(e)}`,
+                );
+              }
             }
           }
 
           if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
-            // Check if relationship is incoming (type 3)
             if (d.type === 3) {
               const targetUser = `@${d.user.username}`;
               await log("info", `Received incoming friend request from ${targetUser}`);
+
+              await sleep(randomBetween(2000, 8000));
 
               try {
                 const res = await fetch(
@@ -242,11 +293,22 @@ export async function runDiscordAutoReplyBot(
       }
       if (stopped) return;
 
+      const reconnectDelay = code === 4004 || code === 4010 || code === 4011 || code === 4012
+        ? -1
+        : randomBetween(5000, 12000);
+
+      if (reconnectDelay === -1) {
+        log("error", `Fatal gateway close (code ${code}), not reconnecting`).catch(() => {});
+        await updateJob(jobId, "error", `Gateway closed: ${code}`);
+        stopped = true;
+        return;
+      }
+
       log(
         "warn",
-        `Gateway WebSocket closed (code ${code}): ${reason || "No reason"}. Reconnecting in 5s...`,
+        `Gateway closed (code ${code}). Reconnecting in ${(reconnectDelay / 1000).toFixed(0)}s...`,
       ).catch(() => {});
-      await sleep(5000);
+      await sleep(reconnectDelay);
       connectGateway();
     });
 

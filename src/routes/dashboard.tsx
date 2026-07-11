@@ -103,8 +103,8 @@ function DashboardLayout() {
       <aside
         className="w-64 shrink-0 flex flex-col sticky top-0 h-screen relative overflow-hidden"
         style={{
-          background: "linear-gradient(180deg, oklch(0.045 0.006 80 / 0.95) 0%, oklch(0.035 0.005 80 / 0.98) 100%)",
-          borderRight: "1px solid oklch(0.16 0.015 80 / 0.4)",
+          background: "linear-gradient(180deg, oklch(0.03 0 0 / 0.98) 0%, oklch(0.02 0 0) 100%)",
+          borderRight: "1px solid oklch(0.14 0 0 / 0.5)",
         }}
       >
         {/* Sidebar glow */}
@@ -174,14 +174,14 @@ function DashboardLayout() {
             {me.avatar ? (
               <div className="relative">
                 <img src={me.avatar} alt="" className="h-9 w-9 rounded-lg border border-border/40" />
-                <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500 border border-background" />
+                <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary border border-background" />
               </div>
             ) : (
               <div className="relative">
                 <div className="h-9 w-9 rounded-lg bg-primary/15 border border-primary/20 flex items-center justify-center text-primary text-xs font-bold">
                   {displayName[0]?.toUpperCase()}
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500 border border-background" />
+                <div className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary border border-background" />
               </div>
             )}
             <div className="flex-1 min-w-0">

@@ -396,6 +396,7 @@ function Index() {
         </div>
       </header>
 
+      <main>
       {/* HERO */}
       <section id="top" className="mx-auto max-w-6xl px-6 pt-28 pb-28 md:pt-40 text-center relative">
         {/* Orbiting ring decoration */}
@@ -817,6 +818,7 @@ function Index() {
         </div>
       </section>
 
+      </main>
       {/* FOOTER */}
       <footer className="mx-auto max-w-6xl px-6 py-10 flex flex-wrap items-center justify-between gap-4 text-xs uppercase tracking-widest text-muted-foreground border-t border-border/60">
         <div className="flex items-center gap-2">

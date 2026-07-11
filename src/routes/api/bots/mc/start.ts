@@ -40,6 +40,15 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           return Response.json({ error: "Missing required fields: serverHost, serverPort, messages" }, { status: 400 });
         }
 
+        if (body.authType === "ssid") {
+          if (!body.ssid) {
+            return Response.json({ error: "SSID token required for ssid auth" }, { status: 400 });
+          }
+          if (!body.username) {
+            return Response.json({ error: "Username required for ssid auth" }, { status: 400 });
+          }
+        }
+
         const { data: job, error } = await db
           .from("bot_jobs")
           .insert({

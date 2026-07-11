@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Zap,
@@ -384,12 +384,12 @@ function Index() {
                   {me.avatar && <img src={me.avatar} alt="" className="h-5 w-5 rounded-full" />}
                   <span className="text-foreground/90">{me.global_name || me.username}</span>
                 </div>
-                <button
-                  onClick={signOut}
-                  className="rounded-full border border-border/60 bg-card/60 px-3 py-1.5 text-xs font-semibold hover:bg-primary/10 hover:text-primary transition-all duration-200"
+                <Link
+                  to="/dashboard"
+                  className="rounded-full btn-gold px-4 py-1.5 text-xs"
                 >
-                  Sign out
-                </button>
+                  Go to dashboard
+                </Link>
               </>
             ) : (
               <>
@@ -453,12 +453,21 @@ function Index() {
           </p>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-4 animate-fade-in-up stagger-5" style={{ opacity: 0 }}>
-            <button
-              onClick={openAuth}
-              className="rounded-full btn-gold-lg px-10 py-4 text-sm"
-            >
-              Get started free
-            </button>
+            {me ? (
+              <Link
+                to="/dashboard"
+                className="rounded-full btn-gold-lg px-10 py-4 text-sm"
+              >
+                Go to dashboard
+              </Link>
+            ) : (
+              <button
+                onClick={openAuth}
+                className="rounded-full btn-gold-lg px-10 py-4 text-sm"
+              >
+                Get started free
+              </button>
+            )}
             <a
               href="#console"
               className="rounded-full border border-border/60 bg-card/60 px-8 py-4 text-sm font-semibold text-foreground/90 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border transition-all duration-300"
@@ -697,16 +706,29 @@ function Index() {
                   </li>
                 ))}
               </ul>
-              <button
-                onClick={openAuth}
-                className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
-                  p.highlight
-                    ? "btn-gold-lg"
-                    : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
-                }`}
-              >
-                Get started
-              </button>
+              {me ? (
+                <Link
+                  to="/dashboard"
+                  className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
+                    p.highlight
+                      ? "btn-gold-lg"
+                      : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
+                  }`}
+                >
+                  Go to dashboard
+                </Link>
+              ) : (
+                <button
+                  onClick={openAuth}
+                  className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
+                    p.highlight
+                      ? "btn-gold-lg"
+                      : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
+                  }`}
+                >
+                  Get started
+                </button>
+              )}
             </div>
           ))}
         </div>

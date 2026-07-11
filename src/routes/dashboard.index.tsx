@@ -12,8 +12,8 @@ import {
   ArrowRight,
   Lock,
   Sparkles,
-  ArrowUpRight,
   Terminal,
+  ShieldCheck,
 } from "lucide-react";
 import { getMyProfile } from "@/lib/luaux.functions";
 

@@ -69,7 +69,7 @@ function LogsPage() {
         <div>
           <h1 className="font-display text-4xl font-semibold tracking-tight">Logs</h1>
           <p className="mt-2 text-muted-foreground">
-            Live console output from every bot in your fleet.
+            Live console output from every active bot.
           </p>
         </div>
         <div className="flex items-center gap-2">

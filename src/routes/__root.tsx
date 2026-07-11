@@ -78,14 +78,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "LuauX" },
+      { title: "LuauX — Automated Minecraft bot management" },
       {
         name: "description",
         content:
-          "LuauX — automated Minecraft bot fleets and Discord automation plugins.",
+          "Deploy stealthy Minecraft bots in under a minute. Live logs, anti-detect proxies, 24/7 uptime — no babysitting.",
       },
       { name: "author", content: "LuauX" },
-      { property: "og:site_name", content: "LuauX" },
+      { property: "og:title", content: "LuauX — Automated Minecraft bot management" },
+      {
+        property: "og:description",
+        content:
+          "Deploy stealthy Minecraft bots in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },

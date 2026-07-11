@@ -10,7 +10,7 @@ import {
 
 export type Language = "en" | "es" | "fr" | "de" | "pt";
 export type Currency = "usd" | "eur" | "gbp" | "cad" | "aud";
-export type Theme = "gold" | "amber" | "cyan" | "magenta";
+export type Theme = "gold";
 
 type SettingsState = {
   language: Language;

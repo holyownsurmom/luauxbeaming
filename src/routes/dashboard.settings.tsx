@@ -13,7 +13,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { getMyProfile } from "@/lib/luaux.functions";
-import { useSettings, type Theme } from "@/lib/settings-context";
+import { useSettings } from "@/lib/settings-context";
 
 export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({ meta: [{ title: "Settings — LuauX" }] }),
@@ -246,32 +246,17 @@ function SettingsPage() {
 
           {tab === "appearance" && (
             <Panel title={s.t("appearance")} subtitle={s.t("theme_hint")}>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {(
-                  [
-                    { id: "gold", label: "Gold", swatch: "oklch(0.79 0.16 85)" },
-                    { id: "amber", label: "Amber", swatch: "oklch(0.82 0.18 75)" },
-                    { id: "cyan", label: "Cyan", swatch: "oklch(0.85 0.16 205)" },
-                    { id: "magenta", label: "Magenta", swatch: "oklch(0.78 0.24 340)" },
-                  ] as { id: Theme; label: string; swatch: string }[]
-                ).map((opt) => {
-                  const active = s.theme === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => s.set("theme", opt.id)}
-                      className={`rounded-xl brutal-border bg-background/40 p-4 flex flex-col items-center gap-2 transition ${
-                        active ? "ring-2 ring-primary" : "hover:bg-secondary/30"
-                      }`}
-                    >
-                      <span
-                        className="h-10 w-10 rounded-full brutal-border"
-                        style={{ backgroundColor: opt.swatch }}
-                      />
-                      <span className="text-sm font-semibold">{opt.label}</span>
-                    </button>
-                  );
-                })}
+              <div className="rounded-xl brutal-border bg-background/40 p-6 flex items-center gap-4">
+                <span
+                  className="h-12 w-12 rounded-full brutal-border shrink-0"
+                  style={{ backgroundColor: "oklch(0.79 0.16 85)" }}
+                />
+                <div>
+                  <div className="font-semibold text-sm">Gold & Black</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    The signature LuauX premium theme. Pure black backgrounds with gold accents.
+                  </div>
+                </div>
               </div>
             </Panel>
           )}

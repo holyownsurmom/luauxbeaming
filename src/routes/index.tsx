@@ -1,17 +1,30 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Zap, Shield, Clock, Radio, BarChart3, Rocket } from "lucide-react";
+import {
+  Zap,
+  Shield,
+  Clock,
+  Radio,
+  BarChart3,
+  Rocket,
+  Bot,
+  MessageSquare,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  ArrowRight,
+} from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
 
 export const Route = createFileRoute("/")({
   component: Index,
   head: () => ({
     meta: [
-      { title: "LuauX — Automated Minecraft bot fleets" },
+      { title: "LuauX — Automated Minecraft bot management" },
       {
         name: "description",
         content:
-          "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
+          "Deploy stealthy Minecraft bots in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
       },
       { property: "og:title", content: "LuauX — Automated Minecraft bot fleets" },
       {
@@ -47,7 +60,7 @@ const LOG_LINES = [
   { t: "16:00:43", tag: "CHAT", bot: "vexil", msg: "<S1lent_> yo whats 888?" },
   { t: "16:00:44", tag: "AI", bot: "vexil", msg: "trigger 888 · composing reply" },
   { t: "16:00:45", tag: "SEND", bot: "vexil", msg: '/msg S1lent_ → "add me on dc — untualab"' },
-  { t: "16:00:46", tag: "HOOK", bot: "vexil", msg: "discord webhook · reply logged ✓" },
+  { t: "16:00:46", tag: "HOOK", bot: "vexil", msg: "discord webhook · reply logged" },
   { t: "16:00:47", tag: "AFK", bot: "nyxara", msg: "anti-afk rotation · idle drift" },
   { t: "16:00:48", tag: "JOIN", bot: "korrin", msg: "connected · 18ms eu-fra" },
   { t: "16:00:49", tag: "SEND", bot: "korrin", msg: "/pay untualab 64 diamond_block" },
@@ -57,8 +70,8 @@ const FEATURES = [
   {
     tag: "01",
     label: "Automation",
-    title: "Smart fleet",
-    body: "Spin up dozens of bots with shared behavior profiles. Load balancing distributes tasks across the fleet automatically.",
+    title: "Smart automation",
+    body: "Spin up dozens of bots with shared behavior profiles. Load balancing distributes tasks across the network automatically.",
     Icon: Zap,
   },
   {
@@ -93,7 +106,7 @@ const FEATURES = [
     tag: "06",
     label: "Deploy",
     title: "Instant deploy",
-    body: "Drop credentials and your fleet is beaming in under a minute. No config files.",
+    body: "Drop credentials and your bots are beaming in under a minute. No config files.",
     Icon: Rocket,
   },
 ];
@@ -108,7 +121,7 @@ const PLANS = [
       "1 concurrent bot",
       "5 bot-hours / day",
       "Basic telemetry & logs",
-      "Standard beam speed",
+      "Standard speed",
       "Community Discord",
     ],
     highlight: false,
@@ -124,7 +137,7 @@ const PLANS = [
       "Full analytics & live console",
       "Advanced scanner + priority queue",
       "All plugins included",
-      "Fast beam speed",
+      "Fast speed",
       "Priority Discord support",
     ],
     highlight: true,
@@ -138,7 +151,7 @@ const PLANS = [
       "20 concurrent bots",
       "14 bot-hours / day",
       "Custom behaviors & API access",
-      "Maximum beam speed",
+      "Maximum speed",
       "Early access to features",
       "Dedicated 1:1 support",
     ],
@@ -168,7 +181,7 @@ const REVIEWS = [
 const FAQ = [
   {
     q: "What exactly is LuauX?",
-    a: "A hosted fleet manager for Minecraft bots. You provide credentials, we handle proxies, uptime, anti-detection, and streaming logs.",
+    a: "A hosted bot manager for Minecraft. You provide credentials, we handle proxies, uptime, anti-detection, and streaming logs.",
   },
   {
     q: "Is it safe? Will my accounts get banned?",
@@ -180,7 +193,7 @@ const FAQ = [
   },
   {
     q: "Can I cancel my subscription?",
-    a: "Any time, no questions. Crypto billing is monthly — cancel and the fleet spins down at the end of the cycle.",
+    a: "Any time, no questions. Crypto billing is monthly — cancel and your bots spin down at the end of the cycle.",
   },
   {
     q: "Do you offer custom plans?",
@@ -211,21 +224,18 @@ function GoldDivider() {
 function FloatingParticles() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      {/* Main radial glow */}
       <div
         className="absolute left-1/2 top-0 h-[700px] w-[900px] -translate-x-1/2 rounded-full blur-[150px] animate-glow-breathe"
         style={{
           background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.15), transparent 70%)",
         }}
       />
-      {/* Secondary glow bottom right */}
       <div
         className="absolute right-0 bottom-0 h-[500px] w-[500px] rounded-full blur-[120px] opacity-40"
         style={{
           background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.08), transparent 70%)",
         }}
       />
-      {/* Floating gold orbs */}
       <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
       <div className="absolute top-[40%] right-[15%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float-slow" style={{ animationDelay: "2s" }} />
       <div className="absolute top-[60%] left-[20%] w-1 h-1 rounded-full bg-primary/25 animate-float" style={{ animationDelay: "4s" }} />
@@ -269,7 +279,12 @@ function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: str
     return () => observer.disconnect();
   }, [target]);
 
-  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
+  return (
+    <span ref={ref}>
+      {count.toLocaleString()}
+      {suffix}
+    </span>
+  );
 }
 
 function Index() {
@@ -388,7 +403,7 @@ function Index() {
                   onClick={openAuth}
                   className="rounded-full btn-gold px-4 py-1.5 text-xs"
                 >
-                  Get started →
+                  Get started
                 </button>
               </>
             )}
@@ -428,12 +443,12 @@ function Index() {
 
           <h2 className="mt-4 font-display text-3xl md:text-5xl font-semibold leading-[1] tracking-tight animate-fade-in-up stagger-3" style={{ opacity: 0 }}>
             <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.4)" }}>
-              Let the fleet do it.
+              Let the bots do it.
             </span>
           </h2>
 
           <p className="mx-auto mt-8 max-w-xl text-base md:text-lg text-muted-foreground leading-relaxed animate-fade-in-up stagger-4" style={{ opacity: 0 }}>
-            Deploy a stealth Minecraft bot fleet in under a minute. Live logs, anti-detect proxies,
+            Deploy a stealth Minecraft bot army in under a minute. Live logs, anti-detect proxies,
             24/7 uptime — no babysitting, no scripts, no cope.
           </p>
 
@@ -442,7 +457,7 @@ function Index() {
               onClick={openAuth}
               className="rounded-full btn-gold-lg px-10 py-4 text-sm"
             >
-              Get started free →
+              Get started free
             </button>
             <a
               href="#console"
@@ -487,9 +502,9 @@ function Index() {
               live
             </div>
             <h2 className="mt-4 font-display text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight text-gradient">
-              Watch your fleet
+              Watch your bots
               <br />
-              run itself.
+              run themselves.
             </h2>
             <p className="mt-5 text-muted-foreground leading-relaxed">
               Every bot streams its activity in real time and answers chat autonomously. No
@@ -516,7 +531,6 @@ function Index() {
 
           <div className="lg:col-span-7 animate-slide-in-right">
             <div className="rounded-2xl border border-border/60 overflow-hidden bg-card/80 glow-sm font-mono text-xs relative">
-              {/* Terminal glow effect */}
               <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 via-transparent to-primary/5 pointer-events-none" />
               <div className="relative">
                 <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card/90">
@@ -526,7 +540,7 @@ function Index() {
                     <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
                   </div>
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                    luaux@runner ~ tail -f fleet.log
+                    luaux@runner ~ tail -f bot.log
                   </span>
                   <span className="flex items-center gap-1.5 text-[10px] text-primary">
                     <span className="relative flex h-1.5 w-1.5">
@@ -560,7 +574,7 @@ function Index() {
                     );
                   })}
                   <div className="flex items-center gap-2 pt-2 text-muted-foreground">
-                    <span className="text-primary">›</span>
+                    <span className="text-primary">{'>'}</span>
                     <span className="terminal-cursor" />
                   </div>
                 </div>
@@ -582,7 +596,7 @@ function Index() {
               <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-2xl leading-tight tracking-tight text-gradient">
                 Everything you need to
                 <br />
-                beam at scale.
+                automate at scale.
               </h2>
             </div>
             <p className="max-w-sm text-sm text-muted-foreground">
@@ -598,9 +612,7 @@ function Index() {
                 className="group relative rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/80 hover:-translate-y-2 hover:glow-sm"
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
-                {/* Hover gradient overlay */}
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                {/* Top glow line on hover */}
                 <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative">
                   <div className="mb-6 flex items-center justify-between">
@@ -613,7 +625,7 @@ function Index() {
                   <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
                   <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.body}</p>
                   <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 translate-x-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-2">
-                    Learn more →
+                    Learn more
                   </div>
                 </div>
               </div>
@@ -651,7 +663,6 @@ function Index() {
                   Most popular
                 </div>
               )}
-              {/* Shimmer border on highlight */}
               {p.highlight && (
                 <div className="absolute inset-0 rounded-2xl gold-shimmer pointer-events-none" style={{ mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", maskComposite: "exclude", WebkitMaskComposite: "xor", padding: "2px" }} />
               )}
@@ -681,7 +692,7 @@ function Index() {
               <ul className="mt-6 space-y-3 text-sm">
                 {p.feats.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-muted-foreground">
-                    <span className="mt-0.5 text-primary text-xs">+</span>
+                    <Check className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
                     <span>{f}</span>
                   </li>
                 ))}
@@ -694,7 +705,7 @@ function Index() {
                     : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
                 }`}
               >
-                Get started →
+                Get started
               </button>
             </div>
           ))}
@@ -794,13 +805,12 @@ function Index() {
         <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-card/60 px-8 py-24 text-center group">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/8 pointer-events-none" />
           <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-          {/* Decorative orbs */}
           <div className="absolute top-10 left-10 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" />
           <div className="absolute bottom-10 right-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" style={{ animationDelay: "2s" }} />
           <div className="relative">
             <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// ready</div>
             <h2 className="mt-4 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
-              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.4)" }}>beam?</span>
+              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.4)" }}>start?</span>
             </h2>
             <p className="mx-auto mt-6 max-w-md text-muted-foreground">
               Sign in with Discord. First bot deployed in under a minute.
@@ -809,7 +819,7 @@ function Index() {
               onClick={openAuth}
               className="mt-8 inline-flex items-center gap-2 rounded-full btn-gold-lg px-10 py-4 text-sm"
             >
-              Continue with Discord →
+              Continue with Discord <ArrowRight className="h-4 w-4" />
             </button>
             <div className="mt-5 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
               No credit card · 24h free trial
@@ -823,7 +833,7 @@ function Index() {
       <footer className="mx-auto max-w-6xl px-6 py-10 flex flex-wrap items-center justify-between gap-4 text-xs uppercase tracking-widest text-muted-foreground border-t border-border/60">
         <div className="flex items-center gap-2">
           <Logo />
-          <span>© 2026 LuauX</span>
+          <span>&copy; 2026 LuauX</span>
         </div>
         <div className="flex gap-6">
           <a
@@ -884,14 +894,13 @@ function AuthModal({
         className="relative w-full max-w-sm rounded-3xl border border-border/60 glass-card p-8 glow-primary animate-fade-in-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Background glow */}
         <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/5 pointer-events-none" />
         <button
           onClick={onClose}
           className="absolute top-3 right-3 h-8 w-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all duration-200 text-lg"
           aria-label="Close"
         >
-          ×
+          x
         </button>
 
         <div className="relative flex flex-col items-center text-center">
@@ -916,8 +925,8 @@ function AuthModal({
             {me
               ? `Signed in as ${me.global_name || me.username}`
               : loading
-                ? "Redirecting to Discord…"
-                : "Sign up with Discord to spin up your fleet."}
+                ? "Redirecting to Discord..."
+                : "Sign up with Discord to spin up your bots."}
           </p>
 
           {me ? (
@@ -937,7 +946,7 @@ function AuthModal({
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                 <path d="M20.317 4.369A19.79 19.79 0 0 0 16.558 3a13.7 13.7 0 0 0-.617 1.264 18.298 18.298 0 0 0-5.878 0A13.5 13.5 0 0 0 9.44 3a19.736 19.736 0 0 0-3.76 1.369C1.966 9.834.94 15.148 1.453 20.383a19.9 19.9 0 0 0 6.02 3.049c.484-.655.915-1.352 1.286-2.084-.706-.264-1.379-.59-2.02-.972.17-.126.336-.257.497-.393a14.183 14.183 0 0 0 12.528 0c.163.14.329.271.499.393-.643.383-1.317.71-2.023.973.371.732.802 1.428 1.287 2.083a19.79 19.79 0 0 0 6.021-3.049c.6-6.057-1.041-11.324-4.231-16.014zM8.02 17.212c-1.183 0-2.157-1.085-2.157-2.42 0-1.334.955-2.42 2.157-2.42s2.176 1.086 2.156 2.42c0 1.335-.954 2.42-2.156 2.42zm7.974 0c-1.183 0-2.157-1.085-2.157-2.42 0-1.334.955-2.42 2.157-2.42s2.176 1.086 2.156 2.42c0 1.335-.954 2.42-2.156 2.42z" />
               </svg>
-              {loading ? "Connecting…" : "Continue with Discord"}
+              {loading ? "Connecting..." : "Continue with Discord"}
             </button>
           )}
 

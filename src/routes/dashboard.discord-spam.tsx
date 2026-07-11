@@ -237,6 +237,15 @@ function DiscordSpamPage() {
     }
   };
 
+  const stopAndClearAll = async () => {
+    const running = runningBots.filter((b) => b.status === "running" || b.status === "connecting");
+    for (const bot of running) {
+      await stopBot(bot.id);
+    }
+    setConsoleEntries([]);
+    setSelectedBotId(null);
+  };
+
   // Checkout flow (shown if no key or user clicks purchase)
   if (payment) {
     const done = payment.status === "finished" || payment.status === "confirmed";
@@ -693,8 +702,17 @@ function DiscordSpamPage() {
       {/* Running Bots */}
       {runningBots.length > 0 && (
         <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            Active Instances
+          <div className="flex items-center justify-between">
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">
+              Active Instances
+            </div>
+            <button
+              onClick={stopAndClearAll}
+              disabled={stoppingId !== null}
+              className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+            >
+              <Square className="h-3 w-3" /> Stop & Clear All
+            </button>
           </div>
           {runningBots.map((bot) => (
             <div

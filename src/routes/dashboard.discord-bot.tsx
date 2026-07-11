@@ -41,7 +41,7 @@ function DiscordBotPage() {
         <div className="flex-1">
           <h1 className="font-display text-4xl font-semibold tracking-tight">Plugins</h1>
           <p className="mt-1 text-muted-foreground">
-            Extend your fleet with Discord automation tools. Purchase once, use forever.
+            Extend your setup with Discord automation tools. Purchase once, use forever.
           </p>
         </div>
       </header>

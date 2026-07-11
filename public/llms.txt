@@ -1,0 +1,7 @@
+# LuauX
+
+> LuauX deploys automated Minecraft bot fleets with live logs, anti-detect proxies, and 24/7 uptime, plus Discord automation plugins.
+
+## Pages
+
+- [Home](/): Product overview, features, pricing, FAQ, and live console demo.

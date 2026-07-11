@@ -428,9 +428,126 @@ function SettingsPage() {
               )}
             </Panel>
           )}
+
+          {tab === "admin" && isAdmin && <BlacklistPanel />}
         </div>
       </div>
     </div>
+  );
+}
+
+function BlacklistPanel() {
+  const [users, setUsers] = useState<{ discord_id: string; reason: string; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [blDiscordId, setBlDiscordId] = useState("");
+  const [blReason, setBlReason] = useState("");
+  const [blLoading, setBlLoading] = useState(false);
+  const [blError, setBlError] = useState<string | null>(null);
+
+  const loadBlacklist = async () => {
+    try {
+      const res = await fetch("/api/admin/blacklist");
+      const data = await res.json();
+      setUsers(data.users ?? []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBlacklist();
+  }, []);
+
+  const addBlacklist = async () => {
+    setBlLoading(true);
+    setBlError(null);
+    try {
+      const res = await fetch("/api/admin/blacklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discord_id: blDiscordId.trim(), reason: blReason.trim() }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed");
+      }
+      setBlDiscordId("");
+      setBlReason("");
+      await loadBlacklist();
+    } catch (e) {
+      setBlError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBlLoading(false);
+    }
+  };
+
+  const removeBlacklist = async (discordId: string) => {
+    try {
+      await fetch("/api/admin/blacklist", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discord_id: discordId }),
+      });
+      await loadBlacklist();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <Panel title="User Blacklist" subtitle="Block specific Discord accounts from logging in.">
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+            placeholder="Discord ID"
+            value={blDiscordId}
+            onChange={(e) => { setBlDiscordId(e.target.value); setBlError(null); }}
+          />
+          <input
+            type="text"
+            className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+            placeholder="Reason (optional)"
+            value={blReason}
+            onChange={(e) => setBlReason(e.target.value)}
+          />
+          <button
+            onClick={addBlacklist}
+            disabled={blLoading || !blDiscordId.trim()}
+            className="rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50 whitespace-nowrap"
+          >
+            {blLoading ? "Adding..." : "Blacklist"}
+          </button>
+        </div>
+        {blError && <div className="text-xs text-destructive">{blError}</div>}
+
+        {loading ? (
+          <div className="text-xs text-muted-foreground">Loading...</div>
+        ) : users.length === 0 ? (
+          <div className="text-xs text-muted-foreground">No blacklisted users.</div>
+        ) : (
+          <div className="space-y-2">
+            {users.map((u) => (
+              <div key={u.discord_id} className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-mono">{u.discord_id}</div>
+                  {u.reason && <div className="text-xs text-muted-foreground">{u.reason}</div>}
+                </div>
+                <button
+                  onClick={() => removeBlacklist(u.discord_id)}
+                  className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1 text-xs ml-3 shrink-0"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }
 

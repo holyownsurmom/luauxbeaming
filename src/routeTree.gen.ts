@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VpnBlockedRouteImport } from './routes/vpn-blocked'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as AccountBannedRouteImport } from './routes/account-banned'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVerificationBotRouteImport } from './routes/dashboard.verification-bot'
@@ -33,6 +35,7 @@ import { Route as ApiBotsLogsRouteImport } from './routes/api/bots/logs'
 import { Route as ApiBotsAllStatusRouteImport } from './routes/api/bots/all-status'
 import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
+import { Route as ApiAdminBlacklistRouteImport } from './routes/api/admin/blacklist'
 import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/public/nowpayments/webhook'
 import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worker/update'
 import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
@@ -49,6 +52,11 @@ import { Route as ApiBotsDiscordAutoreplyStopRouteImport } from './routes/api/bo
 import { Route as ApiBotsDiscordAutoreplyStatusRouteImport } from './routes/api/bots/discord-autoreply/status'
 import { Route as ApiBotsDiscordAutoreplyStartRouteImport } from './routes/api/bots/discord-autoreply/start'
 
+const VpnBlockedRoute = VpnBlockedRouteImport.update({
+  id: '/vpn-blocked',
+  path: '/vpn-blocked',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -57,6 +65,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountBannedRoute = AccountBannedRouteImport.update({
+  id: '/account-banned',
+  path: '/account-banned',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -171,6 +184,11 @@ const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
   path: '/api/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminBlacklistRoute = ApiAdminBlacklistRouteImport.update({
+  id: '/api/admin/blacklist',
+  path: '/api/admin/blacklist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicNowpaymentsWebhookRoute =
   ApiPublicNowpaymentsWebhookRouteImport.update({
     id: '/api/public/nowpayments/webhook',
@@ -253,8 +271,10 @@ const ApiBotsDiscordAutoreplyStartRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account-banned': typeof AccountBannedRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/vpn-blocked': typeof VpnBlockedRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -267,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
@@ -294,7 +315,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account-banned': typeof AccountBannedRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/vpn-blocked': typeof VpnBlockedRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -307,6 +330,7 @@ export interface FileRoutesByTo {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
@@ -335,8 +359,10 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account-banned': typeof AccountBannedRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/vpn-blocked': typeof VpnBlockedRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -349,6 +375,7 @@ export interface FileRoutesById {
   '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
@@ -378,8 +405,10 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account-banned'
     | '/dashboard'
     | '/sitemap.xml'
+    | '/vpn-blocked'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -392,6 +421,7 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
+    | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
@@ -419,7 +449,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account-banned'
     | '/sitemap.xml'
+    | '/vpn-blocked'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -432,6 +464,7 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard'
+    | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
@@ -459,8 +492,10 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account-banned'
     | '/dashboard'
     | '/sitemap.xml'
+    | '/vpn-blocked'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -473,6 +508,7 @@ export interface FileRouteTypes {
     | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
+    | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
@@ -501,9 +537,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountBannedRoute: typeof AccountBannedRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  VpnBlockedRoute: typeof VpnBlockedRoute
   ApiMeRoute: typeof ApiMeRoute
+  ApiAdminBlacklistRoute: typeof ApiAdminBlacklistRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminLogoutRoute: typeof ApiAdminLogoutRoute
   ApiBotsAllStatusRoute: typeof ApiBotsAllStatusRoute
@@ -532,6 +571,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/vpn-blocked': {
+      id: '/vpn-blocked'
+      path: '/vpn-blocked'
+      fullPath: '/vpn-blocked'
+      preLoaderRoute: typeof VpnBlockedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -544,6 +590,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account-banned': {
+      id: '/account-banned'
+      path: '/account-banned'
+      fullPath: '/account-banned'
+      preLoaderRoute: typeof AccountBannedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -700,6 +753,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/blacklist': {
+      id: '/api/admin/blacklist'
+      path: '/api/admin/blacklist'
+      fullPath: '/api/admin/blacklist'
+      preLoaderRoute: typeof ApiAdminBlacklistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/nowpayments/webhook': {
       id: '/api/public/nowpayments/webhook'
       path: '/api/public/nowpayments/webhook'
@@ -842,9 +902,12 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountBannedRoute: AccountBannedRoute,
   DashboardRoute: DashboardRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  VpnBlockedRoute: VpnBlockedRoute,
   ApiMeRoute: ApiMeRoute,
+  ApiAdminBlacklistRoute: ApiAdminBlacklistRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminLogoutRoute: ApiAdminLogoutRoute,
   ApiBotsAllStatusRoute: ApiBotsAllStatusRoute,

@@ -29,16 +29,13 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/stop")({
           return notFound("Bot not found");
         }
 
-        if (job.status !== "running" && job.status !== "pending") {
-          return Response.json({ error: "Bot is not running" }, { status: 400 });
+        if (job.status !== "running" && job.status !== "pending" && job.status !== "stopping") {
+          return Response.json({ ok: true, alreadyStopped: true });
         }
 
-        // Verify it is indeed an autoreply bot
-        if ((job.config as Record<string, unknown>)?.subType !== "autoreply") {
-          return Response.json({ error: "Job is not an auto-reply bot" }, { status: 400 });
+        if (job.status !== "stopping") {
+          await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);
         }
-
-        await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);
 
         return Response.json({ ok: true });
       },

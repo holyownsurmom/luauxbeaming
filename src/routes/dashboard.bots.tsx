@@ -251,17 +251,17 @@ function BotsPage() {
         console.error("Stop failed:", data.error || res.status);
       }
       if (selectedBotId === botId) setSelectedBotId(null);
+      await refreshBots();
     } finally {
       setStoppingId(null);
     }
-    await refreshBots();
   };
 
   const stopAndClearAll = async () => {
     setStoppingId("all");
     try {
       const targets = runningBots.filter(
-        (b) => b.status === "running" || b.status === "pending" || b.status === "stopping",
+        (b) => b.status === "running" || b.status === "pending",
       );
       await Promise.all(
         targets.map((b) =>

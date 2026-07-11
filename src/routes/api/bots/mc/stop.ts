@@ -29,11 +29,13 @@ export const Route = createFileRoute("/api/bots/mc/stop")({
           return notFound("Bot not found");
         }
 
-        if (job.status !== "running" && job.status !== "pending") {
-          return Response.json({ error: "Bot is not running" }, { status: 400 });
+        if (job.status !== "running" && job.status !== "pending" && job.status !== "stopping") {
+          return Response.json({ ok: true, alreadyStopped: true });
         }
 
-        await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);
+        if (job.status !== "stopping") {
+          await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);
+        }
 
         return Response.json({ ok: true });
       },

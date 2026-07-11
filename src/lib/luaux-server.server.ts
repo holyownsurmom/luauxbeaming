@@ -9,7 +9,7 @@ export type LuauxSessionUser = {
   avatar: string | null;
 };
 
-type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean };
+type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean; vpnBlocked?: boolean };
 
 export const sessionConfig = () => ({
   password: process.env.SESSION_SECRET!,

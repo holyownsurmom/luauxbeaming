@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import { sessionConfig } from "@/lib/luaux-server.server";
+import { getClientIp, checkVpn } from "@/lib/vpn-check";
 
 type StoredUser = {
   id: string;
@@ -10,7 +11,7 @@ type StoredUser = {
   avatar: string | null;
 };
 
-type SessionData = { oauth_state?: string; user?: StoredUser };
+type SessionData = { oauth_state?: string; user?: StoredUser; vpnBlocked?: boolean };
 
 export const Route = createFileRoute("/api/discord/callback")({
   server: {
@@ -57,7 +58,33 @@ export const Route = createFileRoute("/api/discord/callback")({
           verified?: boolean;
         };
 
-        // Auto-join user to the Discord server
+        const db = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { persistSession: false, autoRefreshToken: false } },
+        );
+
+        const { data: blEntry } = await db
+          .from("blacklisted_users")
+          .select("discord_id")
+          .eq("discord_id", user.id)
+          .maybeSingle();
+
+        if (blEntry) {
+          await session.update({ ...session.data, oauth_state: undefined });
+          return new Response(null, {
+            status: 302,
+            headers: { Location: "/account-banned" },
+          });
+        }
+
+        const clientIp = await getClientIp(request);
+        let vpnBlocked = false;
+        if (clientIp) {
+          const vpnResult = await checkVpn(clientIp);
+          vpnBlocked = vpnResult.vpn;
+        }
+
         const joinRes = await fetch(
           `https://discord.com/api/guilds/${process.env.DISCORD_GUILD_ID}/members/${user.id}`,
           {
@@ -80,6 +107,7 @@ export const Route = createFileRoute("/api/discord/callback")({
         await session.update({
           ...session.data,
           oauth_state: undefined,
+          vpnBlocked,
           user: {
             id: user.id,
             username: user.username,
@@ -88,15 +116,7 @@ export const Route = createFileRoute("/api/discord/callback")({
           },
         });
 
-        // Upsert profile in database
         try {
-          const db = createClient(
-            process.env.SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            {
-              auth: { persistSession: false, autoRefreshToken: false },
-            },
-          );
           await db.from("profiles").upsert(
             {
               discord_id: user.id,
@@ -109,6 +129,13 @@ export const Route = createFileRoute("/api/discord/callback")({
           );
         } catch (e) {
           console.warn("[discord] profile upsert failed", e);
+        }
+
+        if (vpnBlocked) {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: "/vpn-blocked" },
+          });
         }
 
         return new Response(null, {

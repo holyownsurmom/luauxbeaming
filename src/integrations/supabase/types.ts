@@ -32,6 +32,24 @@ export type Database = {
         }
         Relationships: []
       }
+      blacklisted_users: {
+        Row: {
+          created_at: string | null
+          discord_id: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          discord_id: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          discord_id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       bot_jobs: {
         Row: {
           config: Json

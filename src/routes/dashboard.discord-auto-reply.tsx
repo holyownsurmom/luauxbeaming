@@ -163,27 +163,43 @@ function DiscordAutoReplyPage() {
   const stopBot = async (botId: string) => {
     setStoppingId(botId);
     try {
-      await fetch("/api/bots/discord-autoreply/stop", {
+      const res = await fetch("/api/bots/discord-autoreply/stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ botId }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("Stop failed:", data.error || res.status);
+      }
       if (selectedBotId === botId) setSelectedBotId(null);
+    } finally {
+      setStoppingId(null);
+    }
+    await refreshBots();
+  };
+
+  const stopAndClearAll = async () => {
+    setStoppingId("all");
+    try {
+      const targets = runningBots.filter(
+        (b) => b.status === "running" || b.status === "pending" || b.status === "stopping",
+      );
+      await Promise.all(
+        targets.map((b) =>
+          fetch("/api/bots/discord-autoreply/stop", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ botId: b.id }),
+          }).catch(() => {}),
+        ),
+      );
+      setConsoleEntries([]);
+      setSelectedBotId(null);
       await refreshBots();
     } finally {
       setStoppingId(null);
     }
-  };
-
-  const stopAndClearAll = async () => {
-    const running = runningBots.filter(
-      (b) => b.status === "running" || b.status === "pending" || b.status === "stopping",
-    );
-    for (const bot of running) {
-      await stopBot(bot.id);
-    }
-    setConsoleEntries([]);
-    setSelectedBotId(null);
   };
 
   // If no license key, show the purchase PluginPage

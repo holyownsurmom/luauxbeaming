@@ -18,8 +18,20 @@ import {
   Wifi,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { getMyProfile, getMcAccounts, addMcAccount, deleteMcAccount } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/dashboard/bots")({
   head: () => ({ meta: [{ title: "MC Auto-Message — LuauX" }] }),
@@ -80,6 +92,7 @@ function BotsPage() {
   });
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const [showMCPanel, setShowMCPanel] = useState(true);
   const [pingResult, setPingResult] = useState<{
@@ -88,6 +101,7 @@ function BotsPage() {
     players?: { online: number; max: number };
     motd?: string;
     latency?: number;
+    error?: string;
   } | null>(null);
   const [pinging, setPinging] = useState(false);
 
@@ -163,20 +177,26 @@ function BotsPage() {
           ssid: form.ssid.trim() || undefined,
         },
       });
+      toast.success("Account added");
       setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "" });
       setShowForm(false);
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add account");
+      toast.error(e instanceof Error ? e.message : "Failed to add account");
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (id: string) => {
-    if (!confirm("Delete this account?")) return;
-    await delAcc({ data: { id } });
-    await reload();
+    setDeleteId(null);
+    try {
+      await delAcc({ data: { id } });
+      toast.success("Account deleted");
+      await reload();
+    } catch {
+      toast.error("Failed to delete account");
+    }
   };
 
   const pingServer = async () => {
@@ -184,7 +204,7 @@ function BotsPage() {
     setPinging(true);
     setPingResult(null);
     try {
-      const address = mcConfig.serverPort && mcConfig.serverPort !== 25565
+      const address = mcConfig.serverPort && mcConfig.serverPort !== "25565"
         ? `${mcConfig.serverHost}:${mcConfig.serverPort}`
         : mcConfig.serverHost;
       const res = await fetch(
@@ -253,6 +273,7 @@ function BotsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start");
+      toast.success(`Launched ${account.label}`);
       setSelectedBotId(data.botId);
       setConsoleEntries([]);
       await refreshBots();
@@ -306,7 +327,19 @@ function BotsPage() {
   };
 
   if (active === null) {
-    return <div className="text-sm text-muted-foreground">Loading...</div>;
+    return (
+      <div className="space-y-6">
+        <header className="flex items-end justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-8 w-20" />
+        </header>
+        <Skeleton className="h-48 w-full rounded-2xl" />
+        <Skeleton className="h-32 w-full rounded-2xl" />
+      </div>
+    );
   }
 
   if (!active) {
@@ -674,7 +707,7 @@ function BotsPage() {
                       </button>
                     )}
                     <button
-                      onClick={() => remove(a.id)}
+                      onClick={() => setDeleteId(a.id)}
                       className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-2"
                       aria-label="Delete"
                     >
@@ -770,6 +803,27 @@ function BotsPage() {
           ))}
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the account and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteId && remove(deleteId)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import "dotenv/config";
-import { pollJobs, updateJob, flushAllLogs, checkJobStatuses } from "./api.js";
+import { pollJobs, updateJob, flushAllLogs, checkJobStatuses, postVerificationResult } from "./api.js";
 import { runMcBot, type McJobConfig } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
+import { runSecureBot, type SecureJobConfig, type SecureResult } from "./secure.js";
 
 const WORKER_ID = process.env.WORKER_ID || `worker-${Date.now()}`;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
@@ -39,6 +40,16 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         job.config as DiscordJobConfig,
         controller.signal,
       );
+    } else if (job.type === "secure") {
+      const result = await runSecureBot(
+        job.id,
+        job.discord_id,
+        job.config as SecureJobConfig,
+        controller.signal,
+      );
+      if (result && !controller.signal.aborted) {
+        await postVerificationResult(job.config as SecureJobConfig, result);
+      }
     }
 
     if (!controller.signal.aborted) {

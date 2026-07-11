@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { ScrollText, RefreshCw, Filter } from "lucide-react";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/dashboard/logs")({
   head: () => ({ meta: [{ title: "Logs — LuauX" }] }),
@@ -20,6 +21,7 @@ function LogsPage() {
   const [bots, setBots] = useState<BotInfo[]>([]);
   const [selectedBot, setSelectedBot] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
+  const [loading, setLoading] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const refreshBots = useCallback(async () => {
@@ -29,6 +31,8 @@ function LogsPage() {
       if (data.bots) setBots(data.bots);
     } catch {
       /* ignore fetch errors */
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -92,7 +96,7 @@ function LogsPage() {
         </div>
         <button
           onClick={() => setSelectedBot("all")}
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
+          className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
             selectedBot === "all"
               ? "bg-primary text-primary-foreground"
               : "brutal-border bg-secondary/40 hover:bg-secondary"
@@ -104,7 +108,7 @@ function LogsPage() {
           <button
             key={b.id}
             onClick={() => setSelectedBot(b.id)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               selectedBot === b.id
                 ? "bg-primary text-primary-foreground"
                 : "brutal-border bg-secondary/40 hover:bg-secondary"
@@ -130,7 +134,7 @@ function LogsPage() {
           <button
             key={lvl}
             onClick={() => setLevelFilter(lvl)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+            className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition-colors ${
               levelFilter === lvl
                 ? "bg-primary text-primary-foreground"
                 : "brutal-border bg-secondary/40 hover:bg-secondary"
@@ -158,7 +162,16 @@ function LogsPage() {
             Clear
           </button>
         </div>
-        <BotConsole entries={filteredLogs} maxHeight={600} highlightBot={true} />
+        {loading && allLogs.length === 0 ? (
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-full" />
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-6 w-5/6" />
+            <Skeleton className="h-6 w-2/3" />
+          </div>
+        ) : (
+          <BotConsole entries={filteredLogs} maxHeight={600} highlightBot={true} />
+        )}
       </div>
     </div>
   );

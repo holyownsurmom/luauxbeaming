@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LifeBuoy, MessageCircle, ExternalLink } from "lucide-react";
 
-const DISCORD_INVITE = "https://discord.gg/sHgh6kVBg3";
+const DISCORD_INVITE = "https://discord.gg/n6nEcvwzYQ";
 
 export const Route = createFileRoute("/dashboard/support")({
   head: () => ({ meta: [{ title: "Support — LuauX" }] }),

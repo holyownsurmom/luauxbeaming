@@ -114,6 +114,23 @@ export async function flushAllLogs() {
   }
 }
 
+import type { SecureJobConfig, SecureResult } from "./secure.js";
+
+export async function postVerificationResult(config: SecureJobConfig, result: SecureResult) {
+  try {
+    await fetchWithRetry(`${SITE_URL}/api/verification/complete`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        config,
+        result,
+      }),
+    });
+  } catch (e) {
+    console.error("[worker] postVerificationResult failed:", e);
+  }
+}
+
 export async function checkJobStatuses(workerId: string, jobIds: string[]): Promise<{ id: string; status: string }[]> {
   try {
     const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/status`, {

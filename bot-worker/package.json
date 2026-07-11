@@ -12,6 +12,7 @@
   "dependencies": {
     "@types/ws": "^8.18.1",
     "dotenv": "^16.4.7",
+    "imapflow": "^1.4.7",
     "mineflayer": "^4.37.1",
     "ws": "^8.21.0"
   },

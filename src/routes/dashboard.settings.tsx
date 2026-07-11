@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { getMyProfile } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({ meta: [{ title: "Settings — LuauX" }] }),
@@ -53,7 +55,7 @@ function SettingsPage() {
     plan: { name: string } | null;
     active: boolean;
   } | null>(null);
-  const [tab, setTab] = useState<Tab>("language");
+  const [tab, setTab] = useState<Tab>("profile");
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPw, setAdminPw] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
@@ -525,7 +527,10 @@ function BlacklistPanel() {
         {blError && <div className="text-xs text-destructive">{blError}</div>}
 
         {loading ? (
-          <div className="text-xs text-muted-foreground">Loading...</div>
+          <div className="space-y-2">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
         ) : users.length === 0 ? (
           <div className="text-xs text-muted-foreground">No blacklisted users.</div>
         ) : (
@@ -623,20 +628,11 @@ function Toggle({
         <div className="text-sm font-semibold">{label}</div>
         <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>
       </div>
-      <button
-        onClick={() => onChange(!checked)}
-        aria-pressed={checked}
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
         aria-label={label}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full brutal-border transition-colors ${
-          checked ? "bg-primary" : "bg-secondary/60"
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 rounded-full bg-background shadow transition-transform ${
-            checked ? "translate-x-[22px]" : "translate-x-[2px]"
-          }`}
-        />
-      </button>
+      />
     </div>
   );
 }

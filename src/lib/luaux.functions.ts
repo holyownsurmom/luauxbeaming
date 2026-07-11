@@ -256,6 +256,18 @@ export const getVerificationSettings = createServerFn({ method: "GET" }).handler
   return data;
 });
 
+export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireUser, admin } = await import("./luaux-server.server");
+  const user = await requireUser();
+  const { data } = await admin()
+    .from("secured_accounts")
+    .select("*")
+    .eq("discord_id", user.id)
+    .order("secured_at", { ascending: false })
+    .limit(20);
+  return data ?? [];
+});
+
 export const saveVerificationSettings = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z

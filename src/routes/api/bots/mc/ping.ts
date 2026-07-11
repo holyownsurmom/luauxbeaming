@@ -37,18 +37,19 @@ async function pingMcServer(
   players?: { online: number; max: number };
   motd?: string;
   latency?: number;
+  error?: string;
 }> {
   const start = Date.now();
   try {
     const res = await fetch(`https://api.mcsrvstat.us/2/${host}:${port}`, {
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(10000),
     });
     const latency = Date.now() - start;
 
-    if (!res.ok) return { online: false };
+    if (!res.ok) return { online: false, error: `HTTP ${res.status}` };
     const data = await res.json();
 
-    if (!data || data.online !== true) return { online: false };
+    if (!data || data.online !== true) return { online: false, error: data?.error || "Offline" };
 
     return {
       online: true,
@@ -62,7 +63,7 @@ async function pingMcServer(
           : data.motd?.clean || data.motd?.html || undefined,
       latency,
     };
-  } catch {
-    return { online: false };
+  } catch (e) {
+    return { online: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

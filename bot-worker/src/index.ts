@@ -1,10 +1,11 @@
 import "dotenv/config";
-import { pollJobs, updateJob, flushAllLogs } from "./api.js";
+import { pollJobs, updateJob, flushAllLogs, checkJobStatuses } from "./api.js";
 import { runMcBot, type McJobConfig } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 
 const WORKER_ID = process.env.WORKER_ID || `worker-${Date.now()}`;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
+const STATUS_CHECK_INTERVAL = Math.max(5000, POLL_INTERVAL * 2);
 
 if (!process.env.SITE_URL) {
   console.error("[worker] ERROR: SITE_URL is not set!");
@@ -64,12 +65,30 @@ async function poll() {
   }
 }
 
+async function checkRunningJobs() {
+  if (runningJobs.size === 0) return;
+
+  const jobIds = Array.from(runningJobs.keys());
+  const statuses = await checkJobStatuses(WORKER_ID, jobIds);
+
+  for (const { id, status } of statuses) {
+    if (status === "stopping" || status === "stopped" || status === "error" || status === "completed") {
+      console.log(`[worker] job ${id} marked ${status} in DB, aborting`);
+      const controller = runningJobs.get(id);
+      if (controller) controller.abort();
+    }
+  }
+}
+
 const pollTimer = setInterval(poll, POLL_INTERVAL);
+const statusCheckTimer = setInterval(checkRunningJobs, STATUS_CHECK_INTERVAL);
 poll();
+checkRunningJobs();
 
 async function shutdown() {
   console.log("[worker] shutting down...");
   clearInterval(pollTimer);
+  clearInterval(statusCheckTimer);
   for (const [id, controller] of runningJobs) {
     console.log(`[worker] aborting job ${id}`);
     controller.abort();

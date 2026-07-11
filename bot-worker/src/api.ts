@@ -111,3 +111,19 @@ export async function flushAllLogs() {
     await flushLogs();
   }
 }
+
+export async function checkJobStatuses(workerId: string, jobIds: string[]): Promise<{ id: string; status: string }[]> {
+  try {
+    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/status`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ worker_id: workerId, job_ids: jobIds }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.jobs ?? [];
+  } catch (e) {
+    console.error("[worker] checkJobStatuses failed:", e);
+    return [];
+  }
+}

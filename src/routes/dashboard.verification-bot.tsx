@@ -103,19 +103,14 @@ function VerificationBotPage() {
 
     try {
       await saveSettings({
-        guild_id: guildId.trim(),
-        verified_role_id: verifiedRoleId.trim(),
-        channel_id: channelId.trim(),
-        message_title: messageTitle.trim(),
-        message_description: messageDescription.trim(),
-        button_text: buttonText.trim(),
-      } as {
-        guild_id: string;
-        verified_role_id: string;
-        channel_id: string;
-        message_title: string;
-        message_description: string;
-        button_text: string;
+        data: {
+          guild_id: guildId.trim(),
+          verified_role_id: verifiedRoleId.trim(),
+          channel_id: channelId.trim(),
+          message_title: messageTitle.trim(),
+          message_description: messageDescription.trim(),
+          button_text: buttonText.trim(),
+        },
       });
       setSuccessMsg("Settings saved and verification button posted successfully!");
     } catch (err) {

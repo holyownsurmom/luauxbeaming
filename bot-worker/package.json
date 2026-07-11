@@ -10,8 +10,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@types/ws": "^8.18.1",
     "dotenv": "^16.4.7",
-    "mineflayer": "^4.37.1"
+    "mineflayer": "^4.37.1",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.16.5",

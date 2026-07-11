@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import luauxLogo from "@/assets/luaux-logo.png";
 
 export const Route = createFileRoute("/")({
@@ -182,8 +182,73 @@ function GoldDivider() {
   return (
     <div className="relative h-px w-full">
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-4 bg-primary/10 blur-xl rounded-full" />
     </div>
   );
+}
+
+function FloatingParticles() {
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      {/* Main radial glow */}
+      <div
+        className="absolute left-1/2 top-0 h-[700px] w-[900px] -translate-x-1/2 rounded-full blur-[150px] animate-glow-breathe"
+        style={{
+          background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.15), transparent 70%)",
+        }}
+      />
+      {/* Secondary glow bottom right */}
+      <div
+        className="absolute right-0 bottom-0 h-[500px] w-[500px] rounded-full blur-[120px] opacity-40"
+        style={{
+          background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.08), transparent 70%)",
+        }}
+      />
+      {/* Floating gold orbs */}
+      <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
+      <div className="absolute top-[40%] right-[15%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float-slow" style={{ animationDelay: "2s" }} />
+      <div className="absolute top-[60%] left-[20%] w-1 h-1 rounded-full bg-primary/25 animate-float" style={{ animationDelay: "4s" }} />
+      <div className="absolute top-[30%] right-[25%] w-2.5 h-2.5 rounded-full bg-primary/15 animate-float-slow" style={{ animationDelay: "1s" }} />
+      <div className="absolute top-[70%] right-[10%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float" style={{ animationDelay: "3s" }} />
+      <div className="absolute top-[15%] left-[40%] w-1 h-1 rounded-full bg-primary/25 animate-float-slow" style={{ animationDelay: "5s" }} />
+    </div>
+  );
+}
+
+function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          const duration = 1500;
+          const steps = 60;
+          const increment = target / steps;
+          let current = 0;
+          const timer = setInterval(() => {
+            current += increment;
+            if (current >= target) {
+              setCount(target);
+              clearInterval(timer);
+            } else {
+              setCount(Math.floor(current));
+            }
+          }, duration / steps);
+        }
+      },
+      { threshold: 0.5 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [target]);
+
+  return <span ref={ref}>{count.toLocaleString()}{suffix}</span>;
 }
 
 function Index() {
@@ -251,15 +316,7 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
-      {/* Subtle gold radial glow at top */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-        <div
-          className="absolute left-1/2 top-0 h-[600px] w-[800px] -translate-x-1/2 rounded-full blur-[120px]"
-          style={{
-            background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.12), transparent 70%)",
-          }}
-        />
-      </div>
+      <FloatingParticles />
 
       {/* NAV */}
       <header className="sticky top-4 z-40 mx-auto max-w-6xl px-4">
@@ -319,51 +376,78 @@ function Index() {
       </header>
 
       {/* HERO */}
-      <section id="top" className="mx-auto max-w-6xl px-6 pt-24 pb-24 md:pt-32 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/60 glass-card px-4 py-1.5 text-[11px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary blink" />
-          128 nodes online · eu-fra 18ms
-        </div>
-        <h1 className="mt-8 font-display text-5xl md:text-7xl lg:text-8xl font-semibold leading-[0.92] tracking-tight text-gradient">
-          Stop beaming manually.
-          <br />
-          <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.3)" }}>
-            Let the fleet do it.
-          </span>
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl text-base md:text-lg text-muted-foreground leading-relaxed">
-          Deploy a stealth Minecraft bot fleet in under a minute. Live logs, anti-detect proxies,
-          24/7 uptime — no babysitting, no scripts, no cope.
-        </p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <button
-            onClick={openAuth}
-            className="rounded-full btn-gold px-8 py-3.5 text-sm"
-          >
-            Get started free →
-          </button>
-          <a
-            href="#console"
-            className="rounded-full border border-border/60 bg-card/60 px-8 py-3.5 text-sm font-semibold text-foreground/90 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-300"
-          >
-            See it running
-          </a>
+      <section id="top" className="mx-auto max-w-6xl px-6 pt-28 pb-28 md:pt-40 text-center relative">
+        {/* Orbiting ring decoration */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] md:w-[700px] md:h-[700px] pointer-events-none" aria-hidden>
+          <div className="absolute inset-0 rounded-full border border-primary/5 animate-[spin_60s_linear_infinite]" />
+          <div className="absolute inset-8 rounded-full border border-primary/8 animate-[spin_45s_linear_infinite_reverse]" />
+          <div className="absolute inset-16 rounded-full border border-primary/4 animate-[spin_30s_linear_infinite]" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary/40" />
+          <div className="absolute bottom-0 right-1/4 w-1 h-1 rounded-full bg-primary/30" />
+          <div className="absolute top-1/3 left-0 w-1 h-1 rounded-full bg-primary/25" />
         </div>
 
-        {/* Stats bar */}
-        <div className="mx-auto mt-20 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border md:grid-cols-3">
-          {[
-            { k: "$10,000+", v: "value beamed" },
-            { k: "99%", v: "uptime" },
-            { k: "35s", v: "avg deploy" },
-          ].map((s) => (
-            <div key={s.v} className="bg-card/80 px-6 py-7 text-left group hover:bg-card transition-colors">
-              <div className="font-display text-3xl font-semibold text-gradient-gold">{s.k}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-widest text-muted-foreground">
-                {s.v}
+        <div className="relative">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 glass-card px-4 py-1.5 text-[11px] text-muted-foreground animate-fade-in-up">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+            </span>
+            128 nodes online · eu-fra 18ms
+          </div>
+
+          <h1 className="mt-10 font-display text-6xl md:text-8xl lg:text-[96px] font-semibold leading-[0.88] tracking-tight text-gradient animate-fade-in-up stagger-2" style={{ opacity: 0 }}>
+            Stop beaming
+            <br />
+            <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.3)" }}>
+              manually.
+            </span>
+          </h1>
+
+          <h2 className="mt-4 font-display text-3xl md:text-5xl font-semibold leading-[1] tracking-tight animate-fade-in-up stagger-3" style={{ opacity: 0 }}>
+            <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.4)" }}>
+              Let the fleet do it.
+            </span>
+          </h2>
+
+          <p className="mx-auto mt-8 max-w-xl text-base md:text-lg text-muted-foreground leading-relaxed animate-fade-in-up stagger-4" style={{ opacity: 0 }}>
+            Deploy a stealth Minecraft bot fleet in under a minute. Live logs, anti-detect proxies,
+            24/7 uptime — no babysitting, no scripts, no cope.
+          </p>
+
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-4 animate-fade-in-up stagger-5" style={{ opacity: 0 }}>
+            <button
+              onClick={openAuth}
+              className="rounded-full btn-gold-lg px-10 py-4 text-sm"
+            >
+              Get started free →
+            </button>
+            <a
+              href="#console"
+              className="rounded-full border border-border/60 bg-card/60 px-8 py-4 text-sm font-semibold text-foreground/90 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border transition-all duration-300"
+            >
+              See it running
+            </a>
+          </div>
+
+          {/* Stats bar */}
+          <div className="mx-auto mt-24 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border md:grid-cols-3 animate-fade-in-up stagger-6" style={{ opacity: 0 }}>
+            {[
+              { k: "$10,000+", v: "value beamed", num: 10000, suffix: "+" },
+              { k: "99%", v: "uptime", num: 99, suffix: "%" },
+              { k: "35s", v: "avg deploy", num: 35, suffix: "s" },
+            ].map((s) => (
+              <div key={s.v} className="bg-card/80 px-6 py-8 text-left group hover:bg-card transition-all duration-300 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="relative font-display text-3xl md:text-4xl font-semibold text-gradient-gold">
+                  <AnimatedCounter target={s.num} suffix={s.suffix} />
+                </div>
+                <div className="relative mt-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
+                  {s.v}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
@@ -371,10 +455,14 @@ function Index() {
 
       {/* CONSOLE */}
       <section id="console" className="mx-auto max-w-6xl px-6 py-24 md:py-32">
-        <div className="grid gap-12 lg:grid-cols-12">
-          <div className="lg:col-span-5">
+        <div className="grid gap-12 lg:grid-cols-12 items-center">
+          <div className="lg:col-span-5 animate-slide-in-left">
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-primary">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary blink" /> live
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
+              live
             </div>
             <h2 className="mt-4 font-display text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight text-gradient">
               Watch your fleet
@@ -385,7 +473,7 @@ function Index() {
               Every bot streams its activity in real time and answers chat autonomously. No
               babysitting — just a browser tab and a coffee.
             </p>
-            <div className="mt-8 space-y-3">
+            <div className="mt-8 space-y-4">
               {[
                 ["2,418", "AI replies today"],
                 ["128", "nodes online"],
@@ -393,9 +481,9 @@ function Index() {
               ].map(([k, v]) => (
                 <div
                   key={v}
-                  className="flex items-baseline justify-between gap-4 border-b border-border/60 pb-3"
+                  className="flex items-baseline justify-between gap-4 border-b border-border/60 pb-4 group"
                 >
-                  <span className="text-xs uppercase tracking-widest text-muted-foreground">
+                  <span className="text-xs uppercase tracking-widest text-muted-foreground group-hover:text-foreground/70 transition-colors">
                     {v}
                   </span>
                   <span className="font-display text-2xl font-semibold text-gradient-gold">{k}</span>
@@ -404,48 +492,55 @@ function Index() {
             </div>
           </div>
 
-          <div className="lg:col-span-7">
-            <div className="rounded-2xl border border-border/60 overflow-hidden bg-card/80 glow-sm font-mono text-xs">
-              <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card/90">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+          <div className="lg:col-span-7 animate-slide-in-right">
+            <div className="rounded-2xl border border-border/60 overflow-hidden bg-card/80 glow-sm font-mono text-xs relative">
+              {/* Terminal glow effect */}
+              <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 via-transparent to-primary/5 pointer-events-none" />
+              <div className="relative">
+                <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card/90">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+                  </div>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    luaux@runner ~ tail -f fleet.log
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-primary">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
+                    </span>
+                    live
+                  </span>
                 </div>
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  luaux@runner ~ tail -f fleet.log
-                </span>
-                <span className="flex items-center gap-1 text-[10px] text-primary">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary blink" />
-                  live
-                </span>
-              </div>
-              <div className="p-5 space-y-1.5 min-h-[380px]">
-                {visibleLogs.map((l, i) => {
-                  const tagColor: Record<string, string> = {
-                    JOIN: "bg-primary/15 text-primary border-primary/30",
-                    SEND: "bg-yellow-400/8 text-yellow-300 border-yellow-400/20",
-                    CHAT: "bg-sky-400/8 text-sky-300 border-sky-400/20",
-                    AI: "bg-fuchsia-400/8 text-fuchsia-300 border-fuchsia-400/20",
-                    HOOK: "bg-violet-400/8 text-violet-300 border-violet-400/20",
-                    AFK: "bg-muted text-muted-foreground border-border",
-                  };
-                  return (
-                    <div key={i} className="flex items-start gap-3 leading-relaxed">
-                      <span className="text-muted-foreground/50">{l.t}</span>
-                      <span
-                        className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}
-                      >
-                        {l.tag}
-                      </span>
-                      <span className="text-primary/80">{l.bot}</span>
-                      <span className="text-foreground/70">{l.msg}</span>
-                    </div>
-                  );
-                })}
-                <div className="flex items-center gap-2 pt-2 text-muted-foreground">
-                  <span className="text-primary">›</span>
-                  <span className="h-3 w-2 bg-primary blink" />
+                <div className="p-5 space-y-1.5 min-h-[380px] scanlines">
+                  {visibleLogs.map((l, i) => {
+                    const tagColor: Record<string, string> = {
+                      JOIN: "bg-primary/15 text-primary border-primary/30",
+                      SEND: "bg-yellow-400/8 text-yellow-300 border-yellow-400/20",
+                      CHAT: "bg-sky-400/8 text-sky-300 border-sky-400/20",
+                      AI: "bg-fuchsia-400/8 text-fuchsia-300 border-fuchsia-400/20",
+                      HOOK: "bg-violet-400/8 text-violet-300 border-violet-400/20",
+                      AFK: "bg-muted text-muted-foreground border-border",
+                    };
+                    return (
+                      <div key={i} className="flex items-start gap-3 leading-relaxed" style={{ animationDelay: `${i * 0.05}s` }}>
+                        <span className="text-muted-foreground/50">{l.t}</span>
+                        <span
+                          className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}
+                        >
+                          {l.tag}
+                        </span>
+                        <span className="text-primary/80">{l.bot}</span>
+                        <span className="text-foreground/70">{l.msg}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2 pt-2 text-muted-foreground">
+                    <span className="text-primary">›</span>
+                    <span className="terminal-cursor" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -456,8 +551,9 @@ function Index() {
       <GoldDivider />
 
       {/* FEATURES */}
-      <section id="features" className="bg-card/20">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      <section id="features" className="bg-card/20 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/3 via-transparent to-primary/3 pointer-events-none" />
+        <div className="mx-auto max-w-6xl px-6 py-24 relative">
           <div className="mb-16 flex flex-wrap items-end justify-between gap-6">
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// platform</div>
@@ -474,12 +570,16 @@ function Index() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f) => (
+            {FEATURES.map((f, i) => (
               <div
                 key={f.tag}
-                className="group relative rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-300 hover:border-primary/30 hover:bg-card/80 hover:-translate-y-1 hover:glow-sm"
+                className="group relative rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/80 hover:-translate-y-2 hover:glow-sm"
+                style={{ animationDelay: `${i * 0.1}s` }}
               >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                {/* Hover gradient overlay */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                {/* Top glow line on hover */}
+                <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative">
                   <div className="mb-6 flex items-center justify-between">
                     <span className="font-mono text-xs text-muted-foreground/60">{f.tag}</span>
@@ -487,9 +587,10 @@ function Index() {
                       {f.label}
                     </span>
                   </div>
+                  <div className="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300">{f.icon}</div>
                   <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
                   <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.body}</p>
-                  <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1">
+                  <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 translate-x-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-2">
                     Learn more →
                   </div>
                 </div>
@@ -506,27 +607,31 @@ function Index() {
         <div className="mb-16 text-center">
           <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// pricing</div>
           <h2 className="mt-3 font-display text-4xl md:text-6xl font-semibold tracking-tight text-gradient">
-            Simple. Transparent. <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.3)" }}>Crypto.</span>
+            Simple. Transparent. <span className="text-shimmer" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.3)" }}>Crypto.</span>
           </h2>
           <p className="mt-5 text-muted-foreground">
             Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.
           </p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3 items-start">
           {PLANS.map((p) => (
             <div
               key={p.name}
-              className={`relative rounded-2xl p-8 transition-all duration-300 ${
+              className={`relative rounded-2xl p-8 transition-all duration-500 group ${
                 p.highlight
-                  ? "border-2 border-primary/60 bg-card/80 glow-primary lg:-translate-y-4"
-                  : "border border-border/60 bg-card/60 hover:border-primary/20 hover:-translate-y-1"
+                  ? "border-2 border-primary/60 bg-card/80 lg:-translate-y-4 glow-primary pricing-glow"
+                  : "border border-border/60 bg-card/60 hover:border-primary/20 hover:-translate-y-2 hover:glow-sm"
               }`}
             >
               {p.highlight && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-4 py-1 text-[10px] font-semibold uppercase tracking-widest shadow-lg">
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground px-5 py-1 text-[10px] font-semibold uppercase tracking-widest shadow-lg shadow-primary/30">
                   Most popular
                 </div>
+              )}
+              {/* Shimmer border on highlight */}
+              {p.highlight && (
+                <div className="absolute inset-0 rounded-2xl gold-shimmer pointer-events-none" style={{ mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", maskComposite: "exclude", WebkitMaskComposite: "xor", padding: "2px" }} />
               )}
               <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
                 {p.name}
@@ -538,20 +643,20 @@ function Index() {
                 <span className="text-sm text-muted-foreground">/mo</span>
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-border/60 bg-card/80 p-3">
+                <div className="rounded-xl border border-border/60 bg-card/80 p-3 group-hover:border-primary/15 transition-colors duration-300">
                   <div className="font-display text-2xl font-semibold text-gradient-gold">{p.bots}</div>
                   <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     bots
                   </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-card/80 p-3">
+                <div className="rounded-xl border border-border/60 bg-card/80 p-3 group-hover:border-primary/15 transition-colors duration-300">
                   <div className="font-display text-2xl font-semibold text-gradient-gold">{p.hours}h</div>
                   <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     daily
                   </div>
                 </div>
               </div>
-              <ul className="mt-6 space-y-2.5 text-sm">
+              <ul className="mt-6 space-y-3 text-sm">
                 {p.feats.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-muted-foreground">
                     <span className="mt-0.5 text-primary text-xs">✓</span>
@@ -561,10 +666,10 @@ function Index() {
               </ul>
               <button
                 onClick={openAuth}
-                className={`mt-8 block w-full text-center rounded-full py-3.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 ${
+                className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
                   p.highlight
-                    ? "btn-gold"
-                    : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                    ? "btn-gold-lg"
+                    : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
                 }`}
               >
                 Get started →
@@ -577,8 +682,9 @@ function Index() {
       <GoldDivider />
 
       {/* REVIEWS */}
-      <section className="bg-card/20">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      <section className="bg-card/20 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/3 via-transparent to-primary/3 pointer-events-none" />
+        <div className="mx-auto max-w-6xl px-6 py-24 relative">
           <div className="mb-14 flex flex-wrap items-end justify-between gap-6">
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// reviews</div>
@@ -591,7 +697,7 @@ function Index() {
             <div className="flex items-center gap-4">
               <div className="font-display text-5xl font-semibold text-gradient-gold">4.7</div>
               <div className="text-xs uppercase tracking-widest">
-                <div className="text-primary">★★★★★</div>
+                <div className="text-primary text-lg">★★★★★</div>
                 <div className="mt-1 text-muted-foreground">based on 247 reviews</div>
               </div>
             </div>
@@ -600,18 +706,21 @@ function Index() {
             {REVIEWS.map((r, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-300 hover:border-primary/20 hover:-translate-y-1"
+                className="rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-500 hover:border-primary/20 hover:-translate-y-2 hover:glow-sm group relative overflow-hidden"
               >
-                <div className="text-primary text-sm">
-                  {"★".repeat(r.stars)}
-                  <span className="text-muted-foreground/20">{"★".repeat(5 - r.stars)}</span>
-                </div>
-                <p className="mt-4 text-sm leading-relaxed text-foreground/80">"{r.text}"</p>
-                <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] text-primary font-semibold">
-                    {r.name[1]?.toUpperCase()}
-                  </span>
-                  <span>{r.name}</span>
+                <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                <div className="relative">
+                  <div className="text-primary text-sm">
+                    {"★".repeat(r.stars)}
+                    <span className="text-muted-foreground/20">{"★".repeat(5 - r.stars)}</span>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-foreground/80">"{r.text}"</p>
+                  <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] text-primary font-semibold">
+                      {r.name[1]?.toUpperCase()}
+                    </span>
+                    <span>{r.name}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -636,7 +745,7 @@ function Index() {
               <button
                 key={i}
                 onClick={() => setOpenFaq(open ? null : i)}
-                className={`block w-full text-left border-b border-border/60 last:border-b-0 p-6 transition-all duration-200 ${
+                className={`block w-full text-left border-b border-border/60 last:border-b-0 p-6 transition-all duration-300 ${
                   open ? "bg-primary/5" : "hover:bg-primary/5"
                 }`}
               >
@@ -651,9 +760,11 @@ function Index() {
                     +
                   </span>
                 </div>
-                {open && (
-                  <p className="mt-4 pl-10 text-sm text-muted-foreground max-w-2xl leading-relaxed">{f.a}</p>
-                )}
+                <div className={`grid transition-all duration-300 ${open ? "grid-rows-[1fr] mt-4" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                    <p className="pl-10 text-sm text-muted-foreground max-w-2xl leading-relaxed">{f.a}</p>
+                  </div>
+                </div>
               </button>
             );
           })}
@@ -662,23 +773,27 @@ function Index() {
 
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-card/60 px-8 py-20 text-center">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-card/60 px-8 py-24 text-center group">
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/8 pointer-events-none" />
+          <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+          {/* Decorative orbs */}
+          <div className="absolute top-10 left-10 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" />
+          <div className="absolute bottom-10 right-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" style={{ animationDelay: "2s" }} />
           <div className="relative">
             <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// ready</div>
-            <h2 className="mt-3 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
-              Ready to <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.3)" }}>beam?</span>
+            <h2 className="mt-4 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
+              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.4)" }}>beam?</span>
             </h2>
             <p className="mx-auto mt-6 max-w-md text-muted-foreground">
               Sign in with Discord. First bot deployed in under a minute.
             </p>
             <button
               onClick={openAuth}
-              className="mt-8 inline-flex items-center gap-2 rounded-full btn-gold px-8 py-4 text-sm"
+              className="mt-8 inline-flex items-center gap-2 rounded-full btn-gold-lg px-10 py-4 text-sm"
             >
               Continue with Discord →
             </button>
-            <div className="mt-4 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
+            <div className="mt-5 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
               No credit card · 24h free trial
             </div>
           </div>
@@ -693,12 +808,20 @@ function Index() {
         </div>
         <div className="flex gap-6">
           <a
-            href="https://discord.gg/sHgh6kVBg3"
+            href="https://discord.gg/n6nEcvwzYQ"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-primary transition-colors duration-200"
           >
             Discord
+          </a>
+          <a
+            href="https://t.me/luauxx"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary transition-colors duration-200"
+          >
+            Telegram
           </a>
           <a href="#" className="hover:text-primary transition-colors duration-200">
             Docs
@@ -739,9 +862,11 @@ function AuthModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-sm rounded-3xl border border-border/60 glass-card p-8 glow-primary animate-fade-in-up"
+        className="relative w-full max-w-sm rounded-3xl border border-border/60 glass-card p-8 glow-primary animate-fade-in-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Background glow */}
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/5 pointer-events-none" />
         <button
           onClick={onClose}
           className="absolute top-3 right-3 h-8 w-8 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all duration-200 text-lg"
@@ -750,7 +875,7 @@ function AuthModal({
           ×
         </button>
 
-        <div className="flex flex-col items-center text-center">
+        <div className="relative flex flex-col items-center text-center">
           <div className="relative">
             {loading && (
               <div

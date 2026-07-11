@@ -10,9 +10,9 @@ export const Route = createFileRoute("/dashboard/support")({
 
 function SupportPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-page-in">
       <header className="flex items-start gap-4">
-        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center">
+        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
           <LifeBuoy className="h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -23,7 +23,7 @@ function SupportPage() {
         </div>
       </header>
 
-      <div className="rounded-2xl brutal-border bg-card p-8">
+      <div className="rounded-2xl brutal-border bg-card p-8 animated-border noise-texture relative overflow-hidden">
         <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-primary">
           <MessageCircle className="h-4 w-4" /> Official Discord
         </div>
@@ -38,7 +38,7 @@ function SupportPage() {
           href={DISCORD_INVITE}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-3 text-sm font-semibold hover:bg-primary/90"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-3 text-sm font-semibold hover:bg-primary/90 magnetic-hover"
         >
           Open Discord ticket
           <ExternalLink className="h-4 w-4" />

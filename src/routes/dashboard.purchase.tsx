@@ -97,13 +97,13 @@ function PurchasePage() {
   const hourTotal = selectedHours * 1.5;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-page-in">
       <header>
         <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("choose_plan")}</h1>
         <p className="mt-2 text-muted-foreground">{s.t("choose_plan_sub")}</p>
       </header>
 
-      <div className="rounded-2xl brutal-border bg-card p-6">
+      <div className="rounded-2xl brutal-border bg-card p-6 animated-border noise-texture relative overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -176,7 +176,7 @@ function PurchasePage() {
         </div>
       </div>
 
-      <div className="rounded-2xl brutal-border bg-card p-5">
+      <div className="rounded-2xl brutal-border bg-card p-5 animated-border noise-texture relative overflow-hidden">
         <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
           Pay with
         </div>
@@ -206,8 +206,8 @@ function PurchasePage() {
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-2xl brutal-border bg-card p-7 flex flex-col ${
-                  isPro ? "ring-2 ring-primary/50" : ""
+                className={`relative rounded-2xl brutal-border bg-card p-7 flex flex-col animated-border noise-texture overflow-hidden ${
+                  isPro ? "ring-2 ring-primary/50 magnetic-hover holographic" : "magnetic-hover"
                 }`}
               >
                 {isPro && (

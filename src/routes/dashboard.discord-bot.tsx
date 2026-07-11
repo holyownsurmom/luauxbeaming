@@ -29,7 +29,7 @@ const PLUGINS = [
 
 function DiscordBotPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-page-in">
       <header>
         <h1 className="font-display text-4xl font-semibold tracking-tight">Plugins</h1>
         <p className="mt-2 text-muted-foreground">
@@ -42,7 +42,7 @@ function DiscordBotPage() {
           <Link
             key={p.to}
             to={p.to}
-            className="group relative rounded-2xl border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-primary/20 hover:-translate-y-1 transition-all duration-500 block overflow-hidden"
+            className="group relative rounded-2xl brutal-border bg-card/40 p-6 hover:bg-card/60 hover:-translate-y-1 transition-all duration-500 block overflow-hidden magnetic-hover holographic"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

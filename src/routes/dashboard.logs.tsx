@@ -68,7 +68,7 @@ function LogsPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="font-display text-4xl font-semibold tracking-tight">Logs</h1>
@@ -146,7 +146,7 @@ function LogsPage() {
       </div>
 
       {/* Console */}
-      <div className="rounded-2xl brutal-border bg-card p-5">
+      <div className="rounded-2xl brutal-border bg-card p-5 animated-border noise-texture relative overflow-hidden">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-primary" />

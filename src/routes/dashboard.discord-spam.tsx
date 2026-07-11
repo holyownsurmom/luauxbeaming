@@ -466,9 +466,9 @@ function DiscordSpamPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <header className="flex items-start gap-4">
-        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center">
+        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
           <Zap className="h-6 w-6" />
         </div>
         <div className="flex-1">
@@ -487,7 +487,7 @@ function DiscordSpamPage() {
       </header>
 
       {/* License Key Display */}
-      <div className="rounded-2xl brutal-border bg-card p-5">
+      <div className="rounded-2xl brutal-border bg-card p-5 animated-border noise-texture relative overflow-hidden">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
@@ -526,7 +526,7 @@ function DiscordSpamPage() {
       </div>
 
       {/* Config Panel */}
-      <div className="rounded-2xl brutal-border bg-card">
+      <div className="rounded-2xl brutal-border bg-card animated-border noise-texture relative overflow-hidden">
         <button
           onClick={() => setShowConfig(!showConfig)}
           className="w-full flex items-center justify-between p-5"
@@ -684,7 +684,7 @@ function DiscordSpamPage() {
 
       {/* Live Console */}
       {selectedBotId && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
+        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3 animated-border noise-texture relative overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div
@@ -719,7 +719,7 @@ function DiscordSpamPage() {
 
       {/* Running Bots */}
       {runningBots.length > 0 && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
+        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3 animated-border noise-texture relative overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-widest text-muted-foreground">
               Active Instances

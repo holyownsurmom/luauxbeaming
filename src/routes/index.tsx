@@ -477,15 +477,16 @@ function Index() {
           </div>
 
           {/* Stats bar */}
-          <div className="mx-auto mt-24 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/60 bg-border md:grid-cols-3 animate-fade-in-up stagger-6" style={{ opacity: 0 }}>
+          <div className="mx-auto mt-24 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/40 bg-border/50 md:grid-cols-3 animate-fade-in-up stagger-6" style={{ opacity: 0 }}>
             {[
               { k: "$10,000+", v: "value beamed", num: 10000, suffix: "+" },
               { k: "99%", v: "uptime", num: 99, suffix: "%" },
               { k: "35s", v: "avg deploy", num: 35, suffix: "s" },
             ].map((s) => (
-              <div key={s.v} className="bg-card/80 px-6 py-8 text-left group hover:bg-card transition-all duration-300 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                <div className="relative font-display text-3xl md:text-4xl font-semibold text-gradient-gold">
+              <div key={s.v} className="bg-card/80 px-6 py-8 text-left group hover:bg-card transition-all duration-500 relative overflow-hidden holographic">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                <div className="relative font-display text-3xl md:text-4xl font-semibold text-gradient-gold glow-text">
                   <AnimatedCounter target={s.num} suffix={s.suffix} />
                 </div>
                 <div className="relative mt-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -539,14 +540,14 @@ function Index() {
           </div>
 
           <div className="lg:col-span-7 animate-slide-in-right">
-            <div className="rounded-2xl border border-border/60 overflow-hidden bg-card/80 glow-sm font-mono text-xs relative">
+            <div className="rounded-2xl border border-border/40 overflow-hidden bg-card/80 glow-sm font-mono text-xs relative animated-border noise-texture">
               <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 via-transparent to-primary/5 pointer-events-none" />
               <div className="relative">
                 <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card/90">
                   <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/70 shadow-[0_0_6px_oklch(0.704_0.191_22.216_/_0.4)]" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70 shadow-[0_0_6px_oklch(0.85_0.15_85_/_0.3)]" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70 shadow-[0_0_6px_oklch(0.79_0.16_85_/_0.4)]" />
                   </div>
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     luaux@runner ~ tail -f bot.log
@@ -559,7 +560,7 @@ function Index() {
                     live
                   </span>
                 </div>
-                <div className="p-5 space-y-1.5 min-h-[380px] scanlines">
+                <div className="p-5 space-y-1.5 min-h-[380px] crt-overlay crt-flicker bg-[oklch(0.03_0_0)]">
                   {visibleLogs.map((l, i) => {
                     const tagColor: Record<string, string> = {
                       JOIN: "bg-primary/15 text-primary border-primary/30",
@@ -570,7 +571,7 @@ function Index() {
                       AFK: "bg-muted text-muted-foreground border-border",
                     };
                     return (
-                      <div key={i} className="flex items-start gap-3 leading-relaxed" style={{ animationDelay: `${i * 0.05}s` }}>
+                      <div key={i} className="flex items-start gap-3 leading-relaxed phosphor-glow" style={{ animationDelay: `${i * 0.05}s` }}>
                         <span className="text-muted-foreground/50">{l.t}</span>
                         <span
                           className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}
@@ -618,19 +619,21 @@ function Index() {
             {FEATURES.map((f, i) => (
               <div
                 key={f.tag}
-                className="group relative rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/80 hover:-translate-y-2 hover:glow-sm"
+                className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/70 magnetic-hover holographic noise-texture"
                 style={{ animationDelay: `${i * 0.1}s` }}
               >
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                 <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative">
                   <div className="mb-6 flex items-center justify-between">
                     <span className="font-mono text-xs text-muted-foreground/60">{f.tag}</span>
-                    <span className="rounded-full border border-primary/20 bg-primary/8 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-primary">
+                    <span className="rounded-full border border-primary/20 bg-primary/8 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-primary shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.1)]">
                       {f.label}
                     </span>
                   </div>
-                  <div className="text-3xl mb-4 group-hover:scale-110 transition-transform duration-300"><f.Icon className="h-8 w-8 text-primary" /></div>
+                  <div className="mb-4 h-12 w-12 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500 group-hover:scale-110">
+                    <f.Icon className="h-6 w-6 text-primary" />
+                  </div>
                   <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
                   <p className="mt-3 text-sm text-muted-foreground leading-relaxed">{f.body}</p>
                   <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 translate-x-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-2">
@@ -661,10 +664,10 @@ function Index() {
           {PLANS.map((p) => (
             <div
               key={p.name}
-              className={`relative rounded-2xl p-8 transition-all duration-500 group ${
+              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture ${
                 p.highlight
-                  ? "border-2 border-primary/60 bg-card/80 lg:-translate-y-4 glow-primary pricing-glow"
-                  : "border border-border/60 bg-card/60 hover:border-primary/20 hover:-translate-y-2 hover:glow-sm"
+                  ? "border-2 border-primary/60 bg-card/80 lg:-translate-y-4 glow-primary pricing-glow holographic"
+                  : "border border-border/40 bg-card/50 hover:border-primary/30 magnetic-hover holographic"
               }`}
             >
               {p.highlight && (
@@ -761,13 +764,13 @@ function Index() {
             {REVIEWS.map((r, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-border/60 bg-card/60 p-6 transition-all duration-500 hover:border-primary/20 hover:-translate-y-2 hover:glow-sm group relative overflow-hidden"
+                className="rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 magnetic-hover holographic group relative overflow-hidden noise-texture"
               >
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
                 <div className="relative">
                   <p className="text-sm leading-relaxed text-foreground/80">"{r.text}"</p>
                   <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] text-primary font-semibold">
+                    <span className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] text-primary font-semibold shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.15)]">
                       {r.name[1]?.toUpperCase()}
                     </span>
                     <span>{r.name}</span>
@@ -789,14 +792,14 @@ function Index() {
             Frequently asked.
           </h2>
         </div>
-        <div className="rounded-2xl border border-border/60 bg-card/60 overflow-hidden">
+        <div className="rounded-2xl border border-border/40 bg-card/50 overflow-hidden noise-texture">
           {FAQ.map((f, i) => {
             const open = openFaq === i;
             return (
               <button
                 key={i}
                 onClick={() => setOpenFaq(open ? null : i)}
-                className={`block w-full text-left border-b border-border/60 last:border-b-0 p-6 transition-all duration-300 ${
+                className={`block w-full text-left border-b border-border/40 last:border-b-0 p-6 transition-all duration-300 ${
                   open ? "bg-primary/5" : "hover:bg-primary/5"
                 }`}
               >

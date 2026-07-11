@@ -516,3 +516,353 @@ html[data-theme="blue"] {
   vertical-align: text-bottom;
   margin-left: 2px;
 }
+
+/* ===================================================================
+   PREMIUM UI — HOLOGRAPHIC, 3D, CRT, ANIMATED BORDERS
+   =================================================================== */
+
+/* === Holographic shimmer card === */
+@utility holographic {
+  position: relative;
+  overflow: hidden;
+}
+@layer base {
+  .holographic::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      color-mix(in oklch, var(--primary) 8%, transparent) 45%,
+      color-mix(in oklch, var(--primary) 15%, transparent) 50%,
+      color-mix(in oklch, var(--primary) 8%, transparent) 55%,
+      transparent 60%
+    );
+    background-size: 200% 100%;
+    opacity: 0;
+    transition: opacity 0.5s ease, background-position 0.8s ease;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .holographic:hover::after {
+    opacity: 1;
+    background-position: -100% 0;
+  }
+}
+
+/* === Animated gradient border === */
+@utility animated-border {
+  position: relative;
+  border: none !important;
+}
+@layer base {
+  .animated-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      var(--border-angle, 0deg),
+      color-mix(in oklch, var(--primary) 60%, transparent),
+      color-mix(in oklch, var(--primary) 10%, transparent),
+      color-mix(in oklch, var(--primary) 40%, transparent),
+      color-mix(in oklch, var(--primary) 10%, transparent),
+      color-mix(in oklch, var(--primary) 60%, transparent)
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: border-rotate 4s linear infinite;
+    z-index: 0;
+  }
+}
+@keyframes border-rotate {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* === 3D Tilt card (CSS-only on hover) === */
+@utility tilt-card {
+  perspective: 800px;
+  transform-style: preserve-3d;
+}
+@utility tilt-card-inner {
+  transition: transform 0.4s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+  transform-style: preserve-3d;
+}
+@layer base {
+  .tilt-card:hover .tilt-card-inner {
+    transform: rotateX(2deg) rotateY(-2deg) translateZ(10px);
+  }
+}
+
+/* === Liquid morph button === */
+@utility liquid-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+}
+@layer base {
+  .liquid-btn::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: color-mix(in oklch, var(--primary) 20%, transparent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+    z-index: 0;
+  }
+  .liquid-btn:hover::before {
+    width: 300%;
+    height: 300%;
+  }
+}
+
+/* === CRT terminal overlay === */
+@utility crt-overlay {
+  position: relative;
+}
+@layer base {
+  .crt-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      oklch(0 0 0 / 0.03) 2px,
+      oklch(0 0 0 / 0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+    border-radius: inherit;
+  }
+  .crt-overlay::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, oklch(0 0 0 / 0.15) 100%);
+    pointer-events: none;
+    z-index: 2;
+    border-radius: inherit;
+  }
+}
+
+/* === CRT flicker === */
+@keyframes crt-flicker {
+  0% { opacity: 0.97; }
+  5% { opacity: 1; }
+  10% { opacity: 0.98; }
+  15% { opacity: 1; }
+  20% { opacity: 0.96; }
+  50% { opacity: 1; }
+  80% { opacity: 0.98; }
+  100% { opacity: 1; }
+}
+@utility crt-flicker {
+  animation: crt-flicker 0.15s infinite;
+}
+
+/* === Phosphor glow (green terminal text) === */
+@utility phosphor-glow {
+  text-shadow:
+    0 0 4px color-mix(in oklch, var(--primary) 60%, transparent),
+    0 0 12px color-mix(in oklch, var(--primary) 30%, transparent),
+    0 0 30px color-mix(in oklch, var(--primary) 15%, transparent);
+}
+
+/* === Page transition === */
+@keyframes page-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+@utility animate-page-in {
+  animation: page-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* === Reveal on scroll === */
+@utility reveal-up {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@layer base {
+  .reveal-up.revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* === Magnetic hover (subtle scale + glow) === */
+@utility magnetic-hover {
+  transition: all 0.35s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+}
+@layer base {
+  .magnetic-hover:hover {
+    transform: scale(1.02) translateY(-2px);
+    box-shadow:
+      0 8px 30px -8px color-mix(in oklch, var(--primary) 25%, transparent),
+      0 0 20px color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+}
+
+/* === Glowing pulse ring === */
+@keyframes glow-pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 40%, transparent); }
+  70% { box-shadow: 0 0 0 10px color-mix(in oklch, var(--primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 0%, transparent); }
+}
+@utility animate-glow-pulse-ring {
+  animation: glow-pulse-ring 2s ease-in-out infinite;
+}
+
+/* === Flowing gradient background === */
+@keyframes flow-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@utility flow-gradient {
+  background-size: 200% 200%;
+  animation: flow-gradient 8s ease infinite;
+}
+
+/* === Noise texture (subtle grain) === */
+@utility noise-texture {
+  position: relative;
+}
+@layer base {
+  .noise-texture::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: inherit;
+  }
+}
+
+/* === Shimmer skeleton loader === */
+@keyframes shimmer-skeleton {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@utility shimmer-skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--muted) 0%, transparent) 25%,
+    color-mix(in oklch, var(--muted) 50%, transparent) 50%,
+    color-mix(in oklch, var(--muted) 0%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-skeleton 2s ease-in-out infinite;
+}
+
+/* === Dot grid pattern === */
+@utility dot-grid {
+  background-image: radial-gradient(
+    color-mix(in oklch, var(--primary) 8%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 24px 24px;
+}
+
+/* === Stagger cascade (for lists) === */
+@layer base {
+  .stagger-cascade > * {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .stagger-cascade > *:nth-child(1) { animation-delay: 0.05s; }
+  .stagger-cascade > *:nth-child(2) { animation-delay: 0.1s; }
+  .stagger-cascade > *:nth-child(3) { animation-delay: 0.15s; }
+  .stagger-cascade > *:nth-child(4) { animation-delay: 0.2s; }
+  .stagger-cascade > *:nth-child(5) { animation-delay: 0.25s; }
+  .stagger-cascade > *:nth-child(6) { animation-delay: 0.3s; }
+  .stagger-cascade > *:nth-child(7) { animation-delay: 0.35s; }
+  .stagger-cascade > *:nth-child(8) { animation-delay: 0.4s; }
+  .stagger-cascade > *:nth-child(9) { animation-delay: 0.45s; }
+  .stagger-cascade > *:nth-child(10) { animation-delay: 0.5s; }
+}
+
+/* === Glow text (for headings) === */
+@utility glow-text {
+  text-shadow:
+    0 0 20px color-mix(in oklch, var(--primary) 40%, transparent),
+    0 0 60px color-mix(in oklch, var(--primary) 15%, transparent),
+    0 0 100px color-mix(in oklch, var(--primary) 5%, transparent);
+}
+
+/* === Ambient card (soft glow on hover) === */
+@utility ambient-card {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@layer base {
+  .ambient-card:hover {
+    box-shadow:
+      0 0 40px color-mix(in oklch, var(--primary) 12%, transparent),
+      0 20px 60px -20px oklch(0 0 0 / 0.3);
+  }
+}
+
+/* === Status dot animation === */
+@keyframes status-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+}
+@utility animate-status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* === Focus ring (premium) === */
+@layer base {
+  .focus-premium:focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--primary) 60%, transparent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+}
+
+/* === Scrollbar premium === */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 20%, transparent);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--primary) 40%, transparent);
+  }
+}

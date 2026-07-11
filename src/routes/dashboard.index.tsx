@@ -106,15 +106,18 @@ function Overview() {
       : 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-page-in">
       {/* Hero header */}
-      <header className="relative animate-fade-in-up overflow-hidden rounded-3xl border border-border/60 bg-card/40 p-8 md:p-10">
+      <header className="relative overflow-hidden rounded-3xl animated-border bg-card/60 p-8 md:p-10 noise-texture">
         {/* Background effects */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/3 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-80 h-80 bg-primary/4 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-60 h-60 bg-primary/3 rounded-full blur-[80px] pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/4 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/6 rounded-full blur-[120px] pointer-events-none animate-glow-breathe" />
+        <div className="absolute bottom-0 left-0 w-72 h-72 bg-primary/4 rounded-full blur-[100px] pointer-events-none" />
         {/* Top gold line */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+        {/* Corner accents */}
+        <div className="absolute top-0 left-0 w-20 h-20 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none rounded-tl-3xl" />
+        <div className="absolute bottom-0 right-0 w-20 h-20 bg-gradient-to-tl from-primary/8 to-transparent pointer-events-none rounded-br-3xl" />
 
         <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
@@ -186,60 +189,60 @@ function Overview() {
       <div className="grid md:grid-cols-3 gap-4">
         <Link
           to="/dashboard/purchase"
-          className="group relative rounded-2xl border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-primary/20 hover:-translate-y-1 transition-all duration-500 overflow-hidden"
+          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/15 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.15)] transition-all duration-500">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
               <ShoppingCart className="h-5 w-5 text-primary" />
             </div>
             <div className="font-semibold text-sm">Get a Plan</div>
             <p className="mt-1.5 text-xs text-muted-foreground/60 leading-relaxed">
               Pay with crypto. Access unlocks after 2 confirmations.
             </p>
-            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:translate-x-1 transition-transform duration-300">
-              Choose plan <ArrowRight className="h-3 w-3" />
+            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary opacity-0 translate-x-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
+              Choose plan
             </span>
           </div>
         </Link>
 
         <Link
           to="/dashboard/bots"
-          className="group relative rounded-2xl border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-primary/20 hover:-translate-y-1 transition-all duration-500 overflow-hidden"
+          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/15 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.15)] transition-all duration-500">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
               <BotIcon className="h-5 w-5 text-primary" />
             </div>
             <div className="font-semibold text-sm">MC Auto-Message</div>
             <p className="mt-1.5 text-xs text-muted-foreground/60 leading-relaxed">
               Join any Minecraft server and auto-message with your bots.
             </p>
-            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:translate-x-1 transition-transform duration-300">
-              Configure & launch <ArrowRight className="h-3 w-3" />
+            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary opacity-0 translate-x-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
+              Configure & launch
             </span>
           </div>
         </Link>
 
         <Link
           to="/dashboard/logs"
-          className="group relative rounded-2xl border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-primary/20 hover:-translate-y-1 transition-all duration-500 overflow-hidden"
+          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/15 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.15)] transition-all duration-500">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
               <Terminal className="h-5 w-5 text-primary" />
             </div>
             <div className="font-semibold text-sm">Live Logs</div>
             <p className="mt-1.5 text-xs text-muted-foreground/60 leading-relaxed">
               Watch real-time output from every active bot instance.
             </p>
-            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:translate-x-1 transition-transform duration-300">
-              View logs <ArrowRight className="h-3 w-3" />
+            <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary opacity-0 translate-x-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
+              View logs
             </span>
           </div>
         </Link>
@@ -296,19 +299,26 @@ function StatCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-border/60 bg-card/40 p-5 relative overflow-hidden transition-all duration-500 hover:border-primary/20 hover:-translate-y-1 hover:glow-sm group animate-fade-in-up ${locked ? "opacity-50" : ""}`}
-      style={{ animationDelay: `${delay * 0.08}s`, opacity: 0 }}
+      className={`tilt-card rounded-2xl border border-border/40 bg-card/50 p-5 relative overflow-hidden transition-all duration-500 hover:border-primary/30 group animate-fade-in-up magnetic-hover holographic ${locked ? "opacity-50" : ""}`}
+      style={{ animationDelay: `${delay * 0.1}s`, opacity: 0 }}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-      <div className="relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+      <div className="relative tilt-card-inner">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground/60">
-          <Icon
-            className={`h-3.5 w-3.5 transition-colors duration-300 ${
-              locked
-                ? "text-muted-foreground/40"
-                : "text-primary group-hover:drop-shadow-[0_0_4px_oklch(0.79_0.16_85_/_0.4)]"
-            }`}
-          />
+          <div className={`h-7 w-7 rounded-lg flex items-center justify-center transition-all duration-500 ${
+            locked
+              ? "bg-muted/40"
+              : "bg-primary/10 group-hover:bg-primary/20 group-hover:shadow-[0_0_12px_oklch(0.79_0.16_85_/_0.2)]"
+          }`}>
+            <Icon
+              className={`h-3.5 w-3.5 transition-all duration-300 ${
+                locked
+                  ? "text-muted-foreground/40"
+                  : "text-primary"
+              }`}
+            />
+          </div>
           {label}
         </div>
         <div className="mt-3 font-mono text-3xl font-semibold text-gradient-gold">
@@ -335,20 +345,20 @@ function PluginCard({
   return (
     <Link
       to={to}
-      className="group relative rounded-2xl border border-border/60 bg-card/40 p-6 hover:bg-card/60 hover:border-primary/20 hover:-translate-y-1 transition-all duration-500 block overflow-hidden"
+      className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 block overflow-hidden transition-all duration-500 magnetic-hover holographic"
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
       <div className="relative">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center group-hover:bg-primary/15 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.15)] transition-all duration-500">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-12 w-12 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
             <Icon className="h-5 w-5 text-primary" />
           </div>
           <div className="font-semibold text-sm">{title}</div>
         </div>
         <p className="text-xs text-muted-foreground/60 leading-relaxed">{desc}</p>
-        <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:translate-x-1 transition-transform duration-300">
-          Open plugin <ArrowRight className="h-3 w-3" />
+        <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary opacity-0 translate-x-0 group-hover:opacity-100 group-hover:translate-x-2 transition-all duration-300">
+          Open plugin
         </span>
       </div>
     </Link>

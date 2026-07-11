@@ -373,7 +373,7 @@ function BotsPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="font-display text-4xl font-semibold tracking-tight">
@@ -397,7 +397,7 @@ function BotsPage() {
       </header>
 
       {/* Server Config Panel */}
-      <div className="rounded-2xl brutal-border bg-card">
+      <div className="rounded-2xl animated-border bg-card/60 noise-texture">
         <button
           onClick={() => setShowMCPanel(!showMCPanel)}
           className="w-full flex items-center justify-between p-5"
@@ -540,7 +540,7 @@ function BotsPage() {
       </div>
 
       {/* Accounts */}
-      <div className="rounded-2xl brutal-border bg-card">
+      <div className="rounded-2xl animated-border bg-card/60 noise-texture">
         <div className="p-4 border-b border-border/60 flex items-center justify-between">
           <div className="text-xs uppercase tracking-widest text-muted-foreground">
             Minecraft Accounts
@@ -723,7 +723,7 @@ function BotsPage() {
 
       {/* Live Console */}
       {selectedBotId && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
+        <div className="rounded-2xl animated-border bg-card/60 p-5 space-y-3 noise-texture">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div
@@ -758,7 +758,7 @@ function BotsPage() {
 
       {/* Running Bots Summary */}
       {runningBots.length > 0 && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
+        <div className="rounded-2xl animated-border bg-card/60 p-5 space-y-3 noise-texture">
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-widest text-muted-foreground">Active Bots</div>
             <button

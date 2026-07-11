@@ -31,13 +31,13 @@ function BillingPage() {
   }, [fetch]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <header>
         <h1 className="font-display text-4xl font-semibold tracking-tight">Billing</h1>
         <p className="mt-2 text-muted-foreground">Every crypto payment on your account.</p>
       </header>
 
-      <div className="rounded-2xl brutal-border bg-card overflow-hidden">
+      <div className="rounded-2xl animated-border bg-card/60 overflow-hidden noise-texture">
         {!items ? (
           <div className="p-6 space-y-4">
             <Skeleton className="h-10 w-full" />

@@ -138,26 +138,26 @@ function SidebarContent({
                     }}
                     className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group/item ${
                       active
-                        ? "bg-primary/10 text-primary border border-primary/20"
+                        ? "bg-primary/10 text-primary border border-primary/25 shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.08)]"
                         : "text-foreground/60 hover:bg-primary/5 hover:text-foreground/90 border border-transparent"
                     }`}
                   >
                     {active && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-primary shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.5)]" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-primary shadow-[0_0_12px_oklch(0.79_0.16_85_/_0.6)] animate-glow-pulse-ring" />
                     )}
                     <it.icon
                       className={`h-4 w-4 transition-all duration-300 ${
                         active
-                          ? "text-primary"
+                          ? "text-primary drop-shadow-[0_0_6px_oklch(0.79_0.16_85_/_0.5)]"
                           : "text-muted-foreground/60 group-hover/item:text-primary/70 group-hover/item:drop-shadow-[0_0_4px_oklch(0.79_0.16_85_/_0.3)]"
                       }`}
                     />
-                    <span className={active ? "font-medium" : ""}>{it.label}</span>
+                    <span className={active ? "font-semibold" : ""}>{it.label}</span>
                     {active && (
-                      <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px_oklch(0.79_0.16_85_/_0.6)]" />
+                      <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.7)] animate-status-pulse" />
                     )}
                     {!active && (
-                      <ChevronRight className="ml-auto h-3 w-3 opacity-0 group-hover/item:opacity-100 transition-opacity duration-300 text-primary/50" />
+                      <ChevronRight className="ml-auto h-3 w-3 opacity-0 group-hover/item:opacity-100 transition-all duration-300 text-primary/50 group-hover/item:translate-x-0.5" />
                     )}
                   </Link>
                 );
@@ -359,8 +359,9 @@ function DashboardLayout() {
       </div>
 
       {/* Main content */}
-      <main className="min-h-screen relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[200px] bg-primary/3 rounded-full blur-[100px] pointer-events-none" />
+      <main className="min-h-screen relative noise-texture">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/4 rounded-full blur-[150px] pointer-events-none animate-glow-breathe" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-primary/3 rounded-full blur-[120px] pointer-events-none opacity-40" />
         <div className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative">
           <Outlet />
         </div>

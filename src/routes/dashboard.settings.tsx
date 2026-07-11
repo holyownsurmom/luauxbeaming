@@ -103,7 +103,7 @@ function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-in">
       <header>
         <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("settings")}</h1>
         <p className="mt-2 text-muted-foreground">{s.t("settings_sub")}</p>
@@ -112,7 +112,7 @@ function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
         {/* Left column */}
         <div className="space-y-4">
-          <div className="rounded-2xl brutal-border bg-card/60 p-4">
+          <div className="rounded-2xl animated-border bg-card/60 p-4 noise-texture">
             <div className="flex items-center gap-3">
               {data?.profile?.avatar_url ? (
                 <img
@@ -179,7 +179,7 @@ function SettingsPage() {
         </div>
 
         {/* Right column */}
-        <div className="rounded-2xl brutal-border bg-card/60 p-6 min-h-[400px]">
+        <div className="rounded-2xl animated-border bg-card/60 p-6 min-h-[400px] noise-texture">
           {tab === "profile" && (
             <Panel title={s.t("profile")} subtitle="Your Discord identity used across LuauX.">
               <Field label="Display name" value={displayName} />

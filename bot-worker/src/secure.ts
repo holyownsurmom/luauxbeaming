@@ -850,6 +850,19 @@ export async function runSecureBot(
           result.newPassword = newPassword;
           result.recoveryCode = recoveryResult.recoveryCode;
           await log("info", "[secure] Account secured successfully!");
+
+          // Change primary alias to a new outlook.com address
+          if (!signal.aborted) {
+            await log("info", "[secure] Changing primary alias...");
+            const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
+            const aliasChanged = await changePrimaryAlias(jar, aliasName, apiCanary);
+            if (aliasChanged) {
+              result.newEmail = `${aliasName}@outlook.com`;
+              await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+            } else {
+              await log("warn", "[secure] Failed to change primary alias - email recovery address preserved");
+            }
+          }
         }
       }
     }

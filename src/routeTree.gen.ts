@@ -35,6 +35,7 @@ import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/public/nowpayments/webhook'
 import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worker/update'
+import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
 import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
@@ -181,6 +182,11 @@ const ApiBotsWorkerUpdateRoute = ApiBotsWorkerUpdateRouteImport.update({
   path: '/api/bots/worker/update',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsWorkerStatusRoute = ApiBotsWorkerStatusRouteImport.update({
+  id: '/api/bots/worker/status',
+  path: '/api/bots/worker/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBotsWorkerPollRoute = ApiBotsWorkerPollRouteImport.update({
   id: '/api/bots/worker/poll',
   path: '/api/bots/worker/poll',
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
@@ -321,6 +328,7 @@ export interface FileRoutesByTo {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
@@ -362,6 +370,7 @@ export interface FileRoutesById {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
@@ -404,6 +413,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -443,6 +453,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
   id:
@@ -483,6 +494,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
   fileRoutesById: FileRoutesById
@@ -513,6 +525,7 @@ export interface RootRouteChildren {
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
   ApiBotsWorkerPollRoute: typeof ApiBotsWorkerPollRoute
+  ApiBotsWorkerStatusRoute: typeof ApiBotsWorkerStatusRoute
   ApiBotsWorkerUpdateRoute: typeof ApiBotsWorkerUpdateRoute
   ApiPublicNowpaymentsWebhookRoute: typeof ApiPublicNowpaymentsWebhookRoute
 }
@@ -701,6 +714,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsWorkerUpdateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/status': {
+      id: '/api/bots/worker/status'
+      path: '/api/bots/worker/status'
+      fullPath: '/api/bots/worker/status'
+      preLoaderRoute: typeof ApiBotsWorkerStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/worker/poll': {
       id: '/api/bots/worker/poll'
       path: '/api/bots/worker/poll'
@@ -846,6 +866,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
+  ApiBotsWorkerStatusRoute: ApiBotsWorkerStatusRoute,
   ApiBotsWorkerUpdateRoute: ApiBotsWorkerUpdateRoute,
   ApiPublicNowpaymentsWebhookRoute: ApiPublicNowpaymentsWebhookRoute,
 }

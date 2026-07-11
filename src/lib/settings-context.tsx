@@ -10,7 +10,7 @@ import {
 
 export type Language = "en" | "es" | "fr" | "de" | "pt";
 export type Currency = "usd" | "eur" | "gbp" | "cad" | "aud";
-export type Theme = "lime" | "cyan" | "magenta" | "amber";
+export type Theme = "gold" | "amber" | "lime" | "cyan" | "magenta";
 
 type SettingsState = {
   language: Language;
@@ -25,7 +25,7 @@ type SettingsState = {
 const DEFAULTS: SettingsState = {
   language: "en",
   currency: "usd",
-  theme: "lime",
+  theme: "gold",
   notifyDeploys: true,
   notifyPayments: true,
   notifyDiscord: false,

@@ -246,13 +246,14 @@ function SettingsPage() {
 
           {tab === "appearance" && (
             <Panel title={s.t("appearance")} subtitle={s.t("theme_hint")}>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 {(
                   [
+                    { id: "gold", label: "Gold", swatch: "oklch(0.79 0.16 85)" },
+                    { id: "amber", label: "Amber", swatch: "oklch(0.82 0.18 75)" },
                     { id: "lime", label: "Lime", swatch: "oklch(0.88 0.22 145)" },
                     { id: "cyan", label: "Cyan", swatch: "oklch(0.85 0.16 205)" },
                     { id: "magenta", label: "Magenta", swatch: "oklch(0.78 0.24 340)" },
-                    { id: "amber", label: "Amber", swatch: "oklch(0.82 0.18 75)" },
                   ] as { id: Theme; label: string; swatch: string }[]
                 ).map((opt) => {
                   const active = s.theme === opt.id;

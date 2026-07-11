@@ -103,7 +103,7 @@ function Overview() {
     <div className="space-y-8">
       <header className="animate-fade-in-up">
         <h1 className="font-display text-5xl md:text-6xl font-semibold tracking-tight text-gradient">
-          Welcome back
+          Fleet Dashboard
         </h1>
         <p className="mt-2 text-muted-foreground text-lg">
           Here's your fleet at a glance, <span className="text-foreground font-medium">{displayName}</span>.

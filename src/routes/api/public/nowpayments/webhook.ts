@@ -58,7 +58,7 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
 
         if (!pmt) {
           console.warn("[nowpayments] unknown order_id", order_id);
-          return new Response("Unknown order", { status: 200 });
+          return new Response("Unknown order", { status: 404 });
         }
 
         const paid =
@@ -142,18 +142,10 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
               const newHours = Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours);
               const update: Record<string, unknown> = { bot_hours_remaining: newHours };
 
-              if (plan.kind === "hours") {
-                // Hours-only packs: add hours + set active plan with 90-day expiry
-                const base = Math.max(existingExpiry, now);
-                const expiryDays = plan.duration_days || 90;
-                update.active_plan_id = plan.id;
-                update.plan_expires_at = new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString();
-              } else {
-                // Full plans: stack expiry + add hours
-                const base = Math.max(existingExpiry, now);
-                update.active_plan_id = plan.id;
-                update.plan_expires_at = new Date(base + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
-              }
+              const base = Math.max(existingExpiry, now);
+              const expiryDays = plan.duration_days || 90;
+              update.active_plan_id = plan.id;
+              update.plan_expires_at = new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString();
 
               await db
                 .from("profiles")

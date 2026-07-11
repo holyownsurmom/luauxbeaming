@@ -36,6 +36,7 @@ type Account = {
   label: string;
   auth_type: string;
   username: string | null;
+  uuid: string | null;
   ssid: string | null;
   status: string;
   created_at: string;
@@ -66,6 +67,7 @@ function BotsPage() {
     label: "",
     auth_type: "ssid",
     username: "",
+    uuid: "",
     ssid: "",
   });
   const [saving, setSaving] = useState(false);
@@ -159,10 +161,11 @@ function BotsPage() {
           label: form.label.trim(),
           auth_type: form.auth_type as "ssid" | "microsoft",
           username: form.username.trim() || undefined,
+          uuid: form.uuid.trim() || undefined,
           ssid: form.ssid.trim() || undefined,
         },
       });
-      setForm({ label: "", auth_type: "ssid", username: "", ssid: "" });
+      setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "" });
       setShowForm(false);
       await reload();
     } catch (e) {
@@ -222,6 +225,7 @@ function BotsPage() {
           serverPort: parseInt(mcConfig.serverPort, 10),
           authType: account.auth_type,
           username: account.username || undefined,
+          uuid: account.uuid || undefined,
           ssid: account.ssid || undefined,
           messages: msgs,
           interval: parseInt(mcConfig.interval, 10) || 5,
@@ -484,6 +488,7 @@ function BotsPage() {
                   </select>
                 </label>
                 {form.auth_type === "ssid" ? (
+                  <>
                   <label className="text-xs space-y-1 md:col-span-2">
                     <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                       SSID token
@@ -498,6 +503,23 @@ function BotsPage() {
                       placeholder="paste your session cookie"
                     />
                   </label>
+                  <label className="text-xs space-y-1 md:col-span-2">
+                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                      Player UUID (for online-mode servers like Hypixel)
+                    </span>
+                    <input
+                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                      value={form.uuid}
+                      onChange={(e) =>
+                        setForm({ ...form, uuid: e.target.value })
+                      }
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    />
+                    <span className="text-[10px] text-muted-foreground">
+                      Find yours at namemc.com — required for premium servers
+                    </span>
+                  </label>
+                  </>
                 ) : (
                   <label className="text-xs space-y-1 md:col-span-2">
                     <span className="text-muted-foreground uppercase tracking-widest text-[10px]">

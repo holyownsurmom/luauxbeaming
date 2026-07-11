@@ -119,6 +119,7 @@ export type Database = {
           ssid: string | null
           status: string
           username: string | null
+          uuid: string | null
         }
         Insert: {
           auth_type: string
@@ -129,6 +130,7 @@ export type Database = {
           ssid?: string | null
           status?: string
           username?: string | null
+          uuid?: string | null
         }
         Update: {
           auth_type?: string
@@ -139,6 +141,7 @@ export type Database = {
           ssid?: string | null
           status?: string
           username?: string | null
+          uuid?: string | null
         }
         Relationships: [
           {

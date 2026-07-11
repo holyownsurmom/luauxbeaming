@@ -37,7 +37,7 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
   const user = await requireUser();
   const { data } = await admin()
     .from("mc_accounts")
-    .select("id,label,auth_type,username,status,created_at")
+    .select("id,label,auth_type,username,uuid,status,created_at")
     .eq("discord_id", user.id)
     .order("created_at", { ascending: false });
   return data ?? [];
@@ -50,6 +50,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
         label: z.string().min(1).max(60),
         auth_type: z.enum(["microsoft", "ssid", "offline"]),
         username: z.string().max(60).optional().nullable(),
+        uuid: z.string().max(60).optional().nullable(),
         ssid: z.string().max(2000).optional().nullable(),
       })
       .parse(input),
@@ -64,6 +65,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
         label: data.label,
         auth_type: data.auth_type,
         username: data.username ?? null,
+        uuid: data.uuid ?? null,
         ssid: data.ssid ?? null,
       })
       .select("id")

@@ -72,4 +72,5 @@ declare module "lucide-react" {
   export const LayoutGrid: LucideIcon;
   export const ChevronLeft: LucideIcon;
   export const MessageCircle: LucideIcon;
+  export const Save: LucideIcon;
 }

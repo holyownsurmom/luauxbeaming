@@ -109,6 +109,13 @@ function VerificationBotPage() {
         message_title: messageTitle.trim(),
         message_description: messageDescription.trim(),
         button_text: buttonText.trim(),
+      } as {
+        guild_id: string;
+        verified_role_id: string;
+        channel_id: string;
+        message_title: string;
+        message_description: string;
+        button_text: string;
       });
       setSuccessMsg("Settings saved and verification button posted successfully!");
     } catch (err) {

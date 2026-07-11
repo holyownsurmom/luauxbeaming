@@ -1,6 +1,14 @@
 import WebSocket from "ws";
 import { createLogger, updateJob } from "./api.js";
 
+// Type declarations for ws module
+declare module "ws" {
+  interface WebSocket {
+    on(event: "close", listener: (code: number, reason: Buffer) => void): this;
+    on(event: "error", listener: (err: Error) => void): this;
+  }
+}
+
 export type AutoReplyJobConfig = {
   token: string;
   messages: string[];
@@ -227,7 +235,7 @@ export async function runDiscordAutoReplyBot(
       }
     });
 
-    ws.on("close", async (code, reason) => {
+    ws.on("close", async (code: number, reason: Buffer) => {
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
@@ -242,7 +250,7 @@ export async function runDiscordAutoReplyBot(
       connectGateway();
     });
 
-    ws.on("error", (err) => {
+    ws.on("error", (err: Error) => {
       log("error", `Gateway WebSocket error: ${err.message}`).catch(() => {});
     });
   };

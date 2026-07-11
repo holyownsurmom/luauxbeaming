@@ -18,14 +18,18 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/status")({
           .in("status", ["pending", "running", "stopping", "error"])
           .order("created_at", { ascending: false });
 
-        const bots = (jobs ?? []).map((j) => ({
-          id: j.id,
-          status: j.status,
-          label: `AutoReply-${(j.config as Record<string, unknown>)?.token?.substring(0, 8) || "???"}`,
-          error: j.error,
-          startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
-          config: j.config,
-        }));
+        const bots = (jobs ?? []).map((j) => {
+          const cfg = j.config as Record<string, unknown> | null;
+          const token = cfg?.token as string | undefined;
+          return {
+            id: j.id,
+            status: j.status,
+            label: `AutoReply-${token?.substring(0, 8) || "???"}`,
+            error: j.error,
+            startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
+            config: j.config,
+          };
+        });
 
         return Response.json({ bots });
       },

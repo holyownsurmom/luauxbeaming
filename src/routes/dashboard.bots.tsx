@@ -415,8 +415,10 @@ function BotsPage() {
                   ) : (
                     "Offline or unreachable"
                   )}
-                  {pingResult?.error && (
-                    <span className="text-muted-foreground ml-1">({pingResult.error})</span>
+                  {"error" in (pingResult ?? {}) && (
+                    <span className="text-muted-foreground ml-1">
+                      ({(pingResult as { error?: string }).error})
+                    </span>
                   )}
                 </div>
               )}

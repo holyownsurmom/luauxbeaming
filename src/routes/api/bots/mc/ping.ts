@@ -37,19 +37,32 @@ async function pingMcServer(
   players?: { online: number; max: number };
   motd?: string;
   latency?: number;
+  software?: string;
+  plugins?: { name: string; version: string }[];
   error?: string;
 }> {
   const start = Date.now();
   try {
-    const res = await fetch(`https://api.mcsrvstat.us/2/${host}:${port}`, {
+    const address = port === 25565 ? host : `${host}:${port}`;
+    const res = await fetch(`https://api.mcsrvstat.us/3/${address}`, {
       signal: AbortSignal.timeout(10000),
+      headers: { "User-Agent": "LuauX-Bot-Manager/1.0" },
     });
     const latency = Date.now() - start;
 
     if (!res.ok) return { online: false, error: `HTTP ${res.status}` };
     const data = await res.json();
 
-    if (!data || data.online !== true) return { online: false, error: data?.error || "Offline" };
+    if (!data || data.online !== true) return { online: false, error: data?.debug ? "Offline" : "No response" };
+
+    let motd: string | undefined;
+    if (typeof data.motd === "string") {
+      motd = data.motd;
+    } else if (data.motd?.clean) {
+      motd = Array.isArray(data.motd.clean) ? data.motd.clean.join("\n") : data.motd.clean;
+    } else if (data.motd?.raw) {
+      motd = Array.isArray(data.motd.raw) ? data.motd.raw.join("\n") : data.motd.raw;
+    }
 
     return {
       online: true,
@@ -57,11 +70,10 @@ async function pingMcServer(
       players: data.players
         ? { online: data.players.online ?? 0, max: data.players.max ?? 0 }
         : undefined,
-      motd:
-        typeof data.motd === "string"
-          ? data.motd
-          : data.motd?.clean || data.motd?.html || undefined,
+      motd,
       latency,
+      software: data.software || undefined,
+      plugins: Array.isArray(data.plugins) ? data.plugins : undefined,
     };
   } catch (e) {
     return { online: false, error: e instanceof Error ? e.message : String(e) };

@@ -13,6 +13,30 @@ export const Route = createFileRoute("/")({
         content:
           "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
       },
+      { property: "og:title", content: "LuauX — Automated Minecraft bot fleets" },
+      {
+        property: "og:description",
+        content:
+          "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
+      },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://luauxbeaming.lovable.app/" },
+    ],
+    links: [{ rel: "canonical", href: "https://luauxbeaming.lovable.app/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "LuauX",
+          applicationCategory: "DeveloperApplication",
+          operatingSystem: "Web",
+          description:
+            "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
+          offers: { "@type": "Offer", priceCurrency: "USD" },
+        }),
+      },
     ],
   }),
 });

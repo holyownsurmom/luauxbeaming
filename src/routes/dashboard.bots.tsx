@@ -184,13 +184,38 @@ function BotsPage() {
     setPinging(true);
     setPingResult(null);
     try {
+      const address = mcConfig.serverPort && mcConfig.serverPort !== 25565
+        ? `${mcConfig.serverHost}:${mcConfig.serverPort}`
+        : mcConfig.serverHost;
       const res = await fetch(
-        `/api/bots/mc/ping?host=${encodeURIComponent(mcConfig.serverHost)}&port=${mcConfig.serverPort}`,
+        `https://api.mcsrvstat.us/3/${encodeURIComponent(address)}`,
       );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setPingResult(data);
-    } catch {
-      setPingResult({ online: false });
+
+      let motd: string | undefined;
+      if (typeof data.motd === "string") {
+        motd = data.motd;
+      } else if (data.motd?.clean) {
+        motd = Array.isArray(data.motd.clean) ? data.motd.clean.join("\n") : data.motd.clean;
+      } else if (data.motd?.raw) {
+        motd = Array.isArray(data.motd.raw) ? data.motd.raw.join("\n") : data.motd.raw;
+      }
+
+      setPingResult({
+        online: !!data.online,
+        version: data.version || undefined,
+        players: data.players
+          ? { online: data.players.online ?? 0, max: data.players.max ?? 0 }
+          : undefined,
+        motd,
+        error: data.online ? undefined : "Server is offline",
+      });
+    } catch (e) {
+      setPingResult({
+        online: false,
+        error: e instanceof Error ? e.message : "Failed to reach server",
+      });
     } finally {
       setPinging(false);
     }

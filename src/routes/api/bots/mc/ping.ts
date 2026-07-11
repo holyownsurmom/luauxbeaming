@@ -38,22 +38,32 @@ async function pingMcServer(
   motd?: string;
   latency?: number;
   software?: string;
-  plugins?: { name: string; version: string }[];
   error?: string;
 }> {
   const start = Date.now();
   try {
     const address = port === 25565 ? host : `${host}:${port}`;
     const res = await fetch(`https://api.mcsrvstat.us/3/${address}`, {
-      signal: AbortSignal.timeout(10000),
-      headers: { "User-Agent": "LuauX-Bot-Manager/1.0" },
+      signal: AbortSignal.timeout(15000),
     });
     const latency = Date.now() - start;
+
+    if (res.status === 403) {
+      const simpleRes = await fetch(
+        `https://api.mcsrvstat.us/simple/${address}`,
+        { signal: AbortSignal.timeout(15000) },
+      );
+      const simpleLatency = Date.now() - start;
+      if (simpleRes.ok) {
+        return { online: true, latency: simpleLatency, error: "403 on main API, used simple endpoint" };
+      }
+      return { online: false, latency: simpleLatency, error: `Both endpoints failed: ${res.status} / ${simpleRes.status}` };
+    }
 
     if (!res.ok) return { online: false, error: `HTTP ${res.status}` };
     const data = await res.json();
 
-    if (!data || data.online !== true) return { online: false, error: data?.debug ? "Offline" : "No response" };
+    if (!data || data.online !== true) return { online: false, error: data?.debug?.error?.ping || "Offline" };
 
     let motd: string | undefined;
     if (typeof data.motd === "string") {
@@ -73,9 +83,23 @@ async function pingMcServer(
       motd,
       latency,
       software: data.software || undefined,
-      plugins: Array.isArray(data.plugins) ? data.plugins : undefined,
     };
   } catch (e) {
-    return { online: false, error: e instanceof Error ? e.message : String(e) };
+    const latency = Date.now() - start;
+    const msg = e instanceof Error ? e.message : String(e);
+    try {
+      const address = port === 25565 ? host : `${host}:${port}`;
+      const simpleRes = await fetch(
+        `https://api.mcsrvstat.us/simple/${address}`,
+        { signal: AbortSignal.timeout(15000) },
+      );
+      const simpleLatency = Date.now() - start;
+      if (simpleRes.ok) {
+        return { online: true, latency: simpleLatency, error: "Fallback simple endpoint" };
+      }
+      return { online: false, latency: simpleLatency, error: `Primary: ${msg}; Simple: ${simpleRes.status}` };
+    } catch {
+      return { online: false, latency, error: msg };
+    }
   }
 }

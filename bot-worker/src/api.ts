@@ -1,5 +1,8 @@
 const SITE_URL = process.env.SITE_URL!;
 const WORKER_SECRET = process.env.WORKER_SECRET!;
+const WORKER_ID = process.env.WORKER_ID || "default";
+
+const MAX_LOG_BUFFER = 500;
 
 const headers = {
   "Content-Type": "application/json",
@@ -13,8 +16,21 @@ export interface Job {
   config: unknown;
 }
 
+async function fetchWithRetry(url: string, opts: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const res = await fetch(url, opts);
+      if (res.ok || i === retries) return res;
+    } catch (e) {
+      if (i === retries) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw new Error("unreachable");
+}
+
 export async function pollJobs(workerId: string): Promise<Job[]> {
-  const res = await fetch(`${SITE_URL}/api/bots/worker/poll`, {
+  const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/poll`, {
     method: "POST",
     headers,
     body: JSON.stringify({ worker_id: workerId }),
@@ -33,28 +49,34 @@ export interface LogEntry {
 
 const logBuffer: LogEntry[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushFailures = 0;
 
 function scheduleFlush() {
   if (flushTimer) return;
+  const delay = Math.min(2000 * Math.pow(2, flushFailures), 30000);
   flushTimer = setTimeout(() => {
     flushTimer = null;
     flushLogs();
-  }, 2000);
+  }, delay);
 }
 
 async function flushLogs() {
   if (logBuffer.length === 0) return;
   const batch = logBuffer.splice(0, 50);
   try {
-    await fetch(`${SITE_URL}/api/bots/worker/log`, {
+    await fetchWithRetry(`${SITE_URL}/api/bots/worker/log`, {
       method: "POST",
       headers,
       body: JSON.stringify(batch),
     });
+    flushFailures = 0;
   } catch (e) {
     console.error("[worker] log flush failed:", e);
-    // Re-queue on failure
     logBuffer.unshift(...batch);
+    while (logBuffer.length > MAX_LOG_BUFFER) {
+      logBuffer.shift();
+    }
+    flushFailures++;
   }
   if (logBuffer.length > 0) scheduleFlush();
 }
@@ -67,10 +89,10 @@ export function createLogger(jobId: string, discordId: string) {
 }
 
 export async function updateJob(jobId: string, status: string, error?: string) {
-  const body: Record<string, string> = { job_id: jobId, status };
+  const body: Record<string, string> = { job_id: jobId, status, worker_id: WORKER_ID };
   if (error) body.error = error;
   try {
-    await fetch(`${SITE_URL}/api/bots/worker/update`, {
+    await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -85,5 +107,7 @@ export async function flushAllLogs() {
     clearTimeout(flushTimer);
     flushTimer = null;
   }
-  await flushLogs();
+  while (logBuffer.length > 0) {
+    await flushLogs();
+  }
 }

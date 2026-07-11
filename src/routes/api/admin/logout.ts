@@ -17,7 +17,7 @@ export const Route = createFileRoute("/api/admin/logout")({
     handlers: {
       POST: async () => {
         const session = await useSession<SessionData>(cfg());
-        await session.update({ isAdmin: false });
+        await session.update({ ...session.data, isAdmin: false });
         return Response.json({ ok: true });
       },
     },

@@ -19,7 +19,6 @@ export default defineConfig({
           "minecraft-protocol",
           "minecraft-data",
           "prismarine-chunk",
-          "prismarine-chunk列",
           "prismarine-world",
           "prismarine-registry",
           "node-minecraft-protocol",

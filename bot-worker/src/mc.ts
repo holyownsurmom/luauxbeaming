@@ -7,10 +7,13 @@ export type McJobConfig = {
   serverPort: number;
   authType: "ssid" | "microsoft" | "offline";
   username?: string;
+  uuid?: string;
   ssid?: string;
   messages: string[];
   interval: number;
 };
+
+const CONNECTION_TIMEOUT_MS = 30_000;
 
 let mineflayerModule: typeof import("mineflayer") | null = null;
 
@@ -28,6 +31,17 @@ export async function runMcBot(
   abortSignal: AbortSignal
 ): Promise<void> {
   const log = createLogger(jobId, discordId);
+
+  if (!config.serverHost) {
+    await log("error", "Missing serverHost");
+    await updateJob(jobId, "error", "Missing serverHost");
+    return;
+  }
+  if (!config.messages?.length) {
+    await log("error", "No messages configured");
+    await updateJob(jobId, "error", "No messages configured");
+    return;
+  }
 
   await log("system", `Connecting to ${config.serverHost}:${config.serverPort}...`);
 
@@ -51,7 +65,10 @@ export async function runMcBot(
     botOptions.username = config.username || config.label;
     botOptions.session = {
       accessToken: config.ssid,
-      selectedProfile: { name: config.username || config.label },
+      selectedProfile: {
+        name: config.username || config.label,
+        id: (config.uuid || "").replace(/-/g, ""),
+      },
     };
   }
 
@@ -65,21 +82,24 @@ export async function runMcBot(
     }
   };
 
-  abortSignal.addEventListener("abort", async () => {
+  abortSignal.addEventListener("abort", () => {
     cleanup();
-    await log("system", "Stop signal received, disconnecting...");
+    log("system", "Stop signal received, disconnecting...").catch(() => {});
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bot = (mineflayer as any).createBot(botOptions);
 
-  bot.on("login", async () => {
-    await log("info", `Logged in as ${bot.username}`);
+  let connected = false;
+
+  bot.on("login", () => {
+    connected = true;
+    log("info", `Logged in as ${bot.username}`).catch(() => {});
   });
 
-  bot.on("spawn", async () => {
-    await log("info", "Spawned in world");
-    await updateJob(jobId, "running");
+  bot.on("spawn", () => {
+    log("info", "Spawned in world").catch(() => {});
+    updateJob(jobId, "running").catch(() => {});
 
     if (config.messages.length > 0 && config.interval > 0) {
       const sendNext = async () => {
@@ -90,46 +110,42 @@ export async function runMcBot(
         msgIndex++;
       };
 
-      await sendNext();
+      sendNext().catch(() => {});
       sendInterval = setInterval(() => {
         if (abortSignal.aborted) {
           if (sendInterval) clearInterval(sendInterval);
           return;
         }
-        sendNext();
+        sendNext().catch(() => {});
       }, config.interval * 1000);
     }
   });
 
-  bot.on("chat", async (username: string, message: string) => {
+  bot.on("chat", (username: string, message: string) => {
     if (username === bot.username) return;
-    await log("chat", `<${username}> ${message}`);
+    log("chat", `<${username}> ${message}`).catch(() => {});
   });
 
-  bot.on("whisper", async (username: string, message: string) => {
-    await log("chat", `[whisper] <${username}> ${message}`);
+  bot.on("whisper", (username: string, message: string) => {
+    log("chat", `[whisper] <${username}> ${message}`).catch(() => {});
   });
 
-  bot.on("error", async (err: Error) => {
-    await log("error", `Error: ${err.message}`);
+  bot.on("error", (err: Error) => {
+    log("error", `Error: ${err.message}`).catch(() => {});
   });
 
-  bot.on("kicked", async (reason: string) => {
-    await log("error", `Kicked: ${reason}`);
+  bot.on("kicked", (reason: string) => {
+    log("error", `Kicked: ${reason}`).catch(() => {});
     cleanup();
-    await updateJob(jobId, "error", reason);
   });
 
-  bot.on("end", async (reason: string) => {
-    await log("system", `Disconnected: ${reason || "connection closed"}`);
+  bot.on("end", (reason: string) => {
+    log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {});
     cleanup();
-    if (!abortSignal.aborted) {
-      await updateJob(jobId, "stopped");
-    }
   });
 
-  bot.on("death", async () => {
-    await log("warn", "Bot died, respawning...");
+  bot.on("death", () => {
+    log("warn", "Bot died, respawning...").catch(() => {});
   });
 
   return new Promise((resolve) => {
@@ -142,7 +158,18 @@ export async function runMcBot(
       }
     }, 1000);
 
+    const connectionTimeout = setTimeout(() => {
+      if (!connected) {
+        log("error", "Connection timed out").catch(() => {});
+        cleanup();
+        bot.end();
+        clearInterval(checkAbort);
+        resolve();
+      }
+    }, CONNECTION_TIMEOUT_MS);
+
     bot.on("end", () => {
+      clearTimeout(connectionTimeout);
       clearInterval(checkAbort);
       resolve();
     });

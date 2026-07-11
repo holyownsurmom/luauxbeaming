@@ -4,13 +4,10 @@ import { runMcBot, type McJobConfig } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 
 const WORKER_ID = process.env.WORKER_ID || `worker-${Date.now()}`;
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "3000", 10);
+const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
 
 if (!process.env.SITE_URL) {
   console.error("[worker] ERROR: SITE_URL is not set!");
-  console.error("[worker] Current directory:", process.cwd());
-  console.error("[worker] Expected .env file at:", process.cwd() + "/.env");
-  console.error("[worker] Available env vars:", Object.keys(process.env).filter(k => k.startsWith("SITE") || k.startsWith("WORKER")).join(", ") || "none found");
   process.exit(1);
 }
 
@@ -20,7 +17,6 @@ if (!process.env.WORKER_SECRET) {
 }
 
 console.log(`[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms`);
-console.log(`[worker] SITE_URL=${process.env.SITE_URL}`);
 
 const runningJobs = new Map<string, AbortController>();
 
@@ -70,7 +66,6 @@ async function claimJob(job: {
 async function poll() {
   try {
     const jobs = await pollJobs(WORKER_ID);
-
     for (const job of jobs) {
       claimJob(job);
     }
@@ -79,11 +74,12 @@ async function poll() {
   }
 }
 
-setInterval(poll, POLL_INTERVAL);
+const pollTimer = setInterval(poll, POLL_INTERVAL);
 poll();
 
 async function shutdown() {
   console.log("[worker] shutting down...");
+  clearInterval(pollTimer);
   for (const [id, controller] of runningJobs) {
     console.log(`[worker] aborting job ${id}`);
     controller.abort();

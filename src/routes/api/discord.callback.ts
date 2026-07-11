@@ -83,6 +83,8 @@ export const Route = createFileRoute("/api/discord/callback")({
           : null;
 
         await session.update({
+          ...session.data,
+          oauth_state: undefined,
           user: {
             id: user.id,
             username: user.username,

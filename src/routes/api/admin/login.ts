@@ -12,6 +12,15 @@ type SessionData = {
   isAdmin?: boolean;
 };
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export const Route = createFileRoute("/api/admin/login")({
   server: {
     handlers: {
@@ -28,11 +37,12 @@ export const Route = createFileRoute("/api/admin/login")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        if (body.password !== process.env.ADMIN_PASSWORD) {
+        const password = process.env.ADMIN_PASSWORD || "";
+        if (!body.password || !timingSafeEqual(String(body.password), password)) {
           return Response.json({ error: "Wrong password" }, { status: 403 });
         }
 
-        await session.update({ isAdmin: true });
+        await session.update({ ...session.data, isAdmin: true });
         return Response.json({ ok: true });
       },
     },

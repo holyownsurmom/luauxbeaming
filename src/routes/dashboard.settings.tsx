@@ -66,8 +66,14 @@ function SettingsPage() {
   useEffect(() => {
     fetchProfile()
       .then((r) => {
-        setData(r as never);
-        setIsAdmin((r as { isAdmin?: boolean }).isAdmin ?? false);
+        const d = r as {
+          profile: { discord_id: string; username: string; global_name: string | null; email: string | null; avatar_url: string | null; bot_hours_remaining: number; active_plan_id: string | null } | null;
+          plan: { name: string } | null;
+          active: boolean;
+          isAdmin?: boolean;
+        };
+        setData({ profile: d.profile, plan: d.plan, active: d.active });
+        setIsAdmin(d.isAdmin ?? false);
       })
       .catch(() => setData({ profile: null, plan: null, active: false }));
   }, [fetchProfile]);

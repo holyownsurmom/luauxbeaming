@@ -18,7 +18,7 @@ export const Route = createFileRoute("/api/bots/worker/update")({
       POST: async ({ request }) => {
         if (!authWorker(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-        let body: { job_id?: string; status?: string; error?: string };
+        let body: { job_id?: string; status?: string; error?: string; worker_id?: string };
         try {
           body = await request.json();
         } catch {
@@ -35,10 +35,10 @@ export const Route = createFileRoute("/api/bots/worker/update")({
           update.stopped_at = new Date().toISOString();
         }
 
-        const { error } = await db()
-          .from("bot_jobs")
-          .update(update)
-          .eq("id", body.job_id);
+        const query = db().from("bot_jobs").update(update).eq("id", body.job_id);
+        if (body.worker_id) query.eq("worker_id", body.worker_id);
+
+        const { error } = await query;
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
 

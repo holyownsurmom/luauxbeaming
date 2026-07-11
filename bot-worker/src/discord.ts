@@ -28,18 +28,37 @@ export async function runDiscordBot(
 ): Promise<void> {
   const log = createLogger(jobId, discordId);
 
+  if (!config.token) {
+    await log("error", "Missing token");
+    await updateJob(jobId, "error", "Missing token");
+    return;
+  }
+  if (!config.channelId) {
+    await log("error", "Missing channelId");
+    await updateJob(jobId, "error", "Missing channelId");
+    return;
+  }
+  if (!config.messages?.length) {
+    await log("error", "No messages configured");
+    await updateJob(jobId, "error", "No messages configured");
+    return;
+  }
+  if (config.humanize && config.minDelay >= config.maxDelay) {
+    config.maxDelay = config.minDelay + 1;
+  }
+  if (config.minDelay < 1) config.minDelay = 1;
+
   const startedAt = Date.now();
   await log("system", "Initializing Discord user-token client...");
   await updateJob(jobId, "running");
 
   let stopped = false;
 
-  abortSignal.addEventListener("abort", async () => {
+  abortSignal.addEventListener("abort", () => {
     stopped = true;
-    await log("system", "Stop signal received, shutting down...");
+    log("system", "Stop signal received, shutting down...").catch(() => {});
   });
 
-  // Verify token by fetching @me
   let me: { id: string; username: string } | null = null;
   try {
     const meRes = await fetch("https://discord.com/api/v9/users/@me", {
@@ -59,7 +78,6 @@ export async function runDiscordBot(
     return;
   }
 
-  // Verify channel access
   try {
     const chRes = await fetch(`https://discord.com/api/v9/channels/${config.channelId}`, {
       headers: { Authorization: config.token },
@@ -83,6 +101,11 @@ export async function runDiscordBot(
   let msgIndex = 0;
   let sentCount = 0;
   let failCount = 0;
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  abortSignal.addEventListener("abort", () => {
+    if (pendingTimer) clearTimeout(pendingTimer);
+  }, { once: true });
 
   const sendNext = async () => {
     if (stopped) return;
@@ -107,13 +130,13 @@ export async function runDiscordBot(
         if (config.deleteAfterSend) {
           const sent = await res.json();
           if (sent?.id) {
-            setTimeout(async () => {
-              try {
-                await fetch(`https://discord.com/api/v9/channels/${config.channelId}/messages/${sent.id}`, {
-                  method: "DELETE",
-                  headers: { Authorization: config.token },
-                });
-              } catch {}
+            setTimeout(() => {
+              fetch(`https://discord.com/api/v9/channels/${config.channelId}/messages/${sent.id}`, {
+                method: "DELETE",
+                headers: { Authorization: config.token },
+              }).catch((e) => {
+                log("error", `Delete failed: ${e.message}`).catch(() => {});
+              });
             }, randomBetween(1000, 3000));
           }
         }
@@ -123,6 +146,7 @@ export async function runDiscordBot(
         await log("error", `Send failed (${res.status}): ${body}`);
 
         if (res.status === 429) {
+          failCount = Math.max(0, failCount - 5);
           let retryAfter = 10000 + randomBetween(0, 5000);
           try {
             const parsed = JSON.parse(body);
@@ -152,8 +176,10 @@ export async function runDiscordBot(
 
     await log("info", `Next message in ${(runtime / 1000).toFixed(1)}s`);
 
-    const timer = setTimeout(sendNext, runtime);
-    abortSignal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      sendNext();
+    }, runtime);
   };
 
   sendNext();
@@ -161,7 +187,7 @@ export async function runDiscordBot(
   const runtimeLog = setInterval(() => {
     if (!stopped) {
       const botMinutes = Math.floor((Date.now() - startedAt) / 60000);
-      log("info", `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount}`);
+      log("info", `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount}`).catch(() => {});
     }
   }, 300000);
 
@@ -171,6 +197,7 @@ export async function runDiscordBot(
     const checkAbort = setInterval(() => {
       if (abortSignal.aborted || stopped) {
         clearInterval(checkAbort);
+        if (pendingTimer) clearTimeout(pendingTimer);
         resolve();
       }
     }, 1000);

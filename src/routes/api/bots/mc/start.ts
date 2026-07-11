@@ -43,13 +43,40 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           );
         }
 
+        if (!body.accountId) {
+          return Response.json({ error: "accountId required" }, { status: 400 });
+        }
+
+        let config: Record<string, unknown> = {
+          accountId: body.accountId,
+          label: body.label,
+          serverHost: body.serverHost,
+          serverPort: body.serverPort,
+          authType: body.authType,
+          username: body.username,
+          uuid: body.uuid,
+          messages: body.messages,
+          interval: body.interval,
+        };
+
         if (body.authType === "ssid") {
-          if (!body.ssid) {
-            return Response.json({ error: "SSID token required for ssid auth" }, { status: 400 });
+          const { data: account } = await db
+            .from("mc_accounts")
+            .select("ssid,username,uuid")
+            .eq("id", body.accountId)
+            .eq("discord_id", user.id)
+            .maybeSingle();
+
+          if (!account?.ssid) {
+            return Response.json(
+              { error: "SSID not found for this account. Re-add the account with a valid SSID." },
+              { status: 400 },
+            );
           }
-          if (!body.username) {
-            return Response.json({ error: "Username required for ssid auth" }, { status: 400 });
-          }
+
+          config.ssid = account.ssid;
+          config.username = account.username || body.username || body.label;
+          config.uuid = account.uuid || body.uuid || "";
         }
 
         const { data: job, error } = await db
@@ -57,7 +84,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           .insert({
             discord_id: user.id,
             type: "mc",
-            config: body,
+            config,
             status: "pending",
           })
           .select("id")

@@ -44,6 +44,9 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
     if (!controller.signal.aborted) {
       await updateJob(job.id, "completed");
       console.log(`[worker] job ${job.id} finished (completed)`);
+    } else {
+      await updateJob(job.id, "stopped", "Stopped by user");
+      console.log(`[worker] job ${job.id} stopped by user`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

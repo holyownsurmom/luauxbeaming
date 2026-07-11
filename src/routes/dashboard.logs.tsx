@@ -115,7 +115,7 @@ function LogsPage() {
               className={`ml-1 h-1.5 w-1.5 rounded-full inline-block ${
                 b.status === "running"
                   ? "bg-primary"
-                  : b.status === "connecting"
+                  : b.status === "pending"
                     ? "bg-amber-400"
                     : "bg-muted-foreground"
               }`}

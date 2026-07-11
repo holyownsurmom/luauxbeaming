@@ -238,7 +238,9 @@ function DiscordSpamPage() {
   };
 
   const stopAndClearAll = async () => {
-    const running = runningBots.filter((b) => b.status === "running" || b.status === "connecting");
+    const running = runningBots.filter(
+      (b) => b.status === "running" || b.status === "pending" || b.status === "stopping",
+    );
     for (const bot of running) {
       await stopBot(bot.id);
     }
@@ -721,7 +723,7 @@ function DiscordSpamPage() {
             >
               <div className="flex items-center gap-2">
                 <div
-                  className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : bot.status === "connecting" ? "bg-amber-400 animate-pulse" : "bg-muted-foreground"}`}
+                  className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : bot.status === "pending" ? "bg-amber-400 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <span className="text-sm font-semibold">{bot.label}</span>
                 <span className="text-xs text-muted-foreground capitalize">{bot.status}</span>

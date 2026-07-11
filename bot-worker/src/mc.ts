@@ -102,6 +102,8 @@ export async function runMcBot(
   let antiAfkTimer: ReturnType<typeof setInterval> | null = null;
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let currentBot: any = null;
 
   const cleanup = () => {
     if (currentTimer) {
@@ -114,12 +116,26 @@ export async function runMcBot(
     }
   };
 
+  const disconnectBot = () => {
+    if (currentBot) {
+      try {
+        currentBot.removeAllListeners();
+        currentBot.end();
+      } catch {
+        /* ignore disconnect errors */
+      }
+      currentBot = null;
+    }
+  };
+
   abortSignal.addEventListener("abort", () => {
     stopped = true;
     cleanup();
+    disconnectBot();
     log("system", "Stop signal received, disconnecting...").catch(() => {});
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function startAntiAfk(bot: any) {
     if (antiAfkTimer) clearInterval(antiAfkTimer);
     antiAfkTimer = setInterval(() => {
@@ -150,6 +166,7 @@ export async function runMcBot(
     }, randomBetween(4000, 9000));
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function startMessageLoop(bot: any) {
     const scheduleNext = () => {
       if (stopped || abortSignal.aborted) return;
@@ -223,6 +240,7 @@ export async function runMcBot(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bot = (mineflayer as any).createBot(botOptions);
+    currentBot = bot;
 
     let connected = false;
 
@@ -256,6 +274,7 @@ export async function runMcBot(
     bot.on("kicked", async (reason: string) => {
       log("warn", `Kicked: ${reason}`).catch(() => {});
       cleanup();
+      currentBot = null;
 
       if (reason.toLowerCase().includes("banned")) {
         log("error", "Bot was banned, stopping").catch(() => {});
@@ -279,6 +298,7 @@ export async function runMcBot(
     bot.on("end", async (reason: string) => {
       log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {});
       cleanup();
+      currentBot = null;
 
       if (stopped || abortSignal.aborted) return;
 
@@ -302,7 +322,7 @@ export async function runMcBot(
       if (!connected && !stopped) {
         log("error", "Connection timed out").catch(() => {});
         cleanup();
-        bot.end();
+        disconnectBot();
       }
     }, CONNECTION_TIMEOUT_MS);
 
@@ -317,6 +337,7 @@ export async function runMcBot(
     if (abortSignal.aborted && !stopped) {
       stopped = true;
       cleanup();
+      disconnectBot();
       if (cleanupTimer) clearInterval(cleanupTimer);
     }
   }, 1000);
@@ -326,6 +347,7 @@ export async function runMcBot(
       if (abortSignal.aborted || stopped) {
         clearInterval(checkDone);
         cleanup();
+        disconnectBot();
         if (cleanupTimer) clearInterval(cleanupTimer);
         resolve();
       }

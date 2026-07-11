@@ -27,23 +27,6 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
 
         if (!body.worker_id) return Response.json({ error: "worker_id required" }, { status: 400 });
 
-        // First, handle any "stopping" jobs that belong to this worker
-        const { data: stoppingJobs } = await db()
-          .from("bot_jobs")
-          .select("id")
-          .eq("status", "stopping")
-          .eq("worker_id", body.worker_id);
-
-        if (stoppingJobs?.length) {
-          await db()
-            .from("bot_jobs")
-            .update({ status: "stopped", stopped_at: new Date().toISOString() })
-            .in(
-              "id",
-              stoppingJobs.map((j) => j.id),
-            );
-        }
-
         // Claim pending jobs (up to 3 at a time)
         const { data: pendingJobs } = await db()
           .from("bot_jobs")

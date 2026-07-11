@@ -32,7 +32,6 @@ type Account = {
   auth_type: string;
   username: string | null;
   uuid: string | null;
-  ssid: string | null;
   status: string;
   created_at: string;
 };
@@ -223,9 +222,6 @@ function BotsPage() {
           serverHost: mcConfig.serverHost,
           serverPort: parseInt(mcConfig.serverPort, 10),
           authType: account.auth_type,
-          username: account.username || undefined,
-          uuid: account.uuid || undefined,
-          ssid: account.ssid || undefined,
           messages: msgs,
           interval: parseInt(mcConfig.interval, 10) || 5,
         }),
@@ -258,7 +254,9 @@ function BotsPage() {
   };
 
   const stopAndClearAll = async () => {
-    const running = runningBots.filter((b) => b.status === "running" || b.status === "connecting");
+    const running = runningBots.filter(
+      (b) => b.status === "running" || b.status === "pending" || b.status === "stopping",
+    );
     for (const bot of running) {
       await stopBot(bot.id);
     }
@@ -554,7 +552,7 @@ function BotsPage() {
             {accounts.map((a) => {
               const botForAccount = runningBots.find((b) => b.config?.accountId === a.id);
               const isRunning =
-                botForAccount?.status === "running" || botForAccount?.status === "connecting";
+                botForAccount?.status === "running" || botForAccount?.status === "pending";
               return (
                 <li key={a.id} className="p-4 flex items-center gap-4">
                   <div

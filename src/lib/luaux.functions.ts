@@ -48,6 +48,20 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
   return data ?? [];
 });
 
+export const getMcAccountSsid = createServerFn({ method: "POST" })
+  .inputValidator((input) => z.object({ accountId: z.string().uuid() }).parse(input))
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const { data: row } = await admin()
+      .from("mc_accounts")
+      .select("ssid,username,uuid")
+      .eq("id", data.accountId)
+      .eq("discord_id", user.id)
+      .maybeSingle();
+    return row;
+  });
+
 export const addMcAccount = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z

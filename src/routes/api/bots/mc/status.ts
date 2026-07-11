@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/bots/mc/status")({
           .select("id, status, config, error, started_at, created_at")
           .eq("discord_id", user.id)
           .eq("type", "mc")
-          .in("status", ["pending", "running", "stopping", "error"])
+          .in("status", ["pending", "running", "stopping", "stopped", "error"])
           .order("created_at", { ascending: false });
 
         const bots = (jobs ?? []).map((j) => ({

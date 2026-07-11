@@ -97,13 +97,12 @@ function DiscordSpamPage() {
   const [showConfig, setShowConfig] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetchKeys({ data: { plugin_id: "discord-spam" } }),
-      fetchProfile(),
-    ]).then(([k, p]) => {
-      setKeys(k as KeyRow[]);
-      setIsAdmin((p as { isAdmin?: boolean }).isAdmin ?? false);
-    }).finally(() => setLoading(false));
+    Promise.all([fetchKeys({ data: { plugin_id: "discord-spam" } }), fetchProfile()])
+      .then(([k, p]) => {
+        setKeys(k as KeyRow[]);
+        setIsAdmin((p as { isAdmin?: boolean }).isAdmin ?? false);
+      })
+      .finally(() => setLoading(false));
   }, [fetchKeys, fetchProfile]);
 
   useEffect(() => {
@@ -114,25 +113,27 @@ function DiscordSpamPage() {
         setPayment(p);
         if (p.status === "finished" || p.status === "confirmed") {
           clearInterval(t);
-          fetchKeys({ data: { plugin_id: "discord-spam" } }).then((d) =>
-            setKeys(d as KeyRow[])
-          );
+          fetchKeys({ data: { plugin_id: "discord-spam" } }).then((d) => setKeys(d as KeyRow[]));
         }
-      } catch {}
+      } catch {
+        /* ignore polling errors */
+      }
     }, 8000);
     return () => clearInterval(t);
   }, [payment, getPay, fetchKeys]);
 
-  const activeKey = isAdmin ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" } : keys.find(
-    (k) => new Date(k.expires_at).getTime() > Date.now()
-  );
+  const activeKey = isAdmin
+    ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
+    : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
 
   const refreshBots = useCallback(async () => {
     try {
       const res = await fetch("/api/bots/discord/status");
       const data = await res.json();
       if (data.bots) setRunningBots(data.bots);
-    } catch {}
+    } catch {
+      /* ignore status errors */
+    }
   }, []);
 
   useEffect(() => {
@@ -154,7 +155,9 @@ function DiscordSpamPage() {
             { ts: data.ts, level: data.level, msg: data.msg },
           ]);
         }
-      } catch {}
+      } catch {
+        /* ignore parse errors */
+      }
     };
     return () => es.close();
   }, [selectedBotId]);
@@ -236,8 +239,7 @@ function DiscordSpamPage() {
 
   // Checkout flow (shown if no key or user clicks purchase)
   if (payment) {
-    const done =
-      payment.status === "finished" || payment.status === "confirmed";
+    const done = payment.status === "finished" || payment.status === "confirmed";
     return (
       <div className="space-y-6 max-w-xl mx-auto">
         <button
@@ -252,12 +254,11 @@ function DiscordSpamPage() {
               Awaiting payment
             </div>
             <h2 className="mt-2 font-display text-3xl font-semibold">
-              Send {payment.pay_amount}{" "}
-              <span className="uppercase">{payment.pay_currency}</span>
+              Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              To the address below. Access unlocks after{" "}
-              {payment.required_confirmations} confirmations.
+              To the address below. Access unlocks after {payment.required_confirmations}{" "}
+              confirmations.
             </p>
           </div>
           <div>
@@ -310,8 +311,8 @@ function DiscordSpamPage() {
           </div>
           {done && (
             <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-              Payment confirmed. Your license key has been generated and DM'd to
-              you by the LuauX bot.
+              Payment confirmed. Your license key has been generated and DM'd to you by the LuauX
+              bot.
             </div>
           )}
         </div>
@@ -344,9 +345,7 @@ function DiscordSpamPage() {
                 <Zap className="h-6 w-6" />
               </div>
               <div className="min-w-0">
-                <div className="font-display text-2xl font-semibold">
-                  Discord Spam
-                </div>
+                <div className="font-display text-2xl font-semibold">Discord Spam</div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Automated channel spamming with multi-token rotation.
                 </p>
@@ -407,13 +406,9 @@ function DiscordSpamPage() {
                   onClick={startCheckout}
                   className="w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 py-3 text-sm font-semibold disabled:opacity-50"
                 >
-                  {creating
-                    ? "Creating invoice..."
-                    : "Pay $10.00 with crypto"}
+                  {creating ? "Creating invoice..." : "Pay $10.00 with crypto"}
                 </button>
-                {payError && (
-                  <div className="text-xs text-destructive">{payError}</div>
-                )}
+                {payError && <div className="text-xs text-destructive">{payError}</div>}
                 <button
                   onClick={() => setCheckout(false)}
                   className="w-full text-xs text-muted-foreground hover:text-foreground"
@@ -432,8 +427,7 @@ function DiscordSpamPage() {
 
             <div className="rounded-xl brutal-border bg-background/40 px-4 py-3 flex items-center gap-2 text-[12px] text-muted-foreground">
               <KeyRound className="h-3.5 w-3.5 text-primary" />
-              Already have a key? The LuauX bot DMs it to you the moment payment
-              confirms.
+              Already have a key? The LuauX bot DMs it to you the moment payment confirms.
             </div>
           </div>
         </div>
@@ -476,8 +470,7 @@ function DiscordSpamPage() {
           </div>
           {!isAdmin && (
             <span className="text-[10px] text-muted-foreground">
-              Expires{" "}
-              {new Date(activeKey!.expires_at).toLocaleDateString()}
+              Expires {new Date(activeKey!.expires_at).toLocaleDateString()}
             </span>
           )}
         </div>
@@ -670,9 +663,7 @@ function DiscordSpamPage() {
               <div
                 className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
               />
-              <span className="text-xs font-semibold uppercase tracking-widest">
-                Console
-              </span>
+              <span className="text-xs font-semibold uppercase tracking-widest">Console</span>
               <span className="text-xs text-muted-foreground">
                 {activeBot?.label || selectedBotId}
               </span>
@@ -715,9 +706,7 @@ function DiscordSpamPage() {
                   className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : bot.status === "connecting" ? "bg-amber-400 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <span className="text-sm font-semibold">{bot.label}</span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  {bot.status}
-                </span>
+                <span className="text-xs text-muted-foreground capitalize">{bot.status}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button

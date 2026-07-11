@@ -21,7 +21,10 @@ export const Route = createFileRoute("/api/me")({
     handlers: {
       GET: async () => {
         const session = await useSession<SessionData>(cfg());
-        return Response.json({ user: session.data.user ?? null, isAdmin: session.data.isAdmin === true });
+        return Response.json({
+          user: session.data.user ?? null,
+          isAdmin: session.data.isAdmin === true,
+        });
       },
     },
   },

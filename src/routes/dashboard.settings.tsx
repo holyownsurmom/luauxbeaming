@@ -21,13 +21,7 @@ export const Route = createFileRoute("/dashboard/settings")({
 });
 
 type Tab =
-  | "profile"
-  | "subscription"
-  | "bot-hours"
-  | "notifications"
-  | "appearance"
-  | "language"
-  | "admin";
+  "profile" | "subscription" | "bot-hours" | "notifications" | "appearance" | "language" | "admin";
 
 const ACCOUNT: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "profile", label: "Profile", icon: User },
@@ -67,7 +61,15 @@ function SettingsPage() {
     fetchProfile()
       .then((r) => {
         const d = r as {
-          profile: { discord_id: string; username: string; global_name: string | null; email: string | null; avatar_url: string | null; bot_hours_remaining: number; active_plan_id: string | null } | null;
+          profile: {
+            discord_id: string;
+            username: string;
+            global_name: string | null;
+            email: string | null;
+            avatar_url: string | null;
+            bot_hours_remaining: number;
+            active_plan_id: string | null;
+          } | null;
           plan: { name: string } | null;
           active: boolean;
           isAdmin?: boolean;
@@ -78,11 +80,10 @@ function SettingsPage() {
       .catch(() => setData({ profile: null, plan: null, active: false }));
   }, [fetchProfile]);
 
-  const displayName =
-    data?.profile?.global_name || data?.profile?.username || "…";
+  const displayName = data?.profile?.global_name || data?.profile?.username || "…";
   const handle = data?.profile?.username || "";
   const hours = Number(data?.profile?.bot_hours_remaining ?? 0);
-  const planLabel = data?.active ? data?.plan?.name ?? "Active plan" : "No plan";
+  const planLabel = data?.active ? (data?.plan?.name ?? "Active plan") : "No plan";
   const planActive = !!data?.active;
 
   const ACCOUNT_LABELS: Record<string, string> = {
@@ -110,7 +111,11 @@ function SettingsPage() {
           <div className="rounded-2xl brutal-border bg-card/60 p-4">
             <div className="flex items-center gap-3">
               {data?.profile?.avatar_url ? (
-                <img src={data.profile.avatar_url} alt="" className="h-11 w-11 rounded-full brutal-border" />
+                <img
+                  src={data.profile.avatar_url}
+                  alt=""
+                  className="h-11 w-11 rounded-full brutal-border"
+                />
               ) : (
                 <div className="h-11 w-11 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-bold">
                   {displayName[0]?.toUpperCase() || "?"}
@@ -141,7 +146,13 @@ function SettingsPage() {
             </div>
             <div className="space-y-1">
               {ACCOUNT.map((it) => (
-                <SideItem key={it.id} it={it} label={ACCOUNT_LABELS[it.id] ?? it.label} active={tab === it.id} onClick={() => setTab(it.id)} />
+                <SideItem
+                  key={it.id}
+                  it={it}
+                  label={ACCOUNT_LABELS[it.id] ?? it.label}
+                  active={tab === it.id}
+                  onClick={() => setTab(it.id)}
+                />
               ))}
             </div>
           </div>
@@ -151,7 +162,13 @@ function SettingsPage() {
             </div>
             <div className="space-y-1">
               {WORKSPACE.map((it) => (
-                <SideItem key={it.id} it={it} label={WORKSPACE_LABELS[it.id] ?? it.label} active={tab === it.id} onClick={() => setTab(it.id)} />
+                <SideItem
+                  key={it.id}
+                  it={it}
+                  label={WORKSPACE_LABELS[it.id] ?? it.label}
+                  active={tab === it.id}
+                  onClick={() => setTab(it.id)}
+                />
               ))}
             </div>
           </div>
@@ -172,7 +189,9 @@ function SettingsPage() {
             <Panel title={s.t("subscription")} subtitle="Your current plan and renewal status.">
               <div className="rounded-xl brutal-border bg-background/40 p-4 flex items-center justify-between">
                 <div>
-                  <div className="text-xs uppercase tracking-widest text-muted-foreground">Current plan</div>
+                  <div className="text-xs uppercase tracking-widest text-muted-foreground">
+                    Current plan
+                  </div>
                   <div className="mt-1 font-display text-2xl font-semibold">{planLabel}</div>
                 </div>
                 <a
@@ -219,7 +238,8 @@ function SettingsPage() {
                 onChange={(v) => s.set("botDmReading", v)}
               />
               <p className="text-[11px] text-muted-foreground pt-2">
-                Preferences are saved to your browser. The Discord bot only reads DMs when this is on.
+                Preferences are saved to your browser. The Discord bot only reads DMs when this is
+                on.
               </p>
             </Panel>
           )}
@@ -266,9 +286,7 @@ function SettingsPage() {
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <Languages className="h-4 w-4 text-primary" /> {s.t("language")}
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {s.t("language_hint")}
-                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{s.t("language_hint")}</p>
                   <Select
                     value={s.language}
                     onChange={(v) => s.set("language", v as typeof s.language)}
@@ -285,9 +303,7 @@ function SettingsPage() {
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <CreditCard className="h-4 w-4 text-primary" /> {s.t("currency")}
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {s.t("currency_hint")}
-                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{s.t("currency_hint")}</p>
                   <Select
                     value={s.currency}
                     onChange={(v) => s.set("currency", v as typeof s.currency)}
@@ -321,7 +337,10 @@ function SettingsPage() {
                       type="password"
                       className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                       value={adminPw}
-                      onChange={(e) => { setAdminPw(e.target.value); setAdminError(null); }}
+                      onChange={(e) => {
+                        setAdminPw(e.target.value);
+                        setAdminError(null);
+                      }}
                       placeholder="Enter admin password"
                     />
                   </label>

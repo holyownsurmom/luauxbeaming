@@ -26,6 +26,7 @@ import { Route as DashboardBillingRouteImport } from './routes/dashboard.billing
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as ApiDiscordLogoutRouteImport } from './routes/api/discord.logout'
 import { Route as ApiDiscordLoginRouteImport } from './routes/api/discord.login'
+import { Route as ApiDiscordInteractionsRouteImport } from './routes/api/discord/interactions'
 import { Route as ApiDiscordCallbackRouteImport } from './routes/api/discord.callback'
 import { Route as ApiBotsStreamRouteImport } from './routes/api/bots/stream'
 import { Route as ApiBotsLogsRouteImport } from './routes/api/bots/logs'
@@ -43,6 +44,9 @@ import { Route as ApiBotsMcPingRouteImport } from './routes/api/bots/mc/ping'
 import { Route as ApiBotsDiscordStopRouteImport } from './routes/api/bots/discord/stop'
 import { Route as ApiBotsDiscordStatusRouteImport } from './routes/api/bots/discord/status'
 import { Route as ApiBotsDiscordStartRouteImport } from './routes/api/bots/discord/start'
+import { Route as ApiBotsDiscordAutoreplyStopRouteImport } from './routes/api/bots/discord-autoreply/stop'
+import { Route as ApiBotsDiscordAutoreplyStatusRouteImport } from './routes/api/bots/discord-autoreply/status'
+import { Route as ApiBotsDiscordAutoreplyStartRouteImport } from './routes/api/bots/discord-autoreply/start'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -131,6 +135,11 @@ const ApiDiscordLoginRoute = ApiDiscordLoginRouteImport.update({
   path: '/api/discord/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDiscordInteractionsRoute = ApiDiscordInteractionsRouteImport.update({
+  id: '/api/discord/interactions',
+  path: '/api/discord/interactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDiscordCallbackRoute = ApiDiscordCallbackRouteImport.update({
   id: '/api/discord/callback',
   path: '/api/discord/callback',
@@ -217,6 +226,24 @@ const ApiBotsDiscordStartRoute = ApiBotsDiscordStartRouteImport.update({
   path: '/api/bots/discord/start',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsDiscordAutoreplyStopRoute =
+  ApiBotsDiscordAutoreplyStopRouteImport.update({
+    id: '/api/bots/discord-autoreply/stop',
+    path: '/api/bots/discord-autoreply/stop',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiBotsDiscordAutoreplyStatusRoute =
+  ApiBotsDiscordAutoreplyStatusRouteImport.update({
+    id: '/api/bots/discord-autoreply/status',
+    path: '/api/bots/discord-autoreply/status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiBotsDiscordAutoreplyStartRoute =
+  ApiBotsDiscordAutoreplyStartRouteImport.update({
+    id: '/api/bots/discord-autoreply/start',
+    path: '/api/bots/discord-autoreply/start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -240,8 +267,12 @@ export interface FileRoutesByFullPath {
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
+  '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
+  '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
+  '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
@@ -275,8 +306,12 @@ export interface FileRoutesByTo {
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
+  '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
+  '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
+  '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
@@ -312,8 +347,12 @@ export interface FileRoutesById {
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
+  '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
+  '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
+  '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
@@ -350,8 +389,12 @@ export interface FileRouteTypes {
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
+    | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/bots/discord-autoreply/start'
+    | '/api/bots/discord-autoreply/status'
+    | '/api/bots/discord-autoreply/stop'
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
@@ -385,8 +428,12 @@ export interface FileRouteTypes {
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
+    | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/bots/discord-autoreply/start'
+    | '/api/bots/discord-autoreply/status'
+    | '/api/bots/discord-autoreply/stop'
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
@@ -421,8 +468,12 @@ export interface FileRouteTypes {
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
+    | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/bots/discord-autoreply/start'
+    | '/api/bots/discord-autoreply/status'
+    | '/api/bots/discord-autoreply/stop'
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
@@ -447,8 +498,12 @@ export interface RootRouteChildren {
   ApiBotsLogsRoute: typeof ApiBotsLogsRoute
   ApiBotsStreamRoute: typeof ApiBotsStreamRoute
   ApiDiscordCallbackRoute: typeof ApiDiscordCallbackRoute
+  ApiDiscordInteractionsRoute: typeof ApiDiscordInteractionsRoute
   ApiDiscordLoginRoute: typeof ApiDiscordLoginRoute
   ApiDiscordLogoutRoute: typeof ApiDiscordLogoutRoute
+  ApiBotsDiscordAutoreplyStartRoute: typeof ApiBotsDiscordAutoreplyStartRoute
+  ApiBotsDiscordAutoreplyStatusRoute: typeof ApiBotsDiscordAutoreplyStatusRoute
+  ApiBotsDiscordAutoreplyStopRoute: typeof ApiBotsDiscordAutoreplyStopRoute
   ApiBotsDiscordStartRoute: typeof ApiBotsDiscordStartRoute
   ApiBotsDiscordStatusRoute: typeof ApiBotsDiscordStatusRoute
   ApiBotsDiscordStopRoute: typeof ApiBotsDiscordStopRoute
@@ -583,6 +638,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiscordLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/discord/interactions': {
+      id: '/api/discord/interactions'
+      path: '/api/discord/interactions'
+      fullPath: '/api/discord/interactions'
+      preLoaderRoute: typeof ApiDiscordInteractionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/discord/callback': {
       id: '/api/discord/callback'
       path: '/api/discord/callback'
@@ -702,6 +764,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsDiscordStartRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/discord-autoreply/stop': {
+      id: '/api/bots/discord-autoreply/stop'
+      path: '/api/bots/discord-autoreply/stop'
+      fullPath: '/api/bots/discord-autoreply/stop'
+      preLoaderRoute: typeof ApiBotsDiscordAutoreplyStopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/discord-autoreply/status': {
+      id: '/api/bots/discord-autoreply/status'
+      path: '/api/bots/discord-autoreply/status'
+      fullPath: '/api/bots/discord-autoreply/status'
+      preLoaderRoute: typeof ApiBotsDiscordAutoreplyStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/discord-autoreply/start': {
+      id: '/api/bots/discord-autoreply/start'
+      path: '/api/bots/discord-autoreply/start'
+      fullPath: '/api/bots/discord-autoreply/start'
+      preLoaderRoute: typeof ApiBotsDiscordAutoreplyStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -748,8 +831,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsLogsRoute: ApiBotsLogsRoute,
   ApiBotsStreamRoute: ApiBotsStreamRoute,
   ApiDiscordCallbackRoute: ApiDiscordCallbackRoute,
+  ApiDiscordInteractionsRoute: ApiDiscordInteractionsRoute,
   ApiDiscordLoginRoute: ApiDiscordLoginRoute,
   ApiDiscordLogoutRoute: ApiDiscordLogoutRoute,
+  ApiBotsDiscordAutoreplyStartRoute: ApiBotsDiscordAutoreplyStartRoute,
+  ApiBotsDiscordAutoreplyStatusRoute: ApiBotsDiscordAutoreplyStatusRoute,
+  ApiBotsDiscordAutoreplyStopRoute: ApiBotsDiscordAutoreplyStopRoute,
   ApiBotsDiscordStartRoute: ApiBotsDiscordStartRoute,
   ApiBotsDiscordStatusRoute: ApiBotsDiscordStatusRoute,
   ApiBotsDiscordStopRoute: ApiBotsDiscordStopRoute,

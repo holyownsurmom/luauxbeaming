@@ -20,12 +20,7 @@ console.log(`[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms`);
 
 const runningJobs = new Map<string, AbortController>();
 
-async function claimJob(job: {
-  id: string;
-  discord_id: string;
-  type: string;
-  config: unknown;
-}) {
+async function claimJob(job: { id: string; discord_id: string; type: string; config: unknown }) {
   if (runningJobs.has(job.id)) return;
 
   const controller = new AbortController();
@@ -35,18 +30,13 @@ async function claimJob(job: {
 
   try {
     if (job.type === "mc") {
-      await runMcBot(
-        job.id,
-        job.discord_id,
-        job.config as McJobConfig,
-        controller.signal
-      );
+      await runMcBot(job.id, job.discord_id, job.config as McJobConfig, controller.signal);
     } else if (job.type === "discord") {
       await runDiscordBot(
         job.id,
         job.discord_id,
         job.config as DiscordJobConfig,
-        controller.signal
+        controller.signal,
       );
     }
 

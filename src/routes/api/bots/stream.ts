@@ -18,7 +18,9 @@ export const Route = createFileRoute("/api/bots/stream")({
               if (closed) return;
               try {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-              } catch {}
+              } catch {
+                /* ignore send errors */
+              }
             };
 
             send({ type: "connected", userId: user.id });
@@ -48,7 +50,9 @@ export const Route = createFileRoute("/api/bots/stream")({
                   }
                   lastTs = new Date(rows[rows.length - 1].created_at).getTime();
                 }
-              } catch {}
+              } catch {
+                /* ignore polling errors */
+              }
             };
 
             const heartbeat = setInterval(() => {
@@ -67,7 +71,11 @@ export const Route = createFileRoute("/api/bots/stream")({
               closed = true;
               clearInterval(heartbeat);
               clearInterval(pollInterval);
-              try { controller.close(); } catch {}
+              try {
+                controller.close();
+              } catch {
+                /* ignore close errors */
+              }
             };
 
             request.signal.addEventListener("abort", cleanup);

@@ -1,12 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-
-const cfg = () => ({
-  password: process.env.SESSION_SECRET!,
-  name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 30,
-});
+import { sessionConfig } from "@/lib/luaux-server.server";
 
 type StoredUser = {
   id: string;
@@ -24,7 +19,7 @@ export const Route = createFileRoute("/api/discord/callback")({
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-        const session = await useSession<SessionData>(cfg());
+        const session = await useSession<SessionData>(sessionConfig());
 
         if (!code || !state || state !== session.data.oauth_state) {
           return new Response("Invalid OAuth state", { status: 400 });
@@ -95,9 +90,13 @@ export const Route = createFileRoute("/api/discord/callback")({
 
         // Upsert profile in database
         try {
-          const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-            auth: { persistSession: false, autoRefreshToken: false },
-          });
+          const db = createClient(
+            process.env.SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            {
+              auth: { persistSession: false, autoRefreshToken: false },
+            },
+          );
           await db.from("profiles").upsert(
             {
               discord_id: user.id,

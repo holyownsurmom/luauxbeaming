@@ -76,7 +76,9 @@ export function PluginPage({
           clearInterval(t);
           fetchKeys({ data: { plugin_id: pluginId } }).then((d) => setKeys(d as KeyRow[]));
         }
-      } catch {}
+      } catch {
+        /* ignore polling errors */
+      }
     }, 8000);
     return () => clearInterval(t);
   }, [payment, getPay, fetchKeys, pluginId]);
@@ -115,16 +117,21 @@ export function PluginPage({
         </button>
         <div className="rounded-2xl brutal-border bg-card p-8 space-y-5">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-primary">Awaiting payment</div>
+            <div className="text-[10px] uppercase tracking-widest text-primary">
+              Awaiting payment
+            </div>
             <h2 className="mt-2 font-display text-3xl font-semibold">
               Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              To the address below. Access unlocks automatically after {payment.required_confirmations} confirmations.
+              To the address below. Access unlocks automatically after{" "}
+              {payment.required_confirmations} confirmations.
             </p>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Pay to address</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+              Pay to address
+            </div>
             <div className="flex gap-2">
               <code className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-xs font-mono break-all">
                 {payment.pay_address}
@@ -133,24 +140,40 @@ export function PluginPage({
                 onClick={() => copy(payment.pay_address)}
                 className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
               >
-                {copied === payment.pay_address ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                {copied === payment.pay_address ? (
+                  <Check className="h-4 w-4 text-primary" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/60">
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Status
+              </div>
               <div className="mt-1 flex items-center gap-2 text-sm">
                 {done ? (
-                  <><Check className="h-4 w-4 text-primary" /><span className="text-primary font-semibold">Paid</span></>
+                  <>
+                    <Check className="h-4 w-4 text-primary" />
+                    <span className="text-primary font-semibold">Paid</span>
+                  </>
                 ) : (
-                  <><Clock className="h-4 w-4 animate-pulse text-primary" /><span className="capitalize">{payment.status}</span></>
+                  <>
+                    <Clock className="h-4 w-4 animate-pulse text-primary" />
+                    <span className="capitalize">{payment.status}</span>
+                  </>
                 )}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Confirmations</div>
-              <div className="mt-1 font-mono">{payment.confirmations} / {payment.required_confirmations}</div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Confirmations
+              </div>
+              <div className="mt-1 font-mono">
+                {payment.confirmations} / {payment.required_confirmations}
+              </div>
             </div>
           </div>
           {done && (
@@ -218,7 +241,11 @@ export function PluginPage({
                   onClick={() => copy(activeKey.key)}
                   className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
                 >
-                  {copied === activeKey.key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied === activeKey.key ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               {!activeKey.delivered && (
@@ -230,14 +257,18 @@ export function PluginPage({
           ) : checkout ? (
             <div className="space-y-4">
               <div>
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Pay with</div>
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                  Pay with
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {CURRENCIES.map((c) => (
                     <button
                       key={c.code}
                       onClick={() => setCurrency(c.code)}
                       className={`rounded-full brutal-border px-3 py-1.5 text-xs font-semibold ${
-                        currency === c.code ? "bg-primary text-primary-foreground" : "bg-secondary/40 hover:bg-secondary"
+                        currency === c.code
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary/40 hover:bg-secondary"
                       }`}
                     >
                       {c.label}

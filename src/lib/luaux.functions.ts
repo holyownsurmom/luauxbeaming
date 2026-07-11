@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 export const getMyProfile = createServerFn({ method: "GET" }).handler(async () => {
-  const { getSessionUser, getSessionData, admin, ensureProfile } = await import("./luaux-server.server");
+  const { getSessionUser, getSessionData, admin, ensureProfile } =
+    await import("./luaux-server.server");
   const user = await getSessionUser();
   if (!user) return { profile: null, plan: null };
   await ensureProfile(user);
@@ -14,7 +15,11 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
     .maybeSingle();
   let plan = null;
   if (profile?.active_plan_id) {
-    const { data: p } = await db.from("plans").select("*").eq("id", profile.active_plan_id).maybeSingle();
+    const { data: p } = await db
+      .from("plans")
+      .select("*")
+      .eq("id", profile.active_plan_id)
+      .maybeSingle();
     plan = p;
   }
   const active =
@@ -120,7 +125,9 @@ export const createInvoice = createServerFn({ method: "POST" })
         pay_currency: data.pay_currency,
         order_id,
         order_description: `LuauX ${plan.name} plan`,
-        ipn_callback_url: process.env.IPN_CALLBACK_URL || "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook",
+        ipn_callback_url:
+          process.env.IPN_CALLBACK_URL ||
+          "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook",
       }),
     });
     if (!npRes.ok) {
@@ -184,7 +191,9 @@ export const listPayments = createServerFn({ method: "GET" }).handler(async () =
   const user = await requireUser();
   const { data } = await admin()
     .from("payments")
-    .select("id,plan_id,pay_currency,price_amount,status,confirmations,required_confirmations,created_at")
+    .select(
+      "id,plan_id,pay_currency,price_amount,status,confirmations,required_confirmations,created_at",
+    )
     .eq("discord_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -220,4 +229,112 @@ export const getPluginKeys = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(10);
     return rows ?? [];
+  });
+
+export const getVerificationSettings = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireUser, admin } = await import("./luaux-server.server");
+  const user = await requireUser();
+  const { data } = await admin()
+    .from("verification_settings")
+    .select("*")
+    .eq("discord_id", user.id)
+    .maybeSingle();
+  return data;
+});
+
+export const saveVerificationSettings = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        guild_id: z.string().min(1),
+        verified_role_id: z.string().min(1),
+        channel_id: z.string().min(1),
+        message_title: z.string().min(1).max(100),
+        message_description: z.string().min(1).max(2000),
+        button_text: z.string().min(1).max(50),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const db = admin();
+
+    const { data: keys } = await db
+      .from("verification_keys")
+      .select("id, expires_at")
+      .eq("discord_id", user.id)
+      .eq("plugin_id", "verification")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const activeKey = keys?.find((k) => new Date(k.expires_at).getTime() > Date.now());
+
+    const { getSessionData } = await import("./luaux-server.server");
+    const sessionData = await getSessionData();
+    const isAdmin = sessionData.isAdmin === true;
+
+    if (!activeKey && !isAdmin) {
+      throw new Error("No active Verification Bot license");
+    }
+
+    const { error } = await db.from("verification_settings").upsert({
+      discord_id: user.id,
+      guild_id: data.guild_id,
+      verified_role_id: data.verified_role_id,
+      channel_id: data.channel_id,
+      message_title: data.message_title,
+      message_description: data.message_description,
+      button_text: data.button_text,
+    });
+
+    if (error) throw new Error(error.message);
+
+    try {
+      const channelRes = await fetch(
+        `https://discord.com/api/v10/channels/${data.channel_id}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            embeds: [
+              {
+                title: data.message_title,
+                description: data.message_description,
+                color: 5814783,
+              },
+            ],
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 2,
+                    style: 3,
+                    label: data.button_text,
+                    custom_id: "verify_member",
+                  },
+                ],
+              },
+            ],
+          }),
+        },
+      );
+
+      if (!channelRes.ok) {
+        const text = await channelRes.text();
+        console.error("[discord bot] failed to send verification msg:", channelRes.status, text);
+        throw new Error(`Settings saved, but failed to post message: ${text}`);
+      }
+    } catch (e) {
+      console.error("[verification] failed to send message:", e);
+      throw new Error(
+        `Settings saved, but failed to post verification message. Make sure the bot is in your server and has permission to send messages in that channel.`,
+      );
+    }
+
+    return { ok: true };
   });

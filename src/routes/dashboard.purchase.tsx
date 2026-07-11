@@ -67,7 +67,9 @@ function PurchasePage() {
         const p = (await getPay({ data: { id: payment.id } })) as typeof payment;
         setPayment(p);
         if (p.status === "finished" || p.status === "confirmed") clearInterval(t);
-      } catch {}
+      } catch {
+        /* ignore polling errors */
+      }
     }, 8000);
     return () => clearInterval(t);
   }, [payment, getPay]);
@@ -77,7 +79,9 @@ function PurchasePage() {
     setError(null);
     setCreating(true);
     try {
-      const p = (await invoice({ data: { plan_id: planId, pay_currency: selectedCurrency } })) as typeof payment;
+      const p = (await invoice({
+        data: { plan_id: planId, pay_currency: selectedCurrency },
+      })) as typeof payment;
       setPayment(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create invoice");
@@ -102,7 +106,9 @@ function PurchasePage() {
       <div className="rounded-2xl brutal-border bg-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Bot hours</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Bot hours
+            </div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="font-display text-4xl font-semibold">{botHours.toFixed(1)}</span>
               <span className="text-sm text-muted-foreground">hours available</span>
@@ -148,8 +154,12 @@ function PurchasePage() {
               </p>
             </div>
             <div className="rounded-xl brutal-border bg-card p-4 min-w-[180px]">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Total</div>
-              <div className="mt-1 font-display text-3xl font-semibold">{s.formatPrice(hourTotal)}</div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Total
+              </div>
+              <div className="mt-1 font-display text-3xl font-semibold">
+                {s.formatPrice(hourTotal)}
+              </div>
             </div>
           </div>
 
@@ -167,14 +177,18 @@ function PurchasePage() {
       </div>
 
       <div className="rounded-2xl brutal-border bg-card p-5">
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Pay with</div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-3">
+          Pay with
+        </div>
         <div className="flex flex-wrap gap-2">
           {CURRENCIES.map((c) => (
             <button
               key={c.code}
               onClick={() => setSelectedCurrency(c.code)}
               className={`rounded-full brutal-border px-4 py-2 text-xs font-semibold ${
-                selectedCurrency === c.code ? "bg-primary text-primary-foreground" : "bg-secondary/40 hover:bg-secondary"
+                selectedCurrency === c.code
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary/40 hover:bg-secondary"
               }`}
             >
               {c.label}
@@ -207,15 +221,20 @@ function PurchasePage() {
                   </div>
                 )}
 
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{plan.name}</div>
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {plan.name}
+                </div>
                 <p className="mt-2 text-sm text-muted-foreground min-h-[2.5rem]">
                   {plan.id === "starter" && "Ideal for small-scale operations and getting started."}
                   {plan.id === "pro" && "For power users running multiple bots simultaneously."}
-                  {plan.id === "enterprise" && "Maximum throughput, dedicated resources and custom setups."}
+                  {plan.id === "enterprise" &&
+                    "Maximum throughput, dedicated resources and custom setups."}
                 </p>
 
                 <div className="mt-5 flex items-baseline gap-1">
-                  <span className="font-display text-5xl font-semibold">{s.formatPrice(Number(plan.price_usd))}</span>
+                  <span className="font-display text-5xl font-semibold">
+                    {s.formatPrice(Number(plan.price_usd))}
+                  </span>
                   <span className="text-sm text-muted-foreground">{s.t("per_month")}</span>
                 </div>
 
@@ -223,12 +242,16 @@ function PurchasePage() {
                   <div className="flex flex-col items-center justify-center py-4 bg-secondary/20 border-r border-border/60">
                     <Package className="h-4 w-4 text-muted-foreground mb-1" />
                     <div className="font-display text-xl font-semibold">{plan.max_bots}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Bots</div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Bots
+                    </div>
                   </div>
                   <div className="flex flex-col items-center justify-center py-4 bg-secondary/20">
                     <Timer className="h-4 w-4 text-muted-foreground mb-1" />
                     <div className="font-display text-xl font-semibold">{hoursPerDay}h / day</div>
-                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Bot-hours</div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Bot-hours
+                    </div>
                   </div>
                 </div>
 
@@ -303,12 +326,15 @@ function PaymentView({
             Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            To the address below. Access unlocks automatically after {payment.required_confirmations} confirmations.
+            To the address below. Access unlocks automatically after{" "}
+            {payment.required_confirmations} confirmations.
           </p>
         </div>
 
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Pay to address</div>
+          <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+            Pay to address
+          </div>
           <div className="flex gap-2">
             <code className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-xs font-mono break-all">
               {payment.pay_address}
@@ -324,7 +350,9 @@ function PaymentView({
 
         <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/60">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Status
+            </div>
             <div className="mt-1 flex items-center gap-2 text-sm">
               {done ? (
                 <>
@@ -340,7 +368,9 @@ function PaymentView({
             </div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Confirmations</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Confirmations
+            </div>
             <div className="mt-1 font-mono">
               {payment.confirmations} / {payment.required_confirmations}
             </div>
@@ -349,7 +379,11 @@ function PaymentView({
 
         {done && (
           <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-            Plan activated. Head to <a href="/dashboard/bots" className="underline">Bots</a> to deploy.
+            Plan activated. Head to{" "}
+            <a href="/dashboard/bots" className="underline">
+              Bots
+            </a>{" "}
+            to deploy.
           </div>
         )}
       </div>

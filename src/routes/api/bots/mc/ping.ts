@@ -28,7 +28,10 @@ export const Route = createFileRoute("/api/bots/mc/ping")({
   },
 });
 
-async function pingMcServer(host: string, port = 25565): Promise<{
+async function pingMcServer(
+  host: string,
+  port = 25565,
+): Promise<{
   online: boolean;
   version?: string;
   players?: { online: number; max: number };
@@ -53,9 +56,10 @@ async function pingMcServer(host: string, port = 25565): Promise<{
       players: data.players
         ? { online: data.players.online ?? 0, max: data.players.max ?? 0 }
         : undefined,
-      motd: typeof data.motd === "string"
-        ? data.motd
-        : data.motd?.clean || data.motd?.html || undefined,
+      motd:
+        typeof data.motd === "string"
+          ? data.motd
+          : data.motd?.clean || data.motd?.html || undefined,
       latency,
     };
   } catch {

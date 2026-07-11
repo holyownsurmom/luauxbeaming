@@ -53,9 +53,7 @@ export function BotConsole({
           <div
             key={`${entry.ts}-${i}`}
             className={`flex gap-2 leading-relaxed ${
-              highlightBot && entry.level === "bot"
-                ? "bg-primary/10 -mx-4 px-4 rounded"
-                : ""
+              highlightBot && entry.level === "bot" ? "bg-primary/10 -mx-4 px-4 rounded" : ""
             }`}
           >
             <span className="text-muted-foreground/30 select-none shrink-0 w-[72px]">
@@ -66,12 +64,12 @@ export function BotConsole({
                 second: "2-digit",
               })}
             </span>
-            <span className={`shrink-0 w-3 text-center ${LEVEL_COLORS[entry.level] ?? "text-foreground/50"}`}>
+            <span
+              className={`shrink-0 w-3 text-center ${LEVEL_COLORS[entry.level] ?? "text-foreground/50"}`}
+            >
               {LEVEL_PREFIX[entry.level] ?? "·"}
             </span>
-            <span className={LEVEL_COLORS[entry.level] ?? "text-foreground/50"}>
-              {entry.msg}
-            </span>
+            <span className={LEVEL_COLORS[entry.level] ?? "text-foreground/50"}>{entry.msg}</span>
           </div>
         ))
       )}

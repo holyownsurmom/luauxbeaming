@@ -28,7 +28,7 @@ export async function runMcBot(
   jobId: string,
   discordId: string,
   config: McJobConfig,
-  abortSignal: AbortSignal
+  abortSignal: AbortSignal,
 ): Promise<void> {
   const log = createLogger(jobId, discordId);
 
@@ -50,10 +50,7 @@ export async function runMcBot(
   const botOptions: Record<string, unknown> = {
     host: config.serverHost,
     port: config.serverPort,
-    username:
-      config.authType === "offline"
-        ? config.username || config.label
-        : undefined,
+    username: config.authType === "offline" ? config.username || config.label : undefined,
     auth: config.authType === "microsoft" ? "microsoft" : undefined,
     hideErrors: true,
     checkTimeoutInterval: 60000,
@@ -123,29 +120,41 @@ export async function runMcBot(
 
   bot.on("chat", (username: string, message: string) => {
     if (username === bot.username) return;
-    log("chat", `<${username}> ${message}`).catch(() => {});
+    log("chat", `<${username}> ${message}`).catch(() => {
+      /* ignore logging errors */
+    });
   });
 
   bot.on("whisper", (username: string, message: string) => {
-    log("chat", `[whisper] <${username}> ${message}`).catch(() => {});
+    log("chat", `[whisper] <${username}> ${message}`).catch(() => {
+      /* ignore logging errors */
+    });
   });
 
   bot.on("error", (err: Error) => {
-    log("error", `Error: ${err.message}`).catch(() => {});
+    log("error", `Error: ${err.message}`).catch(() => {
+      /* ignore logging errors */
+    });
   });
 
   bot.on("kicked", (reason: string) => {
-    log("error", `Kicked: ${reason}`).catch(() => {});
+    log("error", `Kicked: ${reason}`).catch(() => {
+      /* ignore logging errors */
+    });
     cleanup();
   });
 
   bot.on("end", (reason: string) => {
-    log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {});
+    log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {
+      /* ignore logging errors */
+    });
     cleanup();
   });
 
   bot.on("death", () => {
-    log("warn", "Bot died, respawning...").catch(() => {});
+    log("warn", "Bot died, respawning...").catch(() => {
+      /* ignore logging errors */
+    });
   });
 
   return new Promise((resolve) => {

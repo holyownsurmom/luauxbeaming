@@ -1,4 +1,5 @@
 import { createLogger, updateJob } from "./api.js";
+import { runDiscordAutoReplyBot, type AutoReplyJobConfig } from "./autoreply.js";
 
 export type DiscordJobConfig = {
   token: string;
@@ -23,9 +24,18 @@ function sleep(ms: number): Promise<void> {
 export async function runDiscordBot(
   jobId: string,
   discordId: string,
-  config: DiscordJobConfig,
-  abortSignal: AbortSignal
+  config: DiscordJobConfig & { subType?: string },
+  abortSignal: AbortSignal,
 ): Promise<void> {
+  if (config.subType === "autoreply") {
+    return runDiscordAutoReplyBot(
+      jobId,
+      discordId,
+      config as unknown as AutoReplyJobConfig,
+      abortSignal,
+    );
+  }
+
   const log = createLogger(jobId, discordId);
 
   if (!config.token) {
@@ -54,10 +64,14 @@ export async function runDiscordBot(
 
   let stopped = false;
 
-  abortSignal.addEventListener("abort", () => {
-    stopped = true;
-    log("system", "Stop signal received, shutting down...").catch(() => {});
-  });
+  abortSignal.addEventListener(
+    "abort",
+    () => {
+      stopped = true;
+      log("system", "Stop signal received, shutting down...").catch(() => {});
+    },
+    { once: true },
+  );
 
   let me: { id: string; username: string } | null = null;
   try {
@@ -103,9 +117,13 @@ export async function runDiscordBot(
   let failCount = 0;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
-  abortSignal.addEventListener("abort", () => {
-    if (pendingTimer) clearTimeout(pendingTimer);
-  }, { once: true });
+  abortSignal.addEventListener(
+    "abort",
+    () => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+    },
+    { once: true },
+  );
 
   const sendNext = async () => {
     if (stopped) return;
@@ -130,14 +148,22 @@ export async function runDiscordBot(
         if (config.deleteAfterSend) {
           const sent = await res.json();
           if (sent?.id) {
-            setTimeout(() => {
-              fetch(`https://discord.com/api/v9/channels/${config.channelId}/messages/${sent.id}`, {
-                method: "DELETE",
-                headers: { Authorization: config.token },
-              }).catch((e) => {
-                log("error", `Delete failed: ${e.message}`).catch(() => {});
-              });
-            }, randomBetween(1000, 3000));
+            setTimeout(
+              () => {
+                fetch(
+                  `https://discord.com/api/v9/channels/${config.channelId}/messages/${sent.id}`,
+                  {
+                    method: "DELETE",
+                    headers: { Authorization: config.token },
+                  },
+                ).catch((e) => {
+                  log("error", `Delete failed: ${e.message}`).catch(() => {
+                    /* ignore logging errors */
+                  });
+                });
+              },
+              randomBetween(1000, 3000),
+            );
           }
         }
       } else {
@@ -151,7 +177,9 @@ export async function runDiscordBot(
           try {
             const parsed = JSON.parse(body);
             if (parsed.retry_after) retryAfter = Math.ceil(parsed.retry_after * 1000) + 1000;
-          } catch {}
+          } catch {
+            /* ignore parse errors */
+          }
           await log("warn", `Rate limited, waiting ${retryAfter}ms`);
           await sleep(retryAfter);
         }
@@ -187,7 +215,9 @@ export async function runDiscordBot(
   const runtimeLog = setInterval(() => {
     if (!stopped) {
       const botMinutes = Math.floor((Date.now() - startedAt) / 60000);
-      log("info", `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount}`).catch(() => {});
+      log("info", `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount}`).catch(
+        () => {},
+      );
     }
   }, 300000);
 
@@ -198,6 +228,7 @@ export async function runDiscordBot(
       if (abortSignal.aborted || stopped) {
         clearInterval(checkAbort);
         if (pendingTimer) clearTimeout(pendingTimer);
+        clearInterval(runtimeLog);
         resolve();
       }
     }, 1000);

@@ -7,7 +7,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "LuauX — Automated Minecraft bot fleets" },
-      { name: "description", content: "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime." },
+      {
+        name: "description",
+        content:
+          "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
+      },
     ],
   }),
 });
@@ -25,33 +29,136 @@ const LOG_LINES = [
 ];
 
 const FEATURES = [
-  { tag: "01", label: "Automation", title: "Smart fleet", body: "Spin up dozens of bots with shared behavior profiles. Load balancing distributes tasks across the fleet automatically." },
-  { tag: "02", label: "Stealth", title: "Undetected", body: "Rotating proxies, humanlike movement and unique fingerprints for every session." },
-  { tag: "03", label: "Reliability", title: "24/7 uptime", body: "Bots run continuously. No manual restarts, no babysitting, no drama." },
-  { tag: "04", label: "Tooling", title: "Live console", body: "Watch bot output in real time. Chat, events, errors — streamed to your browser." },
-  { tag: "05", label: "Scale", title: "Multi-account", body: "Manage hundreds of accounts from one unified command center." },
-  { tag: "06", label: "Deploy", title: "Instant deploy", body: "Drop credentials and your fleet is beaming in under a minute. No config files." },
+  {
+    tag: "01",
+    label: "Automation",
+    title: "Smart fleet",
+    body: "Spin up dozens of bots with shared behavior profiles. Load balancing distributes tasks across the fleet automatically.",
+  },
+  {
+    tag: "02",
+    label: "Stealth",
+    title: "Undetected",
+    body: "Rotating proxies, humanlike movement and unique fingerprints for every session.",
+  },
+  {
+    tag: "03",
+    label: "Reliability",
+    title: "24/7 uptime",
+    body: "Bots run continuously. No manual restarts, no babysitting, no drama.",
+  },
+  {
+    tag: "04",
+    label: "Tooling",
+    title: "Live console",
+    body: "Watch bot output in real time. Chat, events, errors — streamed to your browser.",
+  },
+  {
+    tag: "05",
+    label: "Scale",
+    title: "Multi-account",
+    body: "Manage hundreds of accounts from one unified command center.",
+  },
+  {
+    tag: "06",
+    label: "Deploy",
+    title: "Instant deploy",
+    body: "Drop credentials and your fleet is beaming in under a minute. No config files.",
+  },
 ];
 
 const PLANS = [
-  { name: "Starter", price: 15, bots: 1, hours: 5, feats: ["1 concurrent bot", "5 bot-hours / day", "Basic telemetry & logs", "Standard beam speed", "Community Discord"], highlight: false },
-  { name: "Pro", price: 25, bots: 5, hours: 7, feats: ["5 concurrent bots", "7 bot-hours / day", "Full analytics & live console", "Advanced scanner + priority queue", "All plugins included", "Fast beam speed", "Priority Discord support"], highlight: true },
-  { name: "Enterprise", price: 50, bots: 20, hours: 14, feats: ["20 concurrent bots", "14 bot-hours / day", "Custom behaviors & API access", "Maximum beam speed", "Early access to features", "Dedicated 1:1 support"], highlight: false },
+  {
+    name: "Starter",
+    price: 15,
+    bots: 1,
+    hours: 5,
+    feats: [
+      "1 concurrent bot",
+      "5 bot-hours / day",
+      "Basic telemetry & logs",
+      "Standard beam speed",
+      "Community Discord",
+    ],
+    highlight: false,
+  },
+  {
+    name: "Pro",
+    price: 25,
+    bots: 5,
+    hours: 7,
+    feats: [
+      "5 concurrent bots",
+      "7 bot-hours / day",
+      "Full analytics & live console",
+      "Advanced scanner + priority queue",
+      "All plugins included",
+      "Fast beam speed",
+      "Priority Discord support",
+    ],
+    highlight: true,
+  },
+  {
+    name: "Enterprise",
+    price: 50,
+    bots: 20,
+    hours: 14,
+    feats: [
+      "20 concurrent bots",
+      "14 bot-hours / day",
+      "Custom behaviors & API access",
+      "Maximum beam speed",
+      "Early access to features",
+      "Dedicated 1:1 support",
+    ],
+    highlight: false,
+  },
 ];
 
 const REVIEWS = [
-  { text: "went from beaming manually for hours to having 12 bots running while i sleep. its unfair.", name: "@prinsi_", stars: 5 },
-  { text: "excellent. can recommend to anyone tired of manual beams. setup took me 4 minutes.", name: "@cpvpary", stars: 5 },
-  { text: "wasn't sure at first. got 2 clean hits in under an hour. its really good.", name: "@s0wad", stars: 4 },
-  { text: "the live console is stupid good. i just leave it open on my second monitor.", name: "@korr1n", stars: 5 },
+  {
+    text: "went from beaming manually for hours to having 12 bots running while i sleep. its unfair.",
+    name: "@prinsi_",
+    stars: 5,
+  },
+  {
+    text: "excellent. can recommend to anyone tired of manual beams. setup took me 4 minutes.",
+    name: "@cpvpary",
+    stars: 5,
+  },
+  {
+    text: "wasn't sure at first. got 2 clean hits in under an hour. its really good.",
+    name: "@s0wad",
+    stars: 4,
+  },
+  {
+    text: "the live console is stupid good. i just leave it open on my second monitor.",
+    name: "@korr1n",
+    stars: 5,
+  },
 ];
 
 const FAQ = [
-  { q: "What exactly is LuauX?", a: "A hosted fleet manager for Minecraft bots. You provide credentials, we handle proxies, uptime, anti-detection, and streaming logs." },
-  { q: "Is it safe? Will my accounts get banned?", a: "Every bot gets a unique fingerprint, rotating residential proxy, and humanized movement patterns. We can't promise zero risk on any server, but detection is rare." },
-  { q: "How do I sign in?", a: "Continue with Discord. Your first bot deploys in under 60 seconds after linking credentials." },
-  { q: "Can I cancel my subscription?", a: "Any time, no questions. Crypto billing is monthly — cancel and the fleet spins down at the end of the cycle." },
-  { q: "Do you offer custom plans?", a: "Yes. If you need more than 20 concurrent bots or a private cluster, message us in Discord." },
+  {
+    q: "What exactly is LuauX?",
+    a: "A hosted fleet manager for Minecraft bots. You provide credentials, we handle proxies, uptime, anti-detection, and streaming logs.",
+  },
+  {
+    q: "Is it safe? Will my accounts get banned?",
+    a: "Every bot gets a unique fingerprint, rotating residential proxy, and humanized movement patterns. We can't promise zero risk on any server, but detection is rare.",
+  },
+  {
+    q: "How do I sign in?",
+    a: "Continue with Discord. Your first bot deploys in under 60 seconds after linking credentials.",
+  },
+  {
+    q: "Can I cancel my subscription?",
+    a: "Any time, no questions. Crypto billing is monthly — cancel and the fleet spins down at the end of the cycle.",
+  },
+  {
+    q: "Do you offer custom plans?",
+    a: "Yes. If you need more than 20 concurrent bots or a private cluster, message us in Discord.",
+  },
 ];
 
 function Logo() {
@@ -69,7 +176,12 @@ function Index() {
   const [tick, setTick] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [authOpen, setAuthOpen] = useState(false);
-  const [me, setMe] = useState<{ id: string; username: string; global_name: string | null; avatar: string | null } | null>(null);
+  const [me, setMe] = useState<{
+    id: string;
+    username: string;
+    global_name: string | null;
+    avatar: string | null;
+  } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -77,7 +189,11 @@ function Index() {
       .then((r) => r.json())
       .then((d) => {
         setMe(d.user);
-        if (d.user && typeof window !== "undefined" && window.location.search.includes("signed_in=1")) {
+        if (
+          d.user &&
+          typeof window !== "undefined" &&
+          window.location.search.includes("signed_in=1")
+        ) {
           navigate({ to: "/dashboard" });
         }
       })
@@ -127,7 +243,9 @@ function Index() {
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
         <div
           className="absolute left-1/2 top-0 h-[700px] w-[900px] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
-          style={{ background: "radial-gradient(circle, oklch(0.88 0.22 145 / 0.5), transparent 60%)" }}
+          style={{
+            background: "radial-gradient(circle, oklch(0.88 0.22 145 / 0.5), transparent 60%)",
+          }}
         />
         <div className="absolute inset-0 grid-bg" />
       </div>
@@ -140,8 +258,19 @@ function Index() {
             <span className="font-display text-sm font-bold tracking-[0.2em]">LUAUX</span>
           </a>
           <nav className="hidden md:flex items-center gap-1 text-xs">
-            {[["Features","#features"],["Console","#console"],["Pricing","#pricing"],["FAQ","#faq"]].map(([l,h]) => (
-              <a key={h} href={h} className="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">{l}</a>
+            {[
+              ["Features", "#features"],
+              ["Console", "#console"],
+              ["Pricing", "#pricing"],
+              ["FAQ", "#faq"],
+            ].map(([l, h]) => (
+              <a
+                key={h}
+                href={h}
+                className="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                {l}
+              </a>
             ))}
           </nav>
           <div className="flex items-center gap-2">
@@ -151,16 +280,25 @@ function Index() {
                   {me.avatar && <img src={me.avatar} alt="" className="h-5 w-5 rounded-full" />}
                   <span className="text-foreground/90">{me.global_name || me.username}</span>
                 </div>
-                <button onClick={signOut} className="rounded-full brutal-border bg-card/60 px-3 py-1.5 text-xs font-semibold hover:bg-secondary">
+                <button
+                  onClick={signOut}
+                  className="rounded-full brutal-border bg-card/60 px-3 py-1.5 text-xs font-semibold hover:bg-secondary"
+                >
                   Sign out
                 </button>
               </>
             ) : (
               <>
-                <button onClick={openAuth} className="rounded-full brutal-border bg-card/60 px-4 py-1.5 text-xs font-semibold hover:bg-secondary">
+                <button
+                  onClick={openAuth}
+                  className="rounded-full brutal-border bg-card/60 px-4 py-1.5 text-xs font-semibold hover:bg-secondary"
+                >
                   Sign up
                 </button>
-                <button onClick={openAuth} className="rounded-full bg-primary text-primary-foreground px-4 py-1.5 text-xs font-semibold glow-primary transition-transform hover:scale-105">
+                <button
+                  onClick={openAuth}
+                  className="rounded-full bg-primary text-primary-foreground px-4 py-1.5 text-xs font-semibold glow-primary transition-transform hover:scale-105"
+                >
                   Get started →
                 </button>
               </>
@@ -176,17 +314,25 @@ function Index() {
           128 nodes online · eu-fra 18ms
         </div>
         <h1 className="mt-8 font-display text-5xl md:text-7xl lg:text-8xl font-semibold leading-[0.95] tracking-tight text-gradient">
-          Stop beaming manually.<br />
+          Stop beaming manually.
+          <br />
           <span className="italic text-primary">Let the fleet do it.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-xl text-base md:text-lg text-muted-foreground">
-          Deploy a stealth Minecraft bot fleet in under a minute. Live logs, anti-detect proxies, 24/7 uptime — no babysitting, no scripts, no cope.
+          Deploy a stealth Minecraft bot fleet in under a minute. Live logs, anti-detect proxies,
+          24/7 uptime — no babysitting, no scripts, no cope.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <button onClick={openAuth} className="rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-semibold glow-primary transition-transform hover:scale-105">
+          <button
+            onClick={openAuth}
+            className="rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-semibold glow-primary transition-transform hover:scale-105"
+          >
             Get started free →
           </button>
-          <a href="#console" className="rounded-full brutal-border bg-card/60 px-6 py-3 text-sm font-semibold text-foreground/90 hover:bg-secondary">
+          <a
+            href="#console"
+            className="rounded-full brutal-border bg-card/60 px-6 py-3 text-sm font-semibold text-foreground/90 hover:bg-secondary"
+          >
             See it running
           </a>
         </div>
@@ -199,12 +345,13 @@ function Index() {
           ].map((s) => (
             <div key={s.v} className="bg-card px-6 py-6 text-left">
               <div className="font-display text-3xl font-semibold text-gradient">{s.k}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-widest text-muted-foreground">{s.v}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+                {s.v}
+              </div>
             </div>
           ))}
         </div>
       </section>
-
 
       {/* CONSOLE */}
       <section id="console" className="mx-auto max-w-6xl px-6 py-24 md:py-32">
@@ -214,15 +361,27 @@ function Index() {
               <span className="h-1.5 w-1.5 rounded-full bg-primary blink" /> live
             </div>
             <h2 className="mt-4 font-display text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight text-gradient">
-              Watch your fleet<br/>run itself.
+              Watch your fleet
+              <br />
+              run itself.
             </h2>
             <p className="mt-5 text-muted-foreground">
-              Every bot streams its activity in real time and answers chat autonomously. No babysitting — just a browser tab and a coffee.
+              Every bot streams its activity in real time and answers chat autonomously. No
+              babysitting — just a browser tab and a coffee.
             </p>
             <div className="mt-8 space-y-3">
-              {[["2,418","AI replies today"],["128","nodes online"],["18ms","avg latency (eu-fra)"]].map(([k,v]) => (
-                <div key={v} className="flex items-baseline justify-between gap-4 border-b border-border pb-3">
-                  <span className="text-xs uppercase tracking-widest text-muted-foreground">{v}</span>
+              {[
+                ["2,418", "AI replies today"],
+                ["128", "nodes online"],
+                ["18ms", "avg latency (eu-fra)"],
+              ].map(([k, v]) => (
+                <div
+                  key={v}
+                  className="flex items-baseline justify-between gap-4 border-b border-border pb-3"
+                >
+                  <span className="text-xs uppercase tracking-widest text-muted-foreground">
+                    {v}
+                  </span>
                   <span className="font-display text-2xl font-semibold">{k}</span>
                 </div>
               ))}
@@ -237,12 +396,17 @@ function Index() {
                   <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
                   <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
                 </div>
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">luaux@runner ~ tail -f fleet.log</span>
-                <span className="flex items-center gap-1 text-[10px] text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary blink"/>live</span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  luaux@runner ~ tail -f fleet.log
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-primary">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary blink" />
+                  live
+                </span>
               </div>
               <div className="p-5 space-y-1.5 min-h-[380px]">
                 {visibleLogs.map((l, i) => {
-                  const tagColor: Record<string,string> = {
+                  const tagColor: Record<string, string> = {
                     JOIN: "bg-primary/20 text-primary border-primary/40",
                     SEND: "bg-yellow-400/10 text-yellow-300 border-yellow-400/30",
                     CHAT: "bg-sky-400/10 text-sky-300 border-sky-400/30",
@@ -253,7 +417,11 @@ function Index() {
                   return (
                     <div key={i} className="flex items-start gap-3 leading-relaxed">
                       <span className="text-muted-foreground/60">{l.t}</span>
-                      <span className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}>{l.tag}</span>
+                      <span
+                        className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}
+                      >
+                        {l.tag}
+                      </span>
                       <span className="text-primary/90">{l.bot}</span>
                       <span className="text-foreground/80">{l.msg}</span>
                     </div>
@@ -276,22 +444,34 @@ function Index() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// platform</div>
               <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-2xl leading-tight tracking-tight text-gradient">
-                Everything you need to<br/>beam at scale.
+                Everything you need to
+                <br />
+                beam at scale.
               </h2>
             </div>
-            <p className="max-w-sm text-sm text-muted-foreground">A focused toolkit for operators. No bloat. No feature bingo. Six things, done properly.</p>
+            <p className="max-w-sm text-sm text-muted-foreground">
+              A focused toolkit for operators. No bloat. No feature bingo. Six things, done
+              properly.
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f) => (
-              <div key={f.tag} className="group relative rounded-2xl brutal-border bg-card p-6 transition-all hover:border-primary/40 hover:-translate-y-0.5">
+              <div
+                key={f.tag}
+                className="group relative rounded-2xl brutal-border bg-card p-6 transition-all hover:border-primary/40 hover:-translate-y-0.5"
+              >
                 <div className="mb-6 flex items-center justify-between">
                   <span className="font-mono text-xs text-muted-foreground">{f.tag}</span>
-                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-primary">{f.label}</span>
+                  <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-primary">
+                    {f.label}
+                  </span>
                 </div>
                 <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
                 <p className="mt-3 text-sm text-muted-foreground">{f.body}</p>
-                <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 transition-opacity group-hover:opacity-100">Learn more →</div>
+                <div className="mt-6 inline-flex items-center gap-1 text-xs text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                  Learn more →
+                </div>
               </div>
             ))}
           </div>
@@ -305,30 +485,43 @@ function Index() {
           <h2 className="mt-3 font-display text-4xl md:text-6xl font-semibold tracking-tight text-gradient">
             Simple. Transparent. <span className="italic text-primary">Crypto.</span>
           </h2>
-          <p className="mt-5 text-muted-foreground">Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.</p>
+          <p className="mt-5 text-muted-foreground">
+            Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.
+          </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
           {PLANS.map((p) => (
-            <div key={p.name} className={`relative rounded-2xl p-8 ${p.highlight ? "border-2 border-primary bg-card glow-primary lg:-translate-y-4" : "brutal-border bg-card"}`}>
+            <div
+              key={p.name}
+              className={`relative rounded-2xl p-8 ${p.highlight ? "border-2 border-primary bg-card glow-primary lg:-translate-y-4" : "brutal-border bg-card"}`}
+            >
               {p.highlight && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold uppercase tracking-widest">
                   Most popular
                 </div>
               )}
-              <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">{p.name}</div>
+              <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
+                {p.name}
+              </div>
               <div className="mt-3 flex items-baseline gap-1">
-                <span className="font-display text-6xl font-semibold text-gradient">${p.price}</span>
+                <span className="font-display text-6xl font-semibold text-gradient">
+                  ${p.price}
+                </span>
                 <span className="text-sm text-muted-foreground">/mo</span>
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <div className="rounded-xl brutal-border bg-secondary/40 p-3">
                   <div className="font-display text-2xl font-semibold">{p.bots}</div>
-                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">bots</div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    bots
+                  </div>
                 </div>
                 <div className="rounded-xl brutal-border bg-secondary/40 p-3">
                   <div className="font-display text-2xl font-semibold">{p.hours}h</div>
-                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">daily</div>
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    daily
+                  </div>
                 </div>
               </div>
               <ul className="mt-6 space-y-2 text-sm">
@@ -339,7 +532,10 @@ function Index() {
                   </li>
                 ))}
               </ul>
-            <button onClick={openAuth} className={`mt-8 block w-full text-center rounded-full py-3 text-xs font-semibold uppercase tracking-widest transition-transform hover:scale-[1.02] ${p.highlight ? "bg-primary text-primary-foreground glow-primary" : "brutal-border bg-secondary/40 hover:bg-secondary"}`}>
+              <button
+                onClick={openAuth}
+                className={`mt-8 block w-full text-center rounded-full py-3 text-xs font-semibold uppercase tracking-widest transition-transform hover:scale-[1.02] ${p.highlight ? "bg-primary text-primary-foreground glow-primary" : "brutal-border bg-secondary/40 hover:bg-secondary"}`}
+              >
                 Get started →
               </button>
             </div>
@@ -354,7 +550,9 @@ function Index() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// reviews</div>
               <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-xl leading-tight tracking-tight text-gradient">
-                Loved by operators<br/>worldwide.
+                Loved by operators
+                <br />
+                worldwide.
               </h2>
             </div>
             <div className="flex items-center gap-4">
@@ -367,11 +565,19 @@ function Index() {
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {REVIEWS.map((r, i) => (
-              <div key={i} className="rounded-2xl brutal-border bg-card p-6 transition-colors hover:border-primary/30">
-                <div className="text-primary text-sm">{"★".repeat(r.stars)}<span className="text-muted-foreground/30">{"★".repeat(5 - r.stars)}</span></div>
+              <div
+                key={i}
+                className="rounded-2xl brutal-border bg-card p-6 transition-colors hover:border-primary/30"
+              >
+                <div className="text-primary text-sm">
+                  {"★".repeat(r.stars)}
+                  <span className="text-muted-foreground/30">{"★".repeat(5 - r.stars)}</span>
+                </div>
                 <p className="mt-4 text-sm leading-relaxed text-foreground/90">"{r.text}"</p>
                 <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-[10px] text-primary">{r.name[1]?.toUpperCase()}</span>
+                  <span className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-[10px] text-primary">
+                    {r.name[1]?.toUpperCase()}
+                  </span>
                   <span>{r.name}</span>
                 </div>
               </div>
@@ -384,21 +590,33 @@ function Index() {
       <section id="faq" className="mx-auto max-w-4xl px-6 py-24 md:py-32">
         <div className="mb-12 text-center">
           <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// faq</div>
-          <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight text-gradient">Frequently asked.</h2>
+          <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold tracking-tight text-gradient">
+            Frequently asked.
+          </h2>
         </div>
         <div className="rounded-2xl brutal-border bg-card overflow-hidden">
           {FAQ.map((f, i) => {
             const open = openFaq === i;
             return (
-              <button key={i} onClick={() => setOpenFaq(open ? null : i)} className={`block w-full text-left border-b border-border last:border-b-0 p-6 transition-colors ${open ? "bg-secondary/60" : "hover:bg-secondary/30"}`}>
+              <button
+                key={i}
+                onClick={() => setOpenFaq(open ? null : i)}
+                className={`block w-full text-left border-b border-border last:border-b-0 p-6 transition-colors ${open ? "bg-secondary/60" : "hover:bg-secondary/30"}`}
+              >
                 <div className="flex items-center justify-between gap-6">
                   <div className="flex items-center gap-4">
                     <span className="font-mono text-xs text-primary">0{i + 1}</span>
                     <span className="font-display text-base md:text-lg font-medium">{f.q}</span>
                   </div>
-                  <span className={`font-display text-2xl transition-transform ${open ? "rotate-45 text-primary" : "text-muted-foreground"}`}>+</span>
+                  <span
+                    className={`font-display text-2xl transition-transform ${open ? "rotate-45 text-primary" : "text-muted-foreground"}`}
+                  >
+                    +
+                  </span>
                 </div>
-                {open && <p className="mt-4 pl-10 text-sm text-muted-foreground max-w-2xl">{f.a}</p>}
+                {open && (
+                  <p className="mt-4 pl-10 text-sm text-muted-foreground max-w-2xl">{f.a}</p>
+                )}
               </button>
             );
           })}
@@ -414,11 +632,18 @@ function Index() {
             <h2 className="mt-3 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
               Ready to <span className="italic text-primary">beam?</span>
             </h2>
-            <p className="mx-auto mt-6 max-w-md text-muted-foreground">Sign in with Discord. First bot deployed in under a minute.</p>
-            <button onClick={openAuth} className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-8 py-4 text-sm font-semibold glow-primary transition-transform hover:scale-105">
+            <p className="mx-auto mt-6 max-w-md text-muted-foreground">
+              Sign in with Discord. First bot deployed in under a minute.
+            </p>
+            <button
+              onClick={openAuth}
+              className="mt-8 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-8 py-4 text-sm font-semibold glow-primary transition-transform hover:scale-105"
+            >
               Continue with Discord →
             </button>
-            <div className="mt-4 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">No credit card · 24h free trial</div>
+            <div className="mt-4 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
+              No credit card · 24h free trial
+            </div>
           </div>
         </div>
       </section>
@@ -430,16 +655,27 @@ function Index() {
           <span>© 2026 LuauX</span>
         </div>
         <div className="flex gap-6">
-          <a href="https://discord.gg/sHgh6kVBg3" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Discord</a>
-          <a href="#" className="hover:text-primary">Docs</a>
-          <a href="#" className="hover:text-primary">Status</a>
-          <a href="#" className="hover:text-primary">Terms</a>
+          <a
+            href="https://discord.gg/sHgh6kVBg3"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary"
+          >
+            Discord
+          </a>
+          <a href="#" className="hover:text-primary">
+            Docs
+          </a>
+          <a href="#" className="hover:text-primary">
+            Status
+          </a>
+          <a href="#" className="hover:text-primary">
+            Terms
+          </a>
         </div>
       </footer>
 
-      {authOpen && (
-        <AuthModal onClose={() => setAuthOpen(false)} onStart={startDiscord} me={me} />
-      )}
+      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} onStart={startDiscord} me={me} />}
     </div>
   );
 }
@@ -499,8 +735,8 @@ function AuthModal({
             {me
               ? `Signed in as ${me.global_name || me.username}`
               : loading
-              ? "Redirecting to Discord…"
-              : "Sign up with Discord to spin up your fleet."}
+                ? "Redirecting to Discord…"
+                : "Sign up with Discord to spin up your fleet."}
           </p>
 
           {me ? (

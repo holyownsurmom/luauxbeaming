@@ -47,7 +47,10 @@ export const Route = createFileRoute("/api/bots/discord/start")({
         }
 
         if (!body.token || !body.channelId || !body.messages?.length) {
-          return Response.json({ error: "Missing required fields: token, channelId, messages" }, { status: 400 });
+          return Response.json(
+            { error: "Missing required fields: token, channelId, messages" },
+            { status: 400 },
+          );
         }
 
         const { data: job, error } = await db

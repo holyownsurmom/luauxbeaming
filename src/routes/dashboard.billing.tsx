@@ -58,7 +58,9 @@ function BillingPage() {
             <tbody className="divide-y divide-border/60">
               {items.map((p) => (
                 <tr key={p.id}>
-                  <td className="px-4 py-3 font-mono text-xs">{new Date(p.created_at).toLocaleString()}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {new Date(p.created_at).toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 capitalize">{p.plan_id}</td>
                   <td className="px-4 py-3 font-mono">${Number(p.price_amount).toFixed(2)}</td>
                   <td className="px-4 py-3 uppercase font-mono text-xs">{p.pay_currency}</td>
@@ -86,5 +88,11 @@ function StatusPill({ status }: { status: string }) {
     : failed
       ? "bg-destructive/15 text-destructive"
       : "bg-secondary/60 text-muted-foreground";
-  return <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase tracking-widest ${cls}`}>{status}</span>;
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase tracking-widest ${cls}`}
+    >
+      {status}
+    </span>
+  );
 }

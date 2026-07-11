@@ -18,12 +18,7 @@ import {
   Wifi,
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  getMyProfile,
-  getMcAccounts,
-  addMcAccount,
-  deleteMcAccount,
-} from "@/lib/luaux.functions";
+import { getMyProfile, getMcAccounts, addMcAccount, deleteMcAccount } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 
 export const Route = createFileRoute("/dashboard/bots")({
@@ -115,7 +110,9 @@ function BotsPage() {
       const res = await fetch("/api/bots/mc/status");
       const data = await res.json();
       if (data.bots) setRunningBots(data.bots);
-    } catch {}
+    } catch {
+      /* ignore status errors */
+    }
   }, []);
 
   useEffect(() => {
@@ -136,7 +133,9 @@ function BotsPage() {
             { ts: data.ts, level: data.level, msg: data.msg },
           ]);
         }
-      } catch {}
+      } catch {
+        /* ignore parse errors */
+      }
     };
     return () => es.close();
   }, [selectedBotId]);
@@ -150,16 +149,16 @@ function BotsPage() {
     e.preventDefault();
     setError(null);
     if (!form.label.trim()) return setError("Label required");
-    if (form.auth_type === "ssid" && !form.ssid.trim())
-      return setError("SSID required");
+    if (form.auth_type === "ssid" && !form.ssid.trim()) return setError("SSID required");
     if (form.auth_type === "microsoft" && !form.username.trim())
       return setError("Username/email required");
+    if (form.auth_type === "offline" && !form.username.trim()) return setError("Username required");
     setSaving(true);
     try {
       await addAcc({
         data: {
           label: form.label.trim(),
-          auth_type: form.auth_type as "ssid" | "microsoft",
+          auth_type: form.auth_type as "ssid" | "microsoft" | "offline",
           username: form.username.trim() || undefined,
           uuid: form.uuid.trim() || undefined,
           ssid: form.ssid.trim() || undefined,
@@ -187,7 +186,7 @@ function BotsPage() {
     setPingResult(null);
     try {
       const res = await fetch(
-        `/api/bots/mc/ping?host=${encodeURIComponent(mcConfig.serverHost)}&port=${mcConfig.serverPort}`
+        `/api/bots/mc/ping?host=${encodeURIComponent(mcConfig.serverHost)}&port=${mcConfig.serverPort}`,
       );
       const data = await res.json();
       setPingResult(data);
@@ -266,21 +265,17 @@ function BotsPage() {
     return (
       <div className="space-y-6">
         <header>
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
-            MC Auto-Message
-          </h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight">MC Auto-Message</h1>
           <p className="mt-2 text-muted-foreground">
             Deploy Minecraft bots that auto-message in any server.
           </p>
         </header>
         <div className="rounded-2xl brutal-border bg-card p-10 text-center">
           <Lock className="h-8 w-8 mx-auto text-destructive" />
-          <h2 className="mt-4 font-display text-2xl font-semibold">
-            No active plan
-          </h2>
+          <h2 className="mt-4 font-display text-2xl font-semibold">No active plan</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            You need an active plan before you can deploy bots. Purchase one with
-            crypto -- access unlocks after 2 confirmations.
+            You need an active plan before you can deploy bots. Purchase one with crypto -- access
+            unlocks after 2 confirmations.
           </p>
           <Link
             to="/dashboard/purchase"
@@ -313,9 +308,7 @@ function BotsPage() {
           </p>
         </div>
         <div className="text-right text-xs">
-          <div className="text-muted-foreground uppercase tracking-widest text-[10px]">
-            Slots
-          </div>
+          <div className="text-muted-foreground uppercase tracking-widest text-[10px]">Slots</div>
           <div className="font-mono text-lg">
             {accounts.length} / {maxBots}
           </div>
@@ -356,9 +349,7 @@ function BotsPage() {
                 <input
                   className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                   value={mcConfig.serverHost}
-                  onChange={(e) =>
-                    setMcConfig({ ...mcConfig, serverHost: e.target.value })
-                  }
+                  onChange={(e) => setMcConfig({ ...mcConfig, serverHost: e.target.value })}
                   placeholder="mc.hypixel.net"
                 />
               </label>
@@ -369,9 +360,7 @@ function BotsPage() {
                 <input
                   className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                   value={mcConfig.serverPort}
-                  onChange={(e) =>
-                    setMcConfig({ ...mcConfig, serverPort: e.target.value })
-                  }
+                  onChange={(e) => setMcConfig({ ...mcConfig, serverPort: e.target.value })}
                   placeholder="25565"
                 />
               </label>
@@ -396,7 +385,8 @@ function BotsPage() {
                 >
                   {pingResult.online ? (
                     <>
-                      Online -- v{pingResult.version} -- {pingResult.players?.online}/{pingResult.players?.max} players
+                      Online -- v{pingResult.version} -- {pingResult.players?.online}/
+                      {pingResult.players?.max} players
                       {pingResult.latency ? ` -- ${pingResult.latency}ms` : ""}
                     </>
                   ) : (
@@ -414,9 +404,7 @@ function BotsPage() {
                 className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono resize-none"
                 rows={4}
                 value={mcConfig.messages}
-                onChange={(e) =>
-                  setMcConfig({ ...mcConfig, messages: e.target.value })
-                }
+                onChange={(e) => setMcConfig({ ...mcConfig, messages: e.target.value })}
                 placeholder={"gg everyone\n888 to join\nhello world"}
               />
             </label>
@@ -430,9 +418,7 @@ function BotsPage() {
                 min="1"
                 className="w-32 rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                 value={mcConfig.interval}
-                onChange={(e) =>
-                  setMcConfig({ ...mcConfig, interval: e.target.value })
-                }
+                onChange={(e) => setMcConfig({ ...mcConfig, interval: e.target.value })}
               />
             </label>
           </div>
@@ -450,8 +436,7 @@ function BotsPage() {
             disabled={atLimit}
             className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-1.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus className="h-3.5 w-3.5" />{" "}
-            {atLimit ? "Limit reached" : "Add"}
+            <Plus className="h-3.5 w-3.5" /> {atLimit ? "Limit reached" : "Add"}
           </button>
         </div>
 
@@ -466,9 +451,7 @@ function BotsPage() {
                   <input
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                     value={form.label}
-                    onChange={(e) =>
-                      setForm({ ...form, label: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, label: e.target.value })}
                     placeholder="alt-1"
                   />
                 </label>
@@ -479,59 +462,52 @@ function BotsPage() {
                   <select
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
                     value={form.auth_type}
-                    onChange={(e) =>
-                      setForm({ ...form, auth_type: e.target.value })
-                    }
+                    onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                   >
                     <option value="ssid">SSID (session cookie)</option>
                     <option value="microsoft">Microsoft account</option>
+                    <option value="offline">Offline / Cracked (username only)</option>
                   </select>
                 </label>
                 {form.auth_type === "ssid" ? (
                   <>
-                  <label className="text-xs space-y-1 md:col-span-2">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      SSID token
-                    </span>
-                    <input
-                      type="password"
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                      value={form.ssid}
-                      onChange={(e) =>
-                        setForm({ ...form, ssid: e.target.value })
-                      }
-                      placeholder="paste your session cookie"
-                    />
-                  </label>
-                  <label className="text-xs space-y-1 md:col-span-2">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Player UUID (for online-mode servers like Hypixel)
-                    </span>
-                    <input
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                      value={form.uuid}
-                      onChange={(e) =>
-                        setForm({ ...form, uuid: e.target.value })
-                      }
-                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    />
-                    <span className="text-[10px] text-muted-foreground">
-                      Find yours at namemc.com — required for premium servers
-                    </span>
-                  </label>
+                    <label className="text-xs space-y-1 md:col-span-2">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        SSID token
+                      </span>
+                      <input
+                        type="password"
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        value={form.ssid}
+                        onChange={(e) => setForm({ ...form, ssid: e.target.value })}
+                        placeholder="paste your session cookie"
+                      />
+                    </label>
+                    <label className="text-xs space-y-1 md:col-span-2">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        Player UUID (for online-mode servers like Hypixel)
+                      </span>
+                      <input
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        value={form.uuid}
+                        onChange={(e) => setForm({ ...form, uuid: e.target.value })}
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      />
+                      <span className="text-[10px] text-muted-foreground">
+                        Find yours at namemc.com — required for premium servers
+                      </span>
+                    </label>
                   </>
                 ) : (
                   <label className="text-xs space-y-1 md:col-span-2">
                     <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Username / email
+                      {form.auth_type === "offline" ? "Username" : "Username / email"}
                     </span>
                     <input
                       className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                       value={form.username}
-                      onChange={(e) =>
-                        setForm({ ...form, username: e.target.value })
-                      }
-                      placeholder="you@example.com"
+                      onChange={(e) => setForm({ ...form, username: e.target.value })}
+                      placeholder={form.auth_type === "offline" ? "Steve" : "you@example.com"}
                     />
                   </label>
                 )}
@@ -567,10 +543,9 @@ function BotsPage() {
         ) : (
           <ul className="divide-y divide-border/60">
             {accounts.map((a) => {
-              const botForAccount = runningBots.find(
-                (b) => b.config?.accountId === a.id
-              );
-              const isRunning = botForAccount?.status === "running" || botForAccount?.status === "connecting";
+              const botForAccount = runningBots.find((b) => b.config?.accountId === a.id);
+              const isRunning =
+                botForAccount?.status === "running" || botForAccount?.status === "connecting";
               return (
                 <li key={a.id} className="p-4 flex items-center gap-4">
                   <div
@@ -583,16 +558,10 @@ function BotsPage() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-sm truncate">
-                      {a.label}
-                    </div>
+                    <div className="font-semibold text-sm truncate">{a.label}</div>
                     <div className="text-xs text-muted-foreground">
                       {a.auth_type.toUpperCase()} · {a.username || "hidden"} ·{" "}
-                      <span
-                        className={
-                          isRunning ? "text-primary" : "uppercase"
-                        }
-                      >
+                      <span className={isRunning ? "text-primary" : "uppercase"}>
                         {isRunning ? "RUNNING" : a.status}
                       </span>
                     </div>
@@ -646,9 +615,7 @@ function BotsPage() {
               <div
                 className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
               />
-              <span className="text-xs font-semibold uppercase tracking-widest">
-                Console
-              </span>
+              <span className="text-xs font-semibold uppercase tracking-widest">Console</span>
               <span className="text-xs text-muted-foreground">
                 {activeBot?.label || selectedBotId}
               </span>
@@ -678,9 +645,7 @@ function BotsPage() {
       {/* Running Bots Summary */}
       {runningBots.length > 0 && !selectedBotId && (
         <div className="rounded-2xl brutal-border bg-card p-5 space-y-3">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            Active Bots
-          </div>
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">Active Bots</div>
           {runningBots.map((bot) => (
             <div
               key={bot.id}
@@ -691,9 +656,7 @@ function BotsPage() {
                   className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
                 />
                 <span className="text-sm font-semibold">{bot.label}</span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  {bot.status}
-                </span>
+                <span className="text-xs text-muted-foreground capitalize">{bot.status}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button

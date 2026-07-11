@@ -33,10 +33,7 @@ export const Route = createFileRoute("/api/bots/discord/stop")({
           return Response.json({ error: "Bot is not running" }, { status: 400 });
         }
 
-        await db
-          .from("bot_jobs")
-          .update({ status: "stopping" })
-          .eq("id", botId);
+        await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);
 
         return Response.json({ ok: true });
       },

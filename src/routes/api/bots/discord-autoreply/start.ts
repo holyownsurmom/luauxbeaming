@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, isAdminSession, unauthorized, forbidden } from "@/lib/api-helpers";
 
-export const Route = createFileRoute("/api/bots/mc/start")({
+export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -12,9 +12,22 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         const adminUser = await isAdminSession();
 
         if (!adminUser) {
+          const { data: keys } = await db
+            .from("verification_keys")
+            .select("id, key, expires_at")
+            .eq("discord_id", user.id)
+            .eq("plugin_id", "discord-autoreply")
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          const activeKey = keys?.find((k) => new Date(k.expires_at).getTime() > Date.now());
+          if (!activeKey) {
+            return forbidden("No active Discord Auto-Reply license");
+          }
+
           const { data: profile } = await db
             .from("profiles")
-            .select("active_plan_id, plan_expires_at, bot_hours_remaining")
+            .select("active_plan_id, plan_expires_at")
             .eq("discord_id", user.id)
             .maybeSingle();
 
@@ -24,9 +37,6 @@ export const Route = createFileRoute("/api/bots/mc/start")({
             new Date(profile.plan_expires_at).getTime() > Date.now();
 
           if (!active) return forbidden("No active plan");
-          if ((profile?.bot_hours_remaining ?? 0) <= 0) {
-            return forbidden("No bot hours remaining");
-          }
         }
 
         let body;
@@ -36,28 +46,25 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        if (!body.serverHost || !body.serverPort || !body.messages?.length) {
+        if (!body.token || !body.messages?.length) {
           return Response.json(
-            { error: "Missing required fields: serverHost, serverPort, messages" },
+            { error: "Missing required fields: token, messages" },
             { status: 400 },
           );
         }
 
-        if (body.authType === "ssid") {
-          if (!body.ssid) {
-            return Response.json({ error: "SSID token required for ssid auth" }, { status: 400 });
-          }
-          if (!body.username) {
-            return Response.json({ error: "Username required for ssid auth" }, { status: 400 });
-          }
-        }
+        // Add subType 'autoreply' to the configuration
+        const config = {
+          ...body,
+          subType: "autoreply",
+        };
 
         const { data: job, error } = await db
           .from("bot_jobs")
           .insert({
             discord_id: user.id,
-            type: "mc",
-            config: body,
+            type: "discord",
+            config,
             status: "pending",
           })
           .select("id")

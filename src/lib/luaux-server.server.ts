@@ -1,5 +1,6 @@
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "node:crypto";
 
 export type LuauxSessionUser = {
   id: string;
@@ -32,6 +33,11 @@ export async function requireUser(): Promise<LuauxSessionUser> {
   return user;
 }
 
+export async function isAdminSession(): Promise<boolean> {
+  const data = await getSessionData();
+  return data.isAdmin === true;
+}
+
 export function admin() {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -52,4 +58,25 @@ export async function ensureProfile(user: LuauxSessionUser) {
   if (error) {
     console.error("[ensureProfile] upsert failed:", error.message, error.details, error.hint);
   }
+}
+
+export function timingSafeEqualStrings(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+export function notFound(msg: string) {
+  return Response.json({ error: msg }, { status: 404 });
+}
+
+export function unauthorized() {
+  return Response.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+export function forbidden(msg: string) {
+  return Response.json({ error: msg }, { status: 403 });
 }

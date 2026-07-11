@@ -39,12 +39,9 @@ function DiscordBotPage() {
           <Power className="h-6 w-6" />
         </div>
         <div className="flex-1">
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
-            Plugins
-          </h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight">Plugins</h1>
           <p className="mt-1 text-muted-foreground">
-            Extend your fleet with Discord automation tools. Purchase once, use
-            forever.
+            Extend your fleet with Discord automation tools. Purchase once, use forever.
           </p>
         </div>
       </header>
@@ -60,9 +57,7 @@ function DiscordBotPage() {
               <p.icon className="h-6 w-6" />
             </div>
             <div className="flex-1">
-              <div className="font-display text-xl font-semibold">
-                {p.title}
-              </div>
+              <div className="font-display text-xl font-semibold">{p.title}</div>
               <p className="mt-1 text-sm text-muted-foreground">{p.desc}</p>
             </div>
             <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />

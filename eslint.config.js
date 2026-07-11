@@ -6,7 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  { ignores: ["dist", ".output", ".vinxi", "bot-worker/dist"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -34,6 +34,18 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+    },
+    settings: {
+      react: {
+        version: "19",
+      },
+    },
+  },
+  {
+    // TanStack Start server files use useSession in async functions
+    files: ["src/routes/api/**/*.ts", "src/lib/*.server.ts", "src/lib/*.server.tsx"],
+    rules: {
+      "react-hooks/rules-of-hooks": "off",
     },
   },
   eslintPluginPrettier,

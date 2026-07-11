@@ -27,7 +27,9 @@ function LogsPage() {
       const res = await fetch("/api/bots/all-status");
       const data = await res.json();
       if (data.bots) setBots(data.bots);
-    } catch {}
+    } catch {
+      /* ignore fetch errors */
+    }
   }, []);
 
   useEffect(() => {
@@ -49,7 +51,9 @@ function LogsPage() {
             { ts: data.ts, level: data.level, msg: data.msg },
           ]);
         }
-      } catch {}
+      } catch {
+        /* ignore parse errors */
+      }
     };
     return () => es.close();
   }, []);
@@ -63,9 +67,7 @@ function LogsPage() {
     <div className="space-y-6">
       <header className="flex items-end justify-between">
         <div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
-            Logs
-          </h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight">Logs</h1>
           <p className="mt-2 text-muted-foreground">
             Live console output from every bot in your fleet.
           </p>
@@ -144,9 +146,7 @@ function LogsPage() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <ScrollText className="h-4 w-4 text-primary" />
-            <span className="text-xs font-semibold uppercase tracking-widest">
-              Live Output
-            </span>
+            <span className="text-xs font-semibold uppercase tracking-widest">Live Output</span>
             <span className="text-xs text-muted-foreground font-mono">
               {filteredLogs.length} entries
             </span>

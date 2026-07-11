@@ -1,11 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
-
-const cfg = () => ({
-  password: process.env.SESSION_SECRET!,
-  name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 30,
-});
+import { sessionConfig } from "@/lib/luaux-server.server";
 
 type SessionData = { oauth_state?: string; user?: unknown };
 
@@ -16,7 +11,7 @@ export const Route = createFileRoute("/api/discord/login")({
         const url = new URL(request.url);
         const origin = url.origin;
         const state = crypto.randomUUID();
-        const session = await useSession<SessionData>(cfg());
+        const session = await useSession<SessionData>(sessionConfig());
         await session.update({ ...session.data, oauth_state: state });
 
         const params = new URLSearchParams({

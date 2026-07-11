@@ -29,8 +29,9 @@ function SupportPage() {
         </div>
         <h2 className="mt-3 font-display text-2xl font-semibold">Join the LuauX server</h2>
         <p className="mt-2 text-sm text-foreground/80 max-w-lg">
-          Open a <span className="font-semibold text-foreground">#support</span> ticket, chat with staff, and get instant help
-          from the community. Priority tickets are handled first for Pro and Enterprise users.
+          Open a <span className="font-semibold text-foreground">#support</span> ticket, chat with
+          staff, and get instant help from the community. Priority tickets are handled first for Pro
+          and Enterprise users.
         </p>
 
         <a

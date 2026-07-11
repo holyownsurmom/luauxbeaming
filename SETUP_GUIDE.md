@@ -25,6 +25,7 @@ Complete step-by-step guide to deploy the LuauX Minecraft bot management platfor
 ## 1. What You're Building
 
 A web platform where users:
+
 - Log in with Discord
 - Manage auto-message bots on Minecraft servers (via SSID / offline auth)
 - Manage Discord auto-spam bots (user token, HTTP API)
@@ -51,16 +52,19 @@ A web platform where users:
 ## 2. Prerequisites
 
 ### For the Lovable site (hosted)
+
 - [Lovable](https://lovable.dev) account (free tier works)
 - GitHub repository connected to Lovable
 
 ### For the bot worker (your VPS)
+
 - Windows VPS with RDP access (or Linux with SSH)
 - Node.js 22+ installed
 - Git installed
 - At least 1 GB free RAM
 
 ### Accounts you need
+
 - [Discord Developer Portal](https://discord.com/developers/applications) account
 - [NOWPayments](https://nowpayments.io) account (merchant)
 - [Supabase](https://supabase.com) (managed by Lovable — don't create one manually)
@@ -94,17 +98,17 @@ Go to your Lovable project → **Settings** (gear icon) → **Environment Variab
 
 Add every variable in this table. **Do not skip any.**
 
-| Variable | Value | Notes |
-|---|---|---|
-| `SESSION_SECRET` | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Encrypts session cookies. Never change after first deploy. |
-| `ADMIN_PASSWORD` | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk` | Password to unlock admin mode in the dashboard. |
-| `WORKER_SECRET` | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Shared secret between site and bot worker. Must match exactly. |
-| `IPN_CALLBACK_URL` | `https://luauxbeaming.lovable.app/api/public/nowpayments/webhook` | NOWPayments sends payment confirmations here. |
-| `DISCORD_CLIENT_ID` | Your Discord app client ID | From Discord Developer Portal → OAuth2 → Client Information |
-| `DISCORD_CLIENT_SECRET` | Your Discord app client secret | From Discord Developer Portal → OAuth2 → Client Information |
-| `DISCORD_BOT_TOKEN` | Your Discord bot token | From Discord Developer Portal → Bot → Token. Used for auto-joining guilds and DMs. |
-| `NOWPAYMENTS_API_KEY` | Your NOWPayments API key | From NOWPayments Dashboard → Merchant → API Keys |
-| `NOWPAYMENTS_IPN_SECRET` | Your NOWPayments IPN secret | From NOWPayments Dashboard → Merchant → IPN. Used to verify webhook signatures. |
+| Variable                 | Value                                                              | Notes                                                                              |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `SESSION_SECRET`         | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Encrypts session cookies. Never change after first deploy.                         |
+| `ADMIN_PASSWORD`         | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Password to unlock admin mode in the dashboard.                                    |
+| `WORKER_SECRET`          | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Shared secret between site and bot worker. Must match exactly.                     |
+| `IPN_CALLBACK_URL`       | `https://luauxbeaming.lovable.app/api/public/nowpayments/webhook`  | NOWPayments sends payment confirmations here.                                      |
+| `DISCORD_CLIENT_ID`      | Your Discord app client ID                                         | From Discord Developer Portal → OAuth2 → Client Information                        |
+| `DISCORD_CLIENT_SECRET`  | Your Discord app client secret                                     | From Discord Developer Portal → OAuth2 → Client Information                        |
+| `DISCORD_BOT_TOKEN`      | Your Discord bot token                                             | From Discord Developer Portal → Bot → Token. Used for auto-joining guilds and DMs. |
+| `NOWPAYMENTS_API_KEY`    | Your NOWPayments API key                                           | From NOWPayments Dashboard → Merchant → API Keys                                   |
+| `NOWPAYMENTS_IPN_SECRET` | Your NOWPayments IPN secret                                        | From NOWPayments Dashboard → Merchant → IPN. Used to verify webhook signatures.    |
 
 > **DO NOT set** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or `SUPABASE_ANON_KEY`. Lovable manages these automatically. Setting them manually will break things.
 
@@ -373,6 +377,7 @@ C:\Users\Administrator\Desktop\luaux-bot-worker\
 ```
 
 The folder should contain:
+
 ```
 bot-worker/
 ├── src/
@@ -456,11 +461,13 @@ pm2 startup
 ```
 
 To view logs:
+
 ```bash
 pm2 logs luaux-worker
 ```
 
 To restart after code updates:
+
 ```bash
 pm2 restart luaux-worker
 ```
@@ -516,11 +523,13 @@ pm2 restart luaux-worker
 Your SSID token is the Minecraft session access token. The UUID is your player's unique identifier.
 
 **Method 1: Namemc.com**
+
 1. Go to https://namemc.com/profile/YourUsername
 2. Your UUID is displayed on the profile page (with dashes, e.g. `12345678-abcd-1234-abcd-123456789abc`)
 3. Enter it in the UUID field — dashes are automatically removed
 
 **Method 2: Mojang API**
+
 1. Go to https://api.mojang.com/users/profiles/minecraft/YourUsername
 2. The `id` field is your UUID (without dashes)
 
@@ -556,12 +565,14 @@ Your SSID token is the Minecraft session access token. The UUID is your player's
 Admin is password-based, not a database role. Anyone who enters the correct password in the Settings tab gets admin privileges.
 
 ### How it works
+
 - Session flag `isAdmin` is set when you enter the correct password
 - Admin bypasses all payment gates (MC bots, Discord spam, plugins)
 - Admin sees an "ADMIN" badge in the dashboard
 - Admin can manage MC accounts without bot-hour limits
 
 ### Login
+
 1. Go to **Settings** tab in the dashboard
 2. Click the **Admin** sub-tab
 3. Enter the admin password
@@ -569,9 +580,11 @@ Admin is password-based, not a database role. Anyone who enters the correct pass
 5. The page reloads — you should see "ADMIN" badge
 
 ### Logout
+
 1. Settings → Admin → click **Logout**
 
 ### Change the password
+
 1. Go to Lovable Dashboard → Settings → Environment Variables
 2. Update `ADMIN_PASSWORD` to a new value
 3. Save — Lovable will redeploy
@@ -668,33 +681,41 @@ On payment confirmed:
 ## 11. Troubleshooting
 
 ### "No active plan" on MC Auto-Message
+
 - You need to purchase a plan first, or log in as admin (admin bypasses this)
 
 ### "No active Discord Spam license"
+
 - You need to purchase the Discord Spam plugin ($10), or log in as admin
 
 ### Bot doesn't start / no console output
+
 1. Check the bot-worker terminal — is it running? Any errors?
 2. Check the Lovable deploy — did it succeed?
 3. Check that `WORKER_SECRET` matches exactly in both Lovable env vars AND bot-worker `.env`
 4. Open browser DevTools → Network → check if `/api/bots/worker/poll` returns 200
 
 ### Discord login goes to localhost
+
 - Update the OAuth2 redirect URI in Discord Developer Portal (Step 5b)
 
 ### Logs not showing in real-time
+
 - The SSE stream polls every 2 seconds — a slight delay is normal
 - Check bot-worker terminal for any connection errors
 
 ### Bot worker shows "poll failed: 401"
+
 - `WORKER_SECRET` doesn't match between Lovable env vars and bot-worker `.env`
 - Copy-paste the exact same value into both places
 
 ### Bot worker shows "poll failed: 404"
+
 - The Lovable site hasn't deployed the worker API endpoints yet
 - Push the latest code to GitHub and wait for Lovable to rebuild (check deploy logs)
 
 ### mineflayer won't connect to server
+
 - **Offline server**: Make sure the server allows cracked/offline-mode clients
 - **Premium server**: SSID token must be valid (not expired), and UUID must be correct
 - Check the bot console logs for specific error messages
@@ -702,17 +723,20 @@ On payment confirmed:
 - Test with `Ping Server` first to confirm the server is reachable
 
 ### mineflayer connects but messages aren't sending
+
 - Some servers have anti-spam plugins that block repeated messages
 - Increase the interval (e.g. from 5s to 10s or 15s)
 - Use more varied message content
 
 ### Discord spam isn't sending
+
 - Your user token may be invalid or expired — get a fresh one from DevTools
 - The channel ID must be correct (right-click channel → Copy ID with Developer Mode enabled)
 - Discord may be rate-limiting — check the console for 429 errors
 - **Warning**: Using user tokens (self-botting) violates Discord TOS and can result in account ban
 
 ### VPS RDP won't connect
+
 - Check your VPS provider's firewall rules
 - Ensure RDP (port 3389) is allowed inbound
 - Try restarting the VPS from the provider's control panel
@@ -808,37 +832,37 @@ luauxbeaming/
 
 ### Lovable Cloud (set in Lovable Dashboard → Settings → Env Vars)
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `SESSION_SECRET` | Encrypts session cookies | **Yes** |
-| `ADMIN_PASSWORD` | Password to unlock admin mode | **Yes** |
-| `WORKER_SECRET` | Auth token for bot-worker REST API | **Yes** |
-| `IPN_CALLBACK_URL` | NOWPayments webhook URL | **Yes** |
-| `DISCORD_CLIENT_ID` | Discord OAuth2 app ID | **Yes** |
-| `DISCORD_CLIENT_SECRET` | Discord OAuth2 app secret | **Yes** |
-| `DISCORD_BOT_TOKEN` | Discord bot token (auto-join + DMs) | **Yes** |
-| `NOWPAYMENTS_API_KEY` | NOWPayments API key | **Yes** |
-| `NOWPAYMENTS_IPN_SECRET` | NOWPayments IPN signature verification | **Yes** |
-| `SUPABASE_URL` | Auto-managed by Lovable | **Do NOT set** |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto-managed by Lovable | **Do NOT set** |
-| `SUPABASE_ANON_KEY` | Auto-managed by Lovable | **Do NOT set** |
+| Variable                    | Purpose                                | Required       |
+| --------------------------- | -------------------------------------- | -------------- |
+| `SESSION_SECRET`            | Encrypts session cookies               | **Yes**        |
+| `ADMIN_PASSWORD`            | Password to unlock admin mode          | **Yes**        |
+| `WORKER_SECRET`             | Auth token for bot-worker REST API     | **Yes**        |
+| `IPN_CALLBACK_URL`          | NOWPayments webhook URL                | **Yes**        |
+| `DISCORD_CLIENT_ID`         | Discord OAuth2 app ID                  | **Yes**        |
+| `DISCORD_CLIENT_SECRET`     | Discord OAuth2 app secret              | **Yes**        |
+| `DISCORD_BOT_TOKEN`         | Discord bot token (auto-join + DMs)    | **Yes**        |
+| `NOWPAYMENTS_API_KEY`       | NOWPayments API key                    | **Yes**        |
+| `NOWPAYMENTS_IPN_SECRET`    | NOWPayments IPN signature verification | **Yes**        |
+| `SUPABASE_URL`              | Auto-managed by Lovable                | **Do NOT set** |
+| `SUPABASE_SERVICE_ROLE_KEY` | Auto-managed by Lovable                | **Do NOT set** |
+| `SUPABASE_ANON_KEY`         | Auto-managed by Lovable                | **Do NOT set** |
 
 ### Bot Worker (set in `bot-worker/.env` on VPS)
 
-| Variable | Purpose | Required |
-|---|---|---|
-| `SITE_URL` | Your Lovable site URL (e.g. `https://luauxbeaming.lovable.app`) | **Yes** |
-| `WORKER_SECRET` | Must match Lovable's `WORKER_SECRET` exactly | **Yes** |
-| `WORKER_ID` | Unique ID for this worker instance (e.g. `worker-1`) | **Yes** |
-| `POLL_INTERVAL_MS` | How often to poll for jobs (default: `3000`) | No |
+| Variable           | Purpose                                                         | Required |
+| ------------------ | --------------------------------------------------------------- | -------- |
+| `SITE_URL`         | Your Lovable site URL (e.g. `https://luauxbeaming.lovable.app`) | **Yes**  |
+| `WORKER_SECRET`    | Must match Lovable's `WORKER_SECRET` exactly                    | **Yes**  |
+| `WORKER_ID`        | Unique ID for this worker instance (e.g. `worker-1`)            | **Yes**  |
+| `POLL_INTERVAL_MS` | How often to poll for jobs (default: `3000`)                    | No       |
 
 ---
 
 ## Quick Reference: Key Credentials
 
-| Credential | Value | Where it's used |
-|---|---|---|
-| Admin password | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk` | Dashboard Settings → Admin tab |
-| Worker secret | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Lovable env vars + bot-worker `.env` |
-| Session secret | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Lovable env vars only |
-| Site URL | `https://luauxbeaming.lovable.app` | bot-worker `.env` + Discord OAuth redirect |
+| Credential     | Value                                                              | Where it's used                            |
+| -------------- | ------------------------------------------------------------------ | ------------------------------------------ |
+| Admin password | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Dashboard Settings → Admin tab             |
+| Worker secret  | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Lovable env vars + bot-worker `.env`       |
+| Session secret | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Lovable env vars only                      |
+| Site URL       | `https://luauxbeaming.lovable.app`                                 | bot-worker `.env` + Discord OAuth redirect |

@@ -21,9 +21,17 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardLayout,
 });
 
-export type Me = { id: string; username: string; global_name: string | null; avatar: string | null };
+export type Me = {
+  id: string;
+  username: string;
+  global_name: string | null;
+  avatar: string | null;
+};
 
-const NAV: { section: string; items: { to: string; icon: React.ComponentType<{ className?: string }>; label: string }[] }[] = [
+const NAV: {
+  section: string;
+  items: { to: string; icon: React.ComponentType<{ className?: string }>; label: string }[];
+}[] = [
   {
     section: "Core",
     items: [
@@ -87,17 +95,24 @@ function DashboardLayout() {
     <div className="min-h-screen bg-background text-foreground flex">
       <aside className="w-64 shrink-0 border-r border-border/60 bg-card/40 flex flex-col sticky top-0 h-screen">
         <div className="p-5 flex items-center gap-2">
-          <img src={luauxLogo} alt="" className="h-8 w-8 rounded-lg brutal-border bg-background p-1" />
+          <img
+            src={luauxLogo}
+            alt=""
+            className="h-8 w-8 rounded-lg brutal-border bg-background p-1"
+          />
           <span className="font-display text-lg font-semibold text-gradient">LuauX</span>
         </div>
 
         <nav className="flex-1 px-3 space-y-6 overflow-y-auto">
           {NAV.map((sec) => (
             <div key={sec.section}>
-              <div className="px-3 mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">{sec.section}</div>
+              <div className="px-3 mb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                {sec.section}
+              </div>
               <div className="space-y-1">
                 {sec.items.map((it) => {
-                  const active = it.to === "/dashboard" ? path === "/dashboard" : path.startsWith(it.to);
+                  const active =
+                    it.to === "/dashboard" ? path === "/dashboard" : path.startsWith(it.to);
                   return (
                     <Link
                       key={it.to}

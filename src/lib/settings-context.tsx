@@ -180,13 +180,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem("luaux_settings");
       if (raw) setState((s) => ({ ...s, ...JSON.parse(raw) }));
-    } catch {}
+    } catch {
+      /* ignore localStorage parse errors */
+    }
   }, []);
 
   useEffect(() => {
     try {
       localStorage.setItem("luaux_settings", JSON.stringify(state));
-    } catch {}
+    } catch {
+      /* ignore localStorage write errors */
+    }
     if (typeof document !== "undefined") {
       document.documentElement.setAttribute("data-theme", state.theme);
     }
@@ -205,7 +209,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       currencySymbol: symbol,
       formatPrice: (usd: number) => {
         const converted = usd * rate;
-        const rounded = converted >= 100 ? Math.round(converted) : Math.round(converted * 100) / 100;
+        const rounded =
+          converted >= 100 ? Math.round(converted) : Math.round(converted * 100) / 100;
         return `${symbol}${rounded}`;
       },
     };

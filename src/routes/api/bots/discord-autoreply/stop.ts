@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, unauthorized, notFound } from "@/lib/api-helpers";
 
-export const Route = createFileRoute("/api/bots/mc/stop")({
+export const Route = createFileRoute("/api/bots/discord-autoreply/stop")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/bots/mc/stop")({
         const db = admin();
         const { data: job } = await db
           .from("bot_jobs")
-          .select("id, discord_id, status")
+          .select("id, discord_id, status, config")
           .eq("id", botId)
           .maybeSingle();
 
@@ -31,6 +31,11 @@ export const Route = createFileRoute("/api/bots/mc/stop")({
 
         if (job.status !== "running" && job.status !== "pending") {
           return Response.json({ error: "Bot is not running" }, { status: 400 });
+        }
+
+        // Verify it is indeed an autoreply bot
+        if ((job.config as Record<string, unknown>)?.subType !== "autoreply") {
+          return Response.json({ error: "Job is not an auto-reply bot" }, { status: 400 });
         }
 
         await db.from("bot_jobs").update({ status: "stopping" }).eq("id", botId);

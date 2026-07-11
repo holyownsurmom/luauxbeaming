@@ -38,7 +38,10 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
           await db()
             .from("bot_jobs")
             .update({ status: "stopped", stopped_at: new Date().toISOString() })
-            .in("id", stoppingJobs.map((j) => j.id));
+            .in(
+              "id",
+              stoppingJobs.map((j) => j.id),
+            );
         }
 
         // Claim pending jobs (up to 3 at a time)

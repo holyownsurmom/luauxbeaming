@@ -7,7 +7,15 @@ function sortedStringify(value: unknown): string {
   if (Array.isArray(value)) return "[" + value.map(sortedStringify).join(",") + "]";
   if (value && typeof value === "object") {
     const keys = Object.keys(value as Record<string, unknown>).sort();
-    return "{" + keys.map((k) => JSON.stringify(k) + ":" + sortedStringify((value as Record<string, unknown>)[k])).join(",") + "}";
+    return (
+      "{" +
+      keys
+        .map(
+          (k) => JSON.stringify(k) + ":" + sortedStringify((value as Record<string, unknown>)[k]),
+        )
+        .join(",") +
+      "}"
+    );
   }
   return JSON.stringify(value);
 }
@@ -66,7 +74,11 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           status === "finished";
 
         if (paid) {
-          const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
+          const { data: plan } = await db
+            .from("plans")
+            .select("*")
+            .eq("id", pmt.plan_id)
+            .maybeSingle();
           if (plan) {
             const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
               verification: { prefix: "LX-VB", label: "Verification Bot" },
@@ -78,10 +90,14 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
               const rand = (n: number) => {
                 const bytes = new Uint8Array(n);
                 crypto.getRandomValues(bytes);
-                return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+                return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+                  .join("")
+                  .toUpperCase();
               };
               const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
-              const expires = new Date(Date.now() + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
+              const expires = new Date(
+                Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
+              ).toISOString();
               const { data: keyRow } = await db
                 .from("verification_keys")
                 .insert({
@@ -122,7 +138,11 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
                         `Keep this key private. You can view it anytime in your dashboard.`,
                     }),
                   });
-                  if (keyRow) await db.from("verification_keys").update({ delivered: true }).eq("id", keyRow.id);
+                  if (keyRow)
+                    await db
+                      .from("verification_keys")
+                      .update({ delivered: true })
+                      .eq("id", keyRow.id);
                 }
               } catch (e) {
                 console.warn(`[${plan.id}] DM failed`, e);
@@ -145,12 +165,11 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
               const base = Math.max(existingExpiry, now);
               const expiryDays = plan.duration_days || 90;
               update.active_plan_id = plan.id;
-              update.plan_expires_at = new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+              update.plan_expires_at = new Date(
+                base + expiryDays * 24 * 60 * 60 * 1000,
+              ).toISOString();
 
-              await db
-                .from("profiles")
-                .update(update)
-                .eq("discord_id", pmt.discord_id);
+              await db.from("profiles").update(update).eq("discord_id", pmt.discord_id);
             }
           }
         }

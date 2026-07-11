@@ -1,5 +1,5 @@
 import { createLogger, updateJob } from "./api.js";
-import { runDiscordAutoReplyBot, type AutoReplyJobConfig } from "./autoreply.js";
+import { runDiscordAutoReplyBot } from "./autoreply.js";
 
 export type DiscordJobConfig = {
   token: string;
@@ -56,7 +56,36 @@ function typingDuration(msg: string): number {
   const cpm = pickRandom(TYPING_SPEEDS);
   const chars = msg.replace(/\s+/g, " ").length;
   const base = (chars / cpm) * 60 * 1000;
-  return Math.max(1500, Math.min(base + randomBetween(-500, 1500), 12000));
+  return Math.max(2000, Math.min(base + randomBetween(-500, 1500), 14000));
+}
+
+async function sendWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2,
+): Promise<Response | null> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      if (res.status === 429) {
+        const body = await res.text();
+        let retryAfter = 30000;
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 5000;
+        } catch {
+          /* parse failure, use default */
+        }
+        await sleep(retryAfter);
+        continue;
+      }
+      return res;
+    } catch {
+      if (attempt === maxRetries) return null;
+      await sleep(2000 * (attempt + 1));
+    }
+  }
+  return null;
 }
 
 export async function runDiscordBot(
@@ -69,7 +98,7 @@ export async function runDiscordBot(
     return runDiscordAutoReplyBot(
       jobId,
       discordId,
-      config as unknown as AutoReplyJobConfig,
+      config as unknown as import("./autoreply.js").AutoReplyJobConfig,
       abortSignal,
     );
   }
@@ -94,7 +123,8 @@ export async function runDiscordBot(
   if (config.humanize && config.minDelay >= config.maxDelay) {
     config.maxDelay = config.minDelay + 1;
   }
-  if (config.minDelay < 5) config.minDelay = 5;
+  if (config.minDelay < 8) config.minDelay = 8;
+  if (config.maxDelay < config.minDelay + 2) config.maxDelay = config.minDelay + 2;
 
   const startedAt = Date.now();
   await log("system", "Initializing Discord user-token client (anti-ban mode)...");
@@ -164,6 +194,7 @@ export async function runDiscordBot(
     "abort",
     () => {
       if (pendingTimer) clearTimeout(pendingTimer);
+      pendingTimer = null;
     },
     { once: true },
   );
@@ -175,7 +206,7 @@ export async function runDiscordBot(
         headers: { Authorization: token },
       });
     } catch {
-      /* ignore */
+      /* typing failures are non-critical */
     }
   };
 
@@ -193,17 +224,16 @@ export async function runDiscordBot(
         }),
       });
     } catch {
-      /* ignore */
+      /* presence failures are non-critical */
     }
   };
 
   const calculateCooldown = (totalSent: number): number => {
     if (totalSent > 0 && totalSent % randomBetween(8, 15) === 0) {
-      const cooldown = randomBetween(90, 240) * 1000;
-      return cooldown;
+      return randomBetween(120, 300) * 1000;
     }
-    if (Math.random() < 0.08) {
-      return randomBetween(30, 90) * 1000;
+    if (Math.random() < 0.1) {
+      return randomBetween(45, 120) * 1000;
     }
     return 0;
   };
@@ -212,14 +242,14 @@ export async function runDiscordBot(
     let min = baseMin;
     let max = baseMax;
     if (sendCount < 3) {
-      min = Math.max(min, 12);
-      max = Math.max(max, 25);
+      min = Math.max(min, 15);
+      max = Math.max(max, 30);
     } else if (sendCount < 8) {
-      min = Math.max(min, 8);
-      max = Math.max(max, 18);
+      min = Math.max(min, 10);
+      max = Math.max(max, 22);
     }
     const delay = randomBetween(min * 1000, max * 1000);
-    const jitter = randomBetween(-1500, 2000);
+    const jitter = randomBetween(-2000, 3000);
     return Math.max(min * 1000, delay + jitter);
   };
 
@@ -236,7 +266,7 @@ export async function runDiscordBot(
       if (stopped) return;
       if (Math.random() < 0.4) {
         await updatePresence("idle", config.token);
-        await sleep(randomBetween(5000, 15000));
+        await sleep(randomBetween(8000, 25000));
         await updatePresence("online", config.token);
         if (stopped) return;
       }
@@ -246,14 +276,14 @@ export async function runDiscordBot(
     const msg = config.humanize ? variateMessage(baseMsg) : baseMsg;
     msgIndex++;
 
-    const typingTime = config.humanize ? typingDuration(msg) : randomBetween(1500, 3000);
+    const typingTime = config.humanize ? typingDuration(msg) : randomBetween(2000, 4000);
     await sendTyping(config.channelId, config.token);
     await log("info", `Typing... (${(typingTime / 1000).toFixed(1)}s)`);
     await sleep(typingTime);
     if (stopped) return;
 
     try {
-      const res = await fetch(
+      const res = await sendWithRetry(
         `https://discord.com/api/v9/channels/${config.channelId}/messages`,
         {
           method: "POST",
@@ -265,7 +295,10 @@ export async function runDiscordBot(
         },
       );
 
-      if (res.ok) {
+      if (!res) {
+        failCount++;
+        await log("error", "Send failed: network error after retries");
+      } else if (res.ok) {
         sentCount++;
         consecutiveRateLimits = 0;
         failCount = Math.max(0, failCount - 1);
@@ -276,6 +309,7 @@ export async function runDiscordBot(
           if (sent?.id) {
             setTimeout(
               () => {
+                if (stopped) return;
                 fetch(
                   `https://discord.com/api/v9/channels/${config.channelId}/messages/${sent.id}`,
                   {
@@ -286,13 +320,14 @@ export async function runDiscordBot(
                   log("error", `Delete failed: ${e.message}`).catch(() => {});
                 });
               },
-              randomBetween(2000, 5000),
+              randomBetween(3000, 8000),
             );
           }
         }
 
-        if (Math.random() < 0.15 && sentCount > 2) {
+        if (Math.random() < 0.12 && sentCount > 2) {
           try {
+            await sleep(randomBetween(1000, 3000));
             const recentRes = await fetch(
               `https://discord.com/api/v9/channels/${config.channelId}/messages?limit=1`,
               { headers: { Authorization: config.token } },
@@ -319,7 +354,7 @@ export async function runDiscordBot(
               }
             }
           } catch {
-            /* ignore edit errors */
+            /* edit failures are non-critical */
           }
         }
       } else {
@@ -331,14 +366,14 @@ export async function runDiscordBot(
           consecutiveRateLimits++;
           failCount = Math.max(0, failCount - 3);
 
-          let retryAfter = (15 + consecutiveRateLimits * 10 + randomBetween(0, 15)) * 1000;
+          let retryAfter = (20 + consecutiveRateLimits * 15 + randomBetween(0, 20)) * 1000;
           try {
             const parsed = JSON.parse(body);
             if (parsed.retry_after) {
-              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(3000, 8000);
+              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(5000, 15000);
             }
           } catch {
-            /* ignore parse errors */
+            /* parse failure, use computed value */
           }
 
           await log(
@@ -348,7 +383,7 @@ export async function runDiscordBot(
           await sleep(retryAfter);
 
           if (consecutiveRateLimits >= 3) {
-            const longPause = randomBetween(300, 600) * 1000;
+            const longPause = randomBetween(600, 900) * 1000;
             await log(
               "warn",
               `Multiple rate limits. Long pause: ${(longPause / 1000).toFixed(0)}s`,
@@ -365,7 +400,7 @@ export async function runDiscordBot(
           return;
         }
 
-        if (failCount > 15) {
+        if (failCount > 10) {
           await log("error", "Too many failures, stopping");
           await updateJob(jobId, "error", "Too many send failures");
           stopped = true;
@@ -381,7 +416,7 @@ export async function runDiscordBot(
 
     const runtime = config.humanize
       ? calculateDelay(config.minDelay, config.maxDelay, sentCount)
-      : config.interval * 1000 + randomBetween(-500, 1500);
+      : config.interval * 1000 + randomBetween(0, 3000);
 
     await log("info", `Next message in ${(runtime / 1000).toFixed(1)}s`);
 

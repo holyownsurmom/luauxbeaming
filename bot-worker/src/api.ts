@@ -20,7 +20,9 @@ async function fetchWithRetry(url: string, opts: RequestInit, retries = 2): Prom
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, opts);
-      if (res.ok || i === retries) return res;
+      if (res.ok) return res;
+      if (res.status >= 400 && res.status < 500) return res;
+      if (i === retries) return res;
     } catch (e) {
       if (i === retries) throw e;
       await new Promise((r) => setTimeout(r, 1000 * (i + 1)));

@@ -59,7 +59,7 @@ export async function runDiscordAutoReplyBot(
     return;
   }
 
-  if (config.minDelay < 5) config.minDelay = 5;
+  if (config.minDelay < 8) config.minDelay = 8;
 
   await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode)...");
   await updateJob(jobId, "running");
@@ -67,11 +67,32 @@ export async function runDiscordAutoReplyBot(
   let ws: WebSocket | null = null;
   let stopped = false;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatAcked = true;
   let selfUserId: string | null = null;
   let lastSequence: number | null = null;
   let sessionId: string | null = null;
   let replyCount = 0;
   let recentReplyTimes: number[] = [];
+  let reconnectAttempts = 0;
+  const MAX_RECONNECT = 10;
+
+  const cleanup = () => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    if (ws) {
+      try {
+        ws.removeAllListeners();
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+      } catch {
+        /* ignore close errors */
+      }
+      ws = null;
+    }
+  };
 
   const sendPayload = (op: number, d: unknown) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -81,22 +102,47 @@ export async function runDiscordAutoReplyBot(
 
   const startHeartbeat = (intervalMs: number) => {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatAcked = true;
     heartbeatTimer = setInterval(() => {
       if (stopped) return;
+      if (!heartbeatAcked) {
+        log("warn", "Heartbeat not ACKed, reconnecting...").catch(() => {});
+        cleanup();
+        scheduleReconnect();
+        return;
+      }
+      heartbeatAcked = false;
       sendPayload(1, lastSequence);
     }, intervalMs);
+  };
+
+  const scheduleReconnect = () => {
+    if (stopped) return;
+    if (reconnectAttempts >= MAX_RECONNECT) {
+      log("error", "Max gateway reconnect attempts reached").catch(() => {});
+      updateJob(jobId, "error", "Gateway reconnect failed").catch(() => {});
+      stopped = true;
+      return;
+    }
+    reconnectAttempts++;
+    const delay = Math.min(
+      randomBetween(5000, 15000) * Math.pow(1.5, reconnectAttempts - 1),
+      120000,
+    );
+    log("info", `Gateway reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT})`).catch(() => {});
+    setTimeout(() => connectGateway(), delay);
   };
 
   const shouldThrottle = (): boolean => {
     const now = Date.now();
     recentReplyTimes = recentReplyTimes.filter((t) => now - t < 60000);
-    if (recentReplyTimes.length >= 5) return true;
-    return false;
+    return recentReplyTimes.length >= 5;
   };
 
   const connectGateway = () => {
     if (stopped) return;
 
+    cleanup();
     ws = new WebSocket("wss://gateway.discord.gg/?v=9&encoding=json");
 
     ws.on("open", () => {
@@ -109,7 +155,7 @@ export async function runDiscordAutoReplyBot(
         const payload = JSON.parse(data);
         const { op, t, d, s } = payload;
 
-        if (s !== undefined) {
+        if (s !== undefined && s !== null) {
           lastSequence = s;
         }
 
@@ -143,22 +189,36 @@ export async function runDiscordAutoReplyBot(
           }
         }
 
+        if (op === 11) {
+          heartbeatAcked = true;
+        }
+
         if (op === 9) {
           sessionId = null;
           lastSequence = null;
-          log("warn", "Invalid gateway session, re-identifying...").catch(() => {});
-          await sleep(randomBetween(2000, 5000));
-          ws?.close();
+          log("warn", "Invalid gateway session, reconnecting...").catch(() => {});
+          cleanup();
+          scheduleReconnect();
+          return;
+        }
+
+        if (op === 7) {
+          log("warn", "Gateway requested reconnect").catch(() => {});
+          cleanup();
+          scheduleReconnect();
+          return;
         }
 
         if (op === 0) {
           if (t === "READY") {
             selfUserId = d.user.id;
             sessionId = d.session_id;
+            reconnectAttempts = 0;
             await log("info", `Gateway ready! Running as user ${d.user.username}`);
           }
 
           if (t === "RESUMED") {
+            reconnectAttempts = 0;
             await log("info", "Gateway session resumed successfully");
           }
 
@@ -179,9 +239,9 @@ export async function runDiscordAutoReplyBot(
 
               let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
               if (replyCount < 3) {
-                delay = randomBetween(8000, 20000);
+                delay = randomBetween(10000, 25000);
               } else if (Math.random() < 0.12) {
-                delay = randomBetween(30000, 90000);
+                delay = randomBetween(45000, 120000);
                 await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
               }
 
@@ -193,7 +253,7 @@ export async function runDiscordAutoReplyBot(
                     headers: { Authorization: config.token },
                   });
                 } catch {
-                  /* ignore */
+                  /* typing failure is non-critical */
                 }
                 await log(
                   "info",
@@ -230,10 +290,15 @@ export async function runDiscordAutoReplyBot(
                     const parsed = JSON.parse(body);
                     if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 5000;
                   } catch {
-                    /* ignore */
+                    /* use default */
                   }
                   await log("warn", `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s`);
                   await sleep(retryAfter);
+                } else if (res.status === 401 || res.status === 403) {
+                  await log("error", "Token revoked or access denied. Stopping.");
+                  await updateJob(jobId, "error", "Token invalid or banned");
+                  stopped = true;
+                  return;
                 } else {
                   const text = await res.text();
                   await log("error", `Failed to send auto-reply: ${text}`);
@@ -252,7 +317,7 @@ export async function runDiscordAutoReplyBot(
               const targetUser = `@${d.user.username}`;
               await log("info", `Received incoming friend request from ${targetUser}`);
 
-              await sleep(randomBetween(2000, 8000));
+              await sleep(randomBetween(3000, 10000));
 
               try {
                 const res = await fetch(
@@ -286,30 +351,26 @@ export async function runDiscordAutoReplyBot(
       }
     });
 
-    ws.on("close", async (code: number, reason: Buffer) => {
+    ws.on("close", (code: number, _reason: Buffer) => {
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
       }
       if (stopped) return;
 
-      const reconnectDelay = code === 4004 || code === 4010 || code === 4011 || code === 4012
-        ? -1
-        : randomBetween(5000, 12000);
-
-      if (reconnectDelay === -1) {
+      const fatalCodes = [4004, 4010, 4011, 4012, 4014];
+      if (fatalCodes.includes(code)) {
         log("error", `Fatal gateway close (code ${code}), not reconnecting`).catch(() => {});
-        await updateJob(jobId, "error", `Gateway closed: ${code}`);
+        updateJob(jobId, "error", `Gateway closed: ${code}`).catch(() => {});
         stopped = true;
         return;
       }
 
       log(
         "warn",
-        `Gateway closed (code ${code}). Reconnecting in ${(reconnectDelay / 1000).toFixed(0)}s...`,
+        `Gateway closed (code ${code}). Reconnecting...`,
       ).catch(() => {});
-      await sleep(reconnectDelay);
-      connectGateway();
+      scheduleReconnect();
     });
 
     ws.on("error", (err: Error) => {
@@ -323,8 +384,7 @@ export async function runDiscordAutoReplyBot(
     "abort",
     () => {
       stopped = true;
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
-      if (ws) ws.close();
+      cleanup();
       log("system", "Auto-Reply client stopped.").catch(() => {});
     },
     { once: true },
@@ -334,6 +394,7 @@ export async function runDiscordAutoReplyBot(
     const checkAbort = setInterval(() => {
       if (abortSignal.aborted || stopped) {
         clearInterval(checkAbort);
+        cleanup();
         resolve();
       }
     }, 1000);

@@ -34,6 +34,20 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+async function fetchUuidFromUsername(username: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(username)}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.id || null;
+  } catch {
+    return null;
+  }
+}
+
 const MC_SUFFIXES = ["", " ", ".", "...", "!", "?", " ~", " :)"];
 
 function variateMessage(msg: string): string {
@@ -88,6 +102,39 @@ export async function runMcBot(
 
   if (config.interval < 5) config.interval = 5;
 
+  if (config.authType === "ssid") {
+    if (!config.ssid) {
+      await log("error", "SSID token is empty. Re-add your account with a valid SSID.");
+      await updateJob(jobId, "error", "SSID token is empty");
+      return;
+    }
+    if (!config.username) {
+      await log("error", "Username is required for SSID auth.");
+      await updateJob(jobId, "error", "Missing username for SSID auth");
+      return;
+    }
+
+    if (!config.uuid || config.uuid.replace(/-/g, "").length !== 32) {
+      await log("info", "UUID not provided or invalid, fetching from Mojang...");
+      const fetchedUuid = await fetchUuidFromUsername(config.username);
+      if (fetchedUuid) {
+        config.uuid = fetchedUuid;
+        await log("info", `Resolved UUID: ${fetchedUuid}`);
+      } else {
+        await log(
+          "error",
+          `Could not resolve UUID for "${config.username}". Make sure the username is correct and spelled exactly (case-sensitive).`,
+        );
+        await updateJob(
+          jobId,
+          "error",
+          `UUID not found for "${config.username}". Check username spelling.`,
+        );
+        return;
+      }
+    }
+  }
+
   await log(
     "system",
     `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode)...`,
@@ -102,6 +149,7 @@ export async function runMcBot(
   let antiAfkTimer: ReturnType<typeof setInterval> | null = null;
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
+  let authFailed = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentBot: any = null;
 
@@ -149,15 +197,24 @@ export async function runMcBot(
         if (Math.random() < 0.3) {
           const direction = pickRandom(["forward", "back", "left", "right"]);
           bot.setControlState(direction, true);
+          const dur = randomBetween(200, 600);
           setTimeout(() => {
-            try { bot.setControlState(direction, false); } catch { /* ignore */ }
-          }, randomBetween(200, 600));
+            try {
+              if (currentBot === bot) bot.setControlState(direction, false);
+            } catch {
+              /* ignore */
+            }
+          }, dur);
         }
 
         if (Math.random() < 0.1) {
           bot.setControlState("jump", true);
           setTimeout(() => {
-            try { bot.setControlState("jump", false); } catch { /* ignore */ }
+            try {
+              if (currentBot === bot) bot.setControlState("jump", false);
+            } catch {
+              /* ignore */
+            }
           }, 100);
         }
       } catch {
@@ -188,13 +245,13 @@ export async function runMcBot(
       }, delay);
     };
 
-    const sendOneMessage = async (bot: any) => {
+    const sendOneMessage = async (botArg: typeof bot) => {
       if (stopped || abortSignal.aborted) return;
 
       try {
         const baseMsg = config.messages[msgIndex % config.messages.length];
         const msg = variateMessage(baseMsg);
-        bot.chat(msg);
+        botArg.chat(msg);
         sentCount++;
         msgIndex++;
         await log("bot", `> ${msg}`);
@@ -213,8 +270,21 @@ export async function runMcBot(
     }, initialDelay);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function shouldReconnect(kickReason: string): boolean {
+    const lower = kickReason.toLowerCase();
+    if (lower.includes("banned")) return false;
+    if (lower.includes("authenticat")) return false;
+    if (lower.includes("failed to verify")) return false;
+    if (lower.includes("not authenticated")) return false;
+    if (lower.includes("invalid session")) return false;
+    if (lower.includes("whitelist")) return false;
+    if (lower.includes("full")) return false;
+    return true;
+  }
+
   async function connect() {
-    if (stopped || abortSignal.aborted) return;
+    if (stopped || abortSignal.aborted || authFailed) return;
 
     const botOptions: Record<string, unknown> = {
       host: config.serverHost,
@@ -223,17 +293,30 @@ export async function runMcBot(
       auth: config.authType === "microsoft" ? "microsoft" : undefined,
       hideErrors: true,
       checkTimeoutInterval: 60000,
-      respawn: true,
+      respawn: false,
     };
 
     if (config.authType === "ssid" && config.ssid) {
+      const cleanUuid = (config.uuid || "").replace(/-/g, "");
+      const profileName = config.username || config.label;
+
+      if (!cleanUuid || cleanUuid.length !== 32) {
+        await log(
+          "error",
+          `Invalid UUID format: "${config.uuid}". Must be 32 hex characters.`,
+        );
+        await updateJob(jobId, "error", "Invalid UUID format");
+        authFailed = true;
+        return;
+      }
+
       botOptions.auth = "offline";
-      botOptions.username = config.username || config.label;
+      botOptions.username = profileName;
       botOptions.session = {
         accessToken: config.ssid,
         selectedProfile: {
-          name: config.username || config.label,
-          id: (config.uuid || "").replace(/-/g, ""),
+          name: profileName,
+          id: cleanUuid,
         },
       };
     }
@@ -253,6 +336,7 @@ export async function runMcBot(
     bot.on("spawn", () => {
       log("info", "Spawned in world").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
+      reconnectAttempts = 0;
 
       startAntiAfk(bot);
       startMessageLoop(bot);
@@ -274,11 +358,18 @@ export async function runMcBot(
     bot.on("kicked", async (reason: string) => {
       log("warn", `Kicked: ${reason}`).catch(() => {});
       cleanup();
-      currentBot = null;
+      if (currentBot === bot) currentBot = null;
 
-      if (reason.toLowerCase().includes("banned")) {
-        log("error", "Bot was banned, stopping").catch(() => {});
-        await updateJob(jobId, "error", `Banned: ${reason}`);
+      const doReconnect = shouldReconnect(reason);
+      if (!doReconnect) {
+        const msg = reason.toLowerCase().includes("authenticat")
+          ? `Authentication failed: ${reason}. Your SSID token may be expired — re-login to Minecraft and get a new token.`
+          : reason.toLowerCase().includes("banned")
+            ? `Banned: ${reason}`
+            : `Not reconnecting: ${reason}`;
+        log("error", msg).catch(() => {});
+        await updateJob(jobId, "error", msg);
+        authFailed = true;
         stopped = true;
         return;
       }
@@ -298,15 +389,19 @@ export async function runMcBot(
     bot.on("end", async (reason: string) => {
       log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {});
       cleanup();
-      currentBot = null;
+      if (currentBot === bot) currentBot = null;
 
-      if (stopped || abortSignal.aborted) return;
+      if (stopped || abortSignal.aborted || authFailed) return;
 
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      if (shouldReconnect(reason) && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1) + randomBetween(0, 3000);
         log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
         setTimeout(() => connect(), delay);
+      } else if (!shouldReconnect(reason)) {
+        log("error", `Connection lost: ${reason} — not reconnecting`).catch(() => {});
+        await updateJob(jobId, "error", reason);
+        stopped = true;
       } else {
         log("error", "Max reconnect attempts reached").catch(() => {});
         await updateJob(jobId, "error", "Connection lost");

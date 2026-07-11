@@ -92,10 +92,30 @@ async function shutdown() {
   console.log("[worker] shutting down...");
   clearInterval(pollTimer);
   clearInterval(statusCheckTimer);
+
+  const abortPromises: Promise<void>[] = [];
   for (const [id, controller] of runningJobs) {
     console.log(`[worker] aborting job ${id}`);
     controller.abort();
+    abortPromises.push(
+      new Promise<void>((resolve) => {
+        const check = setInterval(() => {
+          if (!runningJobs.has(id)) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 500);
+      }),
+    );
   }
+
+  const drainTimeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, 10000);
+  });
+
+  await Promise.race([Promise.all(abortPromises), drainTimeout]);
+
+  console.log(`[worker] ${runningJobs.size} jobs still running after timeout, forcing exit`);
   runningJobs.clear();
   await flushAllLogs();
   process.exit(0);
@@ -103,3 +123,4 @@ async function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("SIGHUP", shutdown);

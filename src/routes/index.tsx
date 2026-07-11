@@ -227,13 +227,13 @@ function FloatingParticles() {
       <div
         className="absolute left-1/2 top-0 h-[700px] w-[900px] -translate-x-1/2 rounded-full blur-[150px] animate-glow-breathe"
         style={{
-          background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.15), transparent 70%)",
+          background: "radial-gradient(circle, color-mix(in oklch, var(--primary) 15%, transparent), transparent 70%)",
         }}
       />
       <div
         className="absolute right-0 bottom-0 h-[500px] w-[500px] rounded-full blur-[120px] opacity-40"
         style={{
-          background: "radial-gradient(circle, oklch(0.79 0.16 85 / 0.08), transparent 70%)",
+          background: "radial-gradient(circle, color-mix(in oklch, var(--primary) 8%, transparent), transparent 70%)",
         }}
       />
       <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
@@ -436,13 +436,13 @@ function Index() {
           <h1 className="mt-10 font-display text-6xl md:text-8xl lg:text-[96px] font-semibold leading-[0.88] tracking-tight text-gradient animate-fade-in-up stagger-2" style={{ opacity: 0 }}>
             Stop beaming
             <br />
-            <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.3)" }}>
+            <span className="text-shimmer" style={{ textShadow: "0 0 60px color-mix(in oklch, var(--primary) 30%, transparent)" }}>
               manually.
             </span>
           </h1>
 
           <h2 className="mt-4 font-display text-3xl md:text-5xl font-semibold leading-[1] tracking-tight animate-fade-in-up stagger-3" style={{ opacity: 0 }}>
-            <span className="text-primary" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.4)" }}>
+            <span className="text-primary" style={{ textShadow: "0 0 40px color-mix(in oklch, var(--primary) 40%, transparent)" }}>
               Let the bots do it.
             </span>
           </h2>
@@ -650,7 +650,7 @@ function Index() {
         <div className="mb-16 text-center">
           <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// pricing</div>
           <h2 className="mt-3 font-display text-4xl md:text-6xl font-semibold tracking-tight text-gradient">
-            Simple. Transparent. <span className="text-shimmer" style={{ textShadow: "0 0 40px oklch(0.79 0.16 85 / 0.3)" }}>Crypto.</span>
+            Simple. Transparent. <span className="text-shimmer" style={{ textShadow: "0 0 40px color-mix(in oklch, var(--primary) 30%, transparent)" }}>Crypto.</span>
           </h2>
           <p className="mt-5 text-muted-foreground">
             Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.
@@ -832,7 +832,7 @@ function Index() {
           <div className="relative">
             <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// ready</div>
             <h2 className="mt-4 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
-              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px oklch(0.79 0.16 85 / 0.4)" }}>start?</span>
+              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px color-mix(in oklch, var(--primary) 40%, transparent)" }}>start?</span>
             </h2>
             <p className="mx-auto mt-6 max-w-md text-muted-foreground">
               Sign in with Discord. First bot deployed in under a minute.

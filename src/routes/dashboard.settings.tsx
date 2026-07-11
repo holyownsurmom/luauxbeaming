@@ -11,6 +11,8 @@ import {
   Sparkles,
   ChevronDown,
   ShieldCheck,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { getMyProfile } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
@@ -245,17 +247,82 @@ function SettingsPage() {
           )}
 
           {tab === "appearance" && (
-            <Panel title={s.t("appearance")} subtitle={s.t("theme_hint")}>
-              <div className="rounded-xl brutal-border bg-background/40 p-6 flex items-center gap-4">
-                <span
-                  className="h-12 w-12 rounded-full brutal-border shrink-0"
-                  style={{ backgroundColor: "oklch(0.79 0.16 85)" }}
-                />
-                <div>
-                  <div className="font-semibold text-sm">Gold & Black</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    The signature LuauX premium theme. Pure black backgrounds with gold accents.
-                  </div>
+            <Panel title={s.t("appearance")} subtitle="Customize the look and feel of LuauX.">
+              {/* Mode toggle */}
+              <div className="rounded-xl brutal-border bg-background/40 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  {s.mode === "dark" ? <Moon className="h-4 w-4 text-primary" /> : <Sun className="h-4 w-4 text-primary" />}
+                  {s.t("mode")}
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">{s.t("mode_hint")}</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => s.set("mode", "dark")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-semibold transition-all duration-300 border ${
+                      s.mode === "dark"
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
+                    }`}
+                  >
+                    <Moon className="h-3.5 w-3.5" />
+                    {s.t("dark")}
+                  </button>
+                  <button
+                    onClick={() => s.set("mode", "light")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-semibold transition-all duration-300 border ${
+                      s.mode === "light"
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
+                    }`}
+                  >
+                    <Sun className="h-3.5 w-3.5" />
+                    {s.t("light")}
+                  </button>
+                </div>
+              </div>
+
+              {/* Theme picker */}
+              <div className="rounded-xl brutal-border bg-background/40 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Palette className="h-4 w-4 text-primary" />
+                  {s.t("theme")}
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">{s.t("theme_hint")}</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => s.set("theme", "gold")}
+                    className={`flex-1 flex items-center gap-3 rounded-xl py-3 px-4 text-xs font-semibold transition-all duration-300 border ${
+                      s.theme === "gold"
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
+                    }`}
+                  >
+                    <span
+                      className="h-8 w-8 rounded-lg shrink-0 border border-border/40"
+                      style={{ backgroundColor: "oklch(0.79 0.16 85)" }}
+                    />
+                    <div className="text-left">
+                      <div>{s.t("gold")}</div>
+                      <div className="text-[10px] text-muted-foreground font-normal mt-0.5">Premium gold accents</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => s.set("theme", "blue")}
+                    className={`flex-1 flex items-center gap-3 rounded-xl py-3 px-4 text-xs font-semibold transition-all duration-300 border ${
+                      s.theme === "blue"
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
+                    }`}
+                  >
+                    <span
+                      className="h-8 w-8 rounded-lg shrink-0 border border-border/40"
+                      style={{ backgroundColor: "oklch(0.55 0.2 250)" }}
+                    />
+                    <div className="text-left">
+                      <div>{s.t("blue")}</div>
+                      <div className="text-[10px] text-muted-foreground font-normal mt-0.5">Royal blue accents</div>
+                    </div>
+                  </button>
                 </div>
               </div>
             </Panel>

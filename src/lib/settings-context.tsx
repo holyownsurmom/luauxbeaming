@@ -10,12 +10,14 @@ import {
 
 export type Language = "en" | "es" | "fr" | "de" | "pt";
 export type Currency = "usd" | "eur" | "gbp" | "cad" | "aud";
-export type Theme = "gold";
+export type Theme = "gold" | "blue";
+export type Mode = "dark" | "light";
 
 type SettingsState = {
   language: Language;
   currency: Currency;
   theme: Theme;
+  mode: Mode;
   notifyDeploys: boolean;
   notifyPayments: boolean;
   notifyDiscord: boolean;
@@ -26,6 +28,7 @@ const DEFAULTS: SettingsState = {
   language: "en",
   currency: "usd",
   theme: "gold",
+  mode: "dark",
   notifyDeploys: true,
   notifyPayments: true,
   notifyDiscord: false,
@@ -41,7 +44,6 @@ type SettingsCtx = SettingsState & {
 
 const Ctx = createContext<SettingsCtx | null>(null);
 
-// Approximate display rates (billing still happens in USD).
 const RATES: Record<Currency, { symbol: string; rate: number }> = {
   usd: { symbol: "$", rate: 1 },
   eur: { symbol: "€", rate: 0.92 },
@@ -72,8 +74,14 @@ const DICT: Record<Language, Record<string, string>> = {
     get_started: "Get Started",
     most_popular: "Most Popular",
     best_value: "Best value",
-    theme: "Theme",
+    theme: "Accent color",
     theme_hint: "Pick the accent color used across LuauX.",
+    mode: "Appearance mode",
+    mode_hint: "Switch between dark and light interface.",
+    dark: "Dark",
+    light: "Light",
+    gold: "Gold",
+    blue: "Blue",
   },
   es: {
     settings: "Ajustes",
@@ -96,8 +104,14 @@ const DICT: Record<Language, Record<string, string>> = {
     get_started: "Empezar",
     most_popular: "Más popular",
     best_value: "Mejor valor",
-    theme: "Tema",
+    theme: "Color de acento",
     theme_hint: "Elige el color de acento de LuauX.",
+    mode: "Modo de apariencia",
+    mode_hint: "Cambia entre interfaz oscura y clara.",
+    dark: "Oscuro",
+    light: "Claro",
+    gold: "Dorado",
+    blue: "Azul",
   },
   fr: {
     settings: "Paramètres",
@@ -120,8 +134,14 @@ const DICT: Record<Language, Record<string, string>> = {
     get_started: "Commencer",
     most_popular: "Le plus populaire",
     best_value: "Meilleure offre",
-    theme: "Thème",
+    theme: "Couleur d'accent",
     theme_hint: "Choisissez la couleur d'accent de LuauX.",
+    mode: "Mode d'apparence",
+    mode_hint: "Basculer entre les interfaces sombre et claire.",
+    dark: "Sombre",
+    light: "Clair",
+    gold: "Or",
+    blue: "Bleu",
   },
   de: {
     settings: "Einstellungen",
@@ -144,8 +164,14 @@ const DICT: Record<Language, Record<string, string>> = {
     get_started: "Loslegen",
     most_popular: "Am beliebtesten",
     best_value: "Bester Wert",
-    theme: "Design",
+    theme: "Akzentfarbe",
     theme_hint: "Wähle die Akzentfarbe von LuauX.",
+    mode: "Darstellungsmodus",
+    mode_hint: "Zwischen dunkler und heller Oberfläche wechseln.",
+    dark: "Dunkel",
+    light: "Hell",
+    gold: "Gold",
+    blue: "Blau",
   },
   pt: {
     settings: "Configurações",
@@ -161,17 +187,33 @@ const DICT: Record<Language, Record<string, string>> = {
     language: "Idioma",
     currency: "Moeda",
     language_hint: "O idioma usado na interface.",
-    currency_hint: "Os preços são exibidos nesta moeda. Cobrança em USD.",
+    currency_hint: "Os precios são exibidos nesta moeda. Cobrança em USD.",
     choose_plan: "Escolha um plano",
     choose_plan_sub: "Pague em cripto. Libera após 2 confirmações.",
     per_month: "/mês",
     get_started: "Começar",
     most_popular: "Mais popular",
     best_value: "Melhor valor",
-    theme: "Tema",
+    theme: "Cor de destaque",
     theme_hint: "Escolha a cor de destaque do LuauX.",
+    mode: "Modo de aparência",
+    mode_hint: "Alternar entre interface escura e clara.",
+    dark: "Escuro",
+    light: "Claro",
+    gold: "Dourado",
+    blue: "Azul",
   },
 };
+
+function applyMode(mode: Mode) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("dark", mode === "dark");
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
+  document.documentElement.setAttribute("data-theme", theme);
+}
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SettingsState>(DEFAULTS);
@@ -179,7 +221,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem("luaux_settings");
-      if (raw) setState((s) => ({ ...s, ...JSON.parse(raw) }));
+      if (raw) {
+        const saved = JSON.parse(raw);
+        setState((s) => ({ ...s, ...saved }));
+      }
     } catch {
       /* ignore localStorage parse errors */
     }
@@ -191,9 +236,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore localStorage write errors */
     }
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", state.theme);
-    }
+    applyMode(state.mode);
+    applyTheme(state.theme);
   }, [state]);
 
   const set = useCallback<SettingsCtx["set"]>((key, value) => {

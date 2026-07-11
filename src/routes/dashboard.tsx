@@ -128,11 +128,11 @@ function DashboardLayout() {
         onMouseEnter={openSidebar}
         style={{
           background: sidebarOpen
-            ? "linear-gradient(180deg, oklch(0.79 0.16 85 / 0.6), oklch(0.79 0.16 85 / 0.2), oklch(0.79 0.16 85 / 0.6))"
-            : "linear-gradient(180deg, oklch(0.79 0.16 85 / 0.3), oklch(0.79 0.16 85 / 0.1), oklch(0.79 0.16 85 / 0.3))",
+            ? "linear-gradient(180deg, color-mix(in oklch, var(--primary) 60%, transparent), color-mix(in oklch, var(--primary) 20%, transparent), color-mix(in oklch, var(--primary) 60%, transparent))"
+            : "linear-gradient(180deg, color-mix(in oklch, var(--primary) 30%, transparent), color-mix(in oklch, var(--primary) 10%, transparent), color-mix(in oklch, var(--primary) 30%, transparent))",
           boxShadow: sidebarOpen
-            ? "0 0 20px oklch(0.79 0.16 85 / 0.3)"
-            : "0 0 8px oklch(0.79 0.16 85 / 0.15)",
+            ? "0 0 20px color-mix(in oklch, var(--primary) 30%, transparent)"
+            : "0 0 8px color-mix(in oklch, var(--primary) 15%, transparent)",
         }}
       >
         {/* Pulsing dot indicator */}
@@ -166,8 +166,8 @@ function DashboardLayout() {
             width: sidebarOpen ? 280 : 0,
             opacity: sidebarOpen ? 1 : 0,
             transform: sidebarOpen ? "translateX(0)" : "translateX(-20px)",
-            background: "linear-gradient(180deg, oklch(0.03 0 0) 0%, oklch(0.02 0 0) 100%)",
-            borderRight: "1px solid oklch(0.14 0 0 / 0.5)",
+            background: "var(--card)",
+            borderRight: "1px solid var(--border)",
             overflow: "hidden",
           }}
         >

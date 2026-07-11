@@ -457,6 +457,7 @@ function Toggle({
       <button
         onClick={() => onChange(!checked)}
         aria-pressed={checked}
+        aria-label={label}
         className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full brutal-border transition-colors ${
           checked ? "bg-primary" : "bg-secondary/60"
         }`}

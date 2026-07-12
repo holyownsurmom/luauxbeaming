@@ -85,7 +85,7 @@ function PurchasePage() {
         data: { plan_id: planId, pay_currency: selectedCurrency },
       })) as typeof payment;
       // Admin bypass: skip payment view, show success inline
-      if (p.pay_currency === "admin" && p.status === "finished") {
+      if (p && p.pay_currency === "admin" && p.status === "finished") {
         setAdminActivated(true);
         fetchProfile().then((d) => {
           const prof = (d as { profile?: { bot_hours_remaining?: number } })?.profile;

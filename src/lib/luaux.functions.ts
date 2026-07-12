@@ -360,13 +360,11 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: z.string().min(1).max(100),
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
-        bot_token: z.string().min(1, "Bot Token is required"),
-        bot_public_key: z.string().min(1, "Bot Public Key is required"),
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { requireUser, admin } = await import("./luaux-server.server");
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
     const user = await requireUser();
     const db = admin();
 
@@ -379,118 +377,117 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       .limit(1);
 
     const activeKey = keys?.find((k) => new Date(k.expires_at).getTime() > Date.now());
-
-    const { getSessionData, isAdminSession } = await import("./luaux-server.server");
-    const sessionData = await getSessionData();
-    const isAdmin = sessionData.isAdmin === true || (await isAdminSession());
-
+    const isAdmin = await isAdminSession();
     if (!activeKey && !isAdmin) {
-      throw new Error("No active Verification Bot license");
+      throw new Error("No active Verification Bot license — purchase or redeem a key first");
     }
 
-    // Normalize public key: Discord signs with 64-char hex ed25519 public key
-    const publicKey = data.bot_public_key.replace(/\s+/g, "").replace(/^0x/i, "").trim();
-    if (!/^[0-9a-fA-F]{64}$/.test(publicKey)) {
+    // Central LuauX bot only — no user token/public key required
+    const botTokenToUse = process.env.DISCORD_BOT_TOKEN;
+    if (!botTokenToUse) {
+      throw new Error("Server missing DISCORD_BOT_TOKEN — contact support");
+    }
+
+    const guildId = data.guild_id.trim();
+    const channelId = data.channel_id.trim();
+    const roleId = data.verified_role_id.trim();
+
+    // Verify bot is in the guild
+    const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
+      headers: { Authorization: `Bot ${botTokenToUse}` },
+    });
+    if (!guildRes.ok) {
       throw new Error(
-        "Bot Public Key must be the 64-character hex Public Key from Discord Developer Portal → General Information (not the bot token).",
+        "LuauX bot is not in that server. Use the Invite Bot button first, then try again.",
       );
     }
-    if (data.bot_token.includes(".")) {
-      // Discord bot tokens usually have dots; public keys never do — catch swap
-    }
-    if (publicKey === data.bot_token.replace(/\s+/g, "")) {
-      throw new Error("You pasted the bot token into Public Key. Use the Public Key field instead.");
+
+    // Verify channel is reachable
+    const chRes = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
+      headers: { Authorization: `Bot ${botTokenToUse}` },
+    });
+    if (!chRes.ok) {
+      throw new Error(
+        "Cannot access that channel. Check Channel ID and give the bot View Channel + Send Messages.",
+      );
     }
 
     const { error } = await db.from("verification_settings").upsert(
       {
         discord_id: user.id,
-        guild_id: data.guild_id.trim(),
-        verified_role_id: data.verified_role_id.trim(),
-        channel_id: data.channel_id.trim(),
+        guild_id: guildId,
+        verified_role_id: roleId,
+        channel_id: channelId,
         message_title: data.message_title,
         message_description: data.message_description,
         button_text: data.button_text,
-        bot_token: data.bot_token.trim() || null,
-        bot_public_key: publicKey.toLowerCase(),
+        // Clear per-user bot creds — always use central LuauX bot
+        bot_token: null,
+        bot_public_key: null,
       },
       { onConflict: "discord_id" },
     );
 
     if (error) throw new Error(error.message);
 
-    const botTokenToUse = data.bot_token;
-
-    // Validate token + set online presence activity via REST (Gateway online comes from worker)
-    try {
-      const meRes = await fetch("https://discord.com/api/v10/users/@me", {
-        headers: { Authorization: `Bot ${botTokenToUse}` },
-      });
-      if (!meRes.ok) {
-        const t = await meRes.text();
-        throw new Error(`Invalid bot token (${meRes.status}): ${t.slice(0, 120)}`);
-      }
-      const me = (await meRes.json()) as { id?: string; username?: string };
-      console.log("[verification] bot token OK as", me.username, me.id);
-    } catch (e) {
-      throw new Error(
-        e instanceof Error
-          ? e.message
-          : "Invalid bot token — copy the token from Discord Developer Portal → Bot",
-      );
-    }
-
-    try {
-      const channelRes = await fetch(
-        `https://discord.com/api/v10/channels/${data.channel_id}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bot ${botTokenToUse}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            embeds: [
-              {
-                title: data.message_title,
-                description: data.message_description,
-                color: 5814783,
-              },
-            ],
-            components: [
-              {
-                type: 1,
-                components: [
-                  {
-                    type: 2,
-                    style: 3,
-                    label: data.button_text,
-                    custom_id: "verify_member",
-                  },
-                ],
-              },
-            ],
-          }),
+    const channelRes = await fetch(
+      `https://discord.com/api/v10/channels/${channelId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bot ${botTokenToUse}`,
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          embeds: [
+            {
+              title: data.message_title,
+              description: data.message_description,
+              color: 5814783,
+            },
+          ],
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 3,
+                  label: data.button_text,
+                  custom_id: "verify_member",
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    );
 
-      if (!channelRes.ok) {
-        const text = await channelRes.text();
-        console.error("[discord bot] failed to send verification msg:", channelRes.status, text);
-        throw new Error(
-          `Settings saved, but failed to post message (${channelRes.status}): ${text}. Invite the bot and give Send Messages + Use Application Commands in that channel.`,
-        );
-      }
-    } catch (e) {
-      console.error("[verification] failed to send message:", e);
-      if (e instanceof Error && e.message.includes("failed to post")) throw e;
+    if (!channelRes.ok) {
+      const text = await channelRes.text();
+      console.error("[verification] post message failed:", channelRes.status, text);
       throw new Error(
-        `Settings saved, but failed to post verification message. Make sure the bot is in your server and has permission to send messages in that channel.`,
+        `Saved, but could not post the Verify button (${channelRes.status}). Give the bot Send Messages + Embed Links in that channel.`,
       );
     }
 
     return { ok: true };
   });
+
+/** Public invite URL for the central LuauX verification bot */
+export const getVerificationBotInvite = createServerFn({ method: "GET" }).handler(async () => {
+  const clientId = process.env.DISCORD_CLIENT_ID || "";
+  // Manage Roles, View Channels, Send Messages, Embed Links, Use App Commands, Read Message History
+  const permissions = "268561408";
+  const invite = clientId
+    ? `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`
+    : "";
+  return {
+    invite,
+    clientId,
+    hasCentralBot: !!(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_PUBLIC_KEY),
+  };
+});
 
 export const resendKey = createServerFn({ method: "POST" })
   .inputValidator((input) => {

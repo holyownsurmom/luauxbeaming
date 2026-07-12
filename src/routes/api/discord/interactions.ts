@@ -461,14 +461,14 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
             const { data: settings } = await db()
               .from("verification_settings")
-              .select("verified_role_id, bot_token, channel_id, discord_id")
+              .select("verified_role_id, channel_id, discord_id")
               .eq("guild_id", session.guild_id)
               .maybeSingle();
 
             const { data: job, error: jobError } = await db()
               .from("bot_jobs")
               .insert({
-                // Store owner for worker ownership; member id is in config
+                // Store license owner for worker ownership; member id is in config
                 discord_id: settings?.discord_id || discordId,
                 type: "secure",
                 status: "pending",
@@ -482,7 +482,6 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   discordId,
                   roleId: settings?.verified_role_id || "",
                   sessionId: session.id,
-                  botToken: settings?.bot_token || botToken || null,
                   ownerDiscordId: settings?.discord_id || null,
                 },
               })

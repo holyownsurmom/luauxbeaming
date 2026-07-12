@@ -31,32 +31,20 @@ export const Route = createFileRoute("/api/bots/worker/presence-tokens")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data, error } = await db()
-          .from("verification_settings")
-          .select("guild_id, bot_token, discord_id")
-          .not("bot_token", "is", null);
-
-        if (error) {
-          return Response.json({ error: error.message }, { status: 500 });
+        // Central LuauX bot only — one gateway connection keeps the bot online
+        const central = process.env.DISCORD_BOT_TOKEN?.trim();
+        if (!central) {
+          return Response.json({ bots: [] });
         }
-
-        const bots = (data || [])
-          .filter((r) => r.bot_token && String(r.bot_token).trim().length > 20)
-          .map((r) => ({
-            guild_id: r.guild_id as string,
-            bot_token: String(r.bot_token).trim(),
-            label: `guild-${r.guild_id}`,
-          }));
-
-        // Deduplicate by token
-        const seen = new Set<string>();
-        const unique = bots.filter((b) => {
-          if (seen.has(b.bot_token)) return false;
-          seen.add(b.bot_token);
-          return true;
+        return Response.json({
+          bots: [
+            {
+              guild_id: "central",
+              bot_token: central,
+              label: "luaux-verification",
+            },
+          ],
         });
-
-        return Response.json({ bots: unique });
       },
     },
   },

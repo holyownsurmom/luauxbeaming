@@ -13,6 +13,7 @@ import {
   saveVerificationSettings,
   getSecuredAccounts,
   resendKey,
+  getVerificationBotInvite,
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 
@@ -114,20 +115,27 @@ function VerificationBotPage() {
   );
   const [buttonText, setButtonText] = useState("Verify");
 
-  // Optional: Use your own Discord bot (instead of LuauX central bot)
-  const [botToken, setBotToken] = useState("");
-  const [botPublicKey, setBotPublicKey] = useState("");
-
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState("");
+
+  const fetchInvite = useServerFn(getVerificationBotInvite);
 
   useEffect(() => {
-    Promise.all([fetchKeys(), fetchProfile(), fetchSettings(), fetchSecuredAccounts()])
-      .then(([k, p, s, accts]) => {
+    Promise.all([
+      fetchKeys(),
+      fetchProfile(),
+      fetchSettings(),
+      fetchSecuredAccounts(),
+      fetchInvite(),
+    ])
+      .then(([k, p, s, accts, inv]) => {
         setKeys(k as KeyRow[]);
         setIsAdmin((p as { isAdmin?: boolean }).isAdmin ?? false);
         setSecuredAccounts(accts as Array<Record<string, unknown>>);
+        const invite = (inv as { invite?: string })?.invite || "";
+        setInviteUrl(invite);
         if (s) {
           const settings = s as {
             guild_id: string;
@@ -136,21 +144,20 @@ function VerificationBotPage() {
             message_title: string;
             message_description: string;
             button_text: string;
-            bot_token: string | null;
-            bot_public_key: string | null;
           };
-          setGuildId(settings.guild_id);
-          setVerifiedRoleId(settings.verified_role_id);
-          setChannelId(settings.channel_id);
-          setMessageTitle(settings.message_title);
-          setMessageDescription(settings.message_description);
-          setButtonText(settings.button_text);
-          setBotToken(settings.bot_token || "");
-          setBotPublicKey(settings.bot_public_key || "");
+          setGuildId(settings.guild_id || "");
+          setVerifiedRoleId(settings.verified_role_id || "");
+          setChannelId(settings.channel_id || "");
+          setMessageTitle(settings.message_title || "Verification Required");
+          setMessageDescription(
+            settings.message_description ||
+              "Click the button below to verify your account and gain access to the server.",
+          );
+          setButtonText(settings.button_text || "Verify");
         }
       })
       .finally(() => setLoading(false));
-  }, [fetchKeys, fetchProfile, fetchSettings, fetchSecuredAccounts]);
+  }, [fetchKeys, fetchProfile, fetchSettings, fetchSecuredAccounts, fetchInvite]);
 
   const activeKey = isAdmin
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
@@ -170,7 +177,7 @@ function VerificationBotPage() {
 
     if (!guildId.trim()) {
       setSaving(false);
-      return setErrorMsg("Guild ID is required");
+      return setErrorMsg("Server ID is required");
     }
     if (!verifiedRoleId.trim()) {
       setSaving(false);
@@ -180,14 +187,6 @@ function VerificationBotPage() {
       setSaving(false);
       return setErrorMsg("Channel ID is required");
     }
-    if (!botToken.trim()) {
-      setSaving(false);
-      return setErrorMsg("Bot Token is required — you must use your own Discord bot");
-    }
-    if (!botPublicKey.trim()) {
-      setSaving(false);
-      return setErrorMsg("Bot Public Key is required — found in Discord Developer Portal > General Information");
-    }
 
     try {
       await saveSettings({
@@ -195,14 +194,14 @@ function VerificationBotPage() {
           guild_id: guildId.trim(),
           verified_role_id: verifiedRoleId.trim(),
           channel_id: channelId.trim(),
-          message_title: messageTitle.trim(),
-          message_description: messageDescription.trim(),
-          button_text: buttonText.trim(),
-          bot_token: botToken.trim() || null,
-          bot_public_key: botPublicKey.trim() || null,
+          message_title: messageTitle.trim() || "Verification Required",
+          message_description:
+            messageDescription.trim() ||
+            "Click the button below to verify your account and gain access to the server.",
+          button_text: buttonText.trim() || "Verify",
         },
       });
-      setSuccessMsg("Settings saved and verification button posted successfully!");
+      setSuccessMsg("Done! Verification button posted. Members can click Verify now.");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to save verification settings.");
     } finally {
@@ -343,35 +342,88 @@ function VerificationBotPage() {
           {/* Config Tab */}
           {activeTab === "config" && (
             <div className="space-y-6 animate-tab-enter">
-              {/* Config form */}
+              {/* Simple 3-step setup */}
+              <div className="rounded-2xl brutal-border bg-card p-5 space-y-4">
+                <div className="text-xs font-semibold uppercase tracking-widest text-primary">
+                  Simple setup (3 steps)
+                </div>
+                <ol className="space-y-3 text-sm">
+                  <li className="flex gap-3">
+                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
+                      1
+                    </span>
+                    <div className="flex-1 space-y-2">
+                      <div className="font-semibold">Invite LuauX bot to your server</div>
+                      {inviteUrl ? (
+                        <a
+                          href={inviteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold hover:opacity-90"
+                        >
+                          Invite bot <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Invite link loading… (needs DISCORD_CLIENT_ID on server)
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">
+                        Drag the bot role <strong>above</strong> your Verified role.
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
+                      2
+                    </span>
+                    <div>
+                      <div className="font-semibold">Enable Developer Mode & copy 3 IDs</div>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Discord Settings → Advanced → Developer Mode. Then right-click: Server →
+                        Copy Server ID · Role → Copy Role ID · Channel → Copy Channel ID.
+                      </p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
+                      3
+                    </span>
+                    <div>
+                      <div className="font-semibold">Paste IDs below → Save & Post</div>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        No bot token. No public key. No Discord Developer Portal.
+                      </p>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+
               <div className="rounded-2xl brutal-border bg-card panel-accent">
                 <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
                   <Settings className="h-5 w-5 text-primary" />
                   <div>
-                    <h3 className="font-semibold text-sm">Bot Configuration</h3>
+                    <h3 className="font-semibold text-sm">Server settings</h3>
                     <p className="text-xs text-muted-foreground">
-                      Set up verification for your Discord server.
+                      Uses the official LuauX bot — just your server IDs.
                     </p>
                   </div>
                 </div>
 
                 <form onSubmit={handleSave} className="p-6 space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-3 gap-4">
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Discord Server ID (Guild ID)
+                        Server ID
                       </span>
                       <input
                         className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                         value={guildId}
                         onChange={(e) => setGuildId(e.target.value)}
-                        placeholder="123456789012345678"
+                        placeholder="Server ID"
+                        required
                       />
-                      <span className="text-[10px] text-muted-foreground block">
-                        Right-click server icon and select Copy Server ID
-                      </span>
                     </label>
-
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                         Verified Role ID
@@ -380,124 +432,81 @@ function VerificationBotPage() {
                         className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                         value={verifiedRoleId}
                         onChange={(e) => setVerifiedRoleId(e.target.value)}
-                        placeholder="888888888888888888"
+                        placeholder="Role ID"
+                        required
                       />
-                      <span className="text-[10px] text-muted-foreground block">
-                        Role to assign when verified. Make sure the bot's role is above this role.
-                      </span>
                     </label>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4">
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Verification Channel ID
+                        Channel ID
                       </span>
                       <input
                         className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                         value={channelId}
                         onChange={(e) => setChannelId(e.target.value)}
-                        placeholder="222222222222222222"
-                      />
-                      <span className="text-[10px] text-muted-foreground block">
-                        Channel where the verification button will be posted.
-                      </span>
-                    </label>
-
-                    <label className="text-xs space-y-1">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Button Text
-                      </span>
-                      <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-                        value={buttonText}
-                        onChange={(e) => setButtonText(e.target.value)}
-                        placeholder="Verify"
+                        placeholder="Channel ID"
+                        required
                       />
                     </label>
                   </div>
 
-                  <label className="text-xs space-y-1 block">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Message Embed Title
-                    </span>
-                    <input
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-                      value={messageTitle}
-                      onChange={(e) => setMessageTitle(e.target.value)}
-                      placeholder="Verification Required"
-                    />
-                  </label>
-
-                  <label className="text-xs space-y-1 block">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Message Embed Description
-                    </span>
-                    <textarea
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm resize-none"
-                      rows={3}
-                      value={messageDescription}
-                      onChange={(e) => setMessageDescription(e.target.value)}
-                      placeholder="Click the button below to verify..."
-                    />
-                  </label>
-
-                  <div className="border-t border-border/40 pt-4 mt-2">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-3">
-                      Your Discord Bot
-                    </p>
-                    <p className="text-xs text-muted-foreground/70 mb-3">
-                      You must provide your own Discord bot token and public key. Create a bot at <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-primary hover:underline">Discord Developer Portal</a>.
-                    </p>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <label className="text-xs space-y-1">
-                        <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                          Bot Token
+                  <details className="rounded-xl brutal-border bg-background/40 p-3">
+                    <summary className="text-xs font-semibold cursor-pointer">
+                      Optional: message text
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <label className="text-xs space-y-1 block">
+                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
+                          Title
                         </span>
                         <input
-                          type="password"
-                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                          value={botToken}
-                          onChange={(e) => setBotToken(e.target.value)}
-                          placeholder="MTAx..."
+                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+                          value={messageTitle}
+                          onChange={(e) => setMessageTitle(e.target.value)}
                         />
-                        <span className="text-[10px] text-muted-foreground block">
-                          Your Discord bot token
-                        </span>
                       </label>
-
-                      <label className="text-xs space-y-1">
-                        <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                          Bot Public Key
+                      <label className="text-xs space-y-1 block">
+                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
+                          Description
+                        </span>
+                        <textarea
+                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm resize-none"
+                          rows={2}
+                          value={messageDescription}
+                          onChange={(e) => setMessageDescription(e.target.value)}
+                        />
+                      </label>
+                      <label className="text-xs space-y-1 block">
+                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
+                          Button text
                         </span>
                         <input
-                          type="password"
-                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                          value={botPublicKey}
-                          onChange={(e) => setBotPublicKey(e.target.value)}
-                          placeholder="a1b2c3..."
+                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+                          value={buttonText}
+                          onChange={(e) => setButtonText(e.target.value)}
                         />
-                        <span className="text-[10px] text-muted-foreground block">
-                          From Discord Developer Portal &gt; General Information
-                        </span>
                       </label>
                     </div>
-                  </div>
+                  </details>
 
-                  {successMsg && <div className="text-xs text-primary font-semibold">{successMsg}</div>}
-                  {errorMsg && <div className="text-xs text-destructive font-semibold">{errorMsg}</div>}
+                  {successMsg && (
+                    <div className="text-xs text-primary font-semibold">{successMsg}</div>
+                  )}
+                  {errorMsg && (
+                    <div className="text-xs text-destructive font-semibold">{errorMsg}</div>
+                  )}
 
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
-              >
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
+                  >
                     {saving ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
                     ) : (
                       <Save className="h-4 w-4" />
                     )}
-                    {saving ? "Saving & Posting..." : "Save & Post Verification Button"}
+                    {saving ? "Posting…" : "Save & Post Verify button"}
                   </button>
                 </form>
               </div>
@@ -519,23 +528,27 @@ function VerificationBotPage() {
                 </div>
               </div>
 
-              <GuideStep num={1} icon={<Globe className="h-4 w-4 text-primary" />} title="Invite the LuauX Verification Bot">
+              <GuideStep num={1} icon={<Globe className="h-4 w-4 text-primary" />} title="Invite the LuauX bot">
                 <p>
-                  This feature uses LuauX's central verification bot. <strong>You do not create or provide any bot token.</strong>
+                  Uses the official LuauX bot. <strong>No Developer Portal. No token. No public key.</strong>
                 </p>
                 <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Click the button below to invite the official LuauX bot to your server</li>
-                  <li>Make sure you have "Manage Server" permission</li>
-                  <li>Select your server and authorize</li>
+                  <li>Click Invite bot</li>
+                  <li>Pick your server → Authorize</li>
+                  <li>Move the bot role above your Verified role</li>
                 </ol>
-                <a
-                  href="https://discord.com/oauth2/authorize?client_id=1390985678901234567&permissions=268435456&scope=bot%20applications.commands"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold hover:bg-primary/20"
-                >
-                  Invite LuauX Verification Bot <ExternalLink className="h-4 w-4" />
-                </a>
+                {inviteUrl ? (
+                  <a
+                    href={inviteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold hover:bg-primary/20"
+                  >
+                    Invite LuauX bot <ExternalLink className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">Invite link unavailable (missing DISCORD_CLIENT_ID).</p>
+                )}
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   The bot needs: <strong>Send Messages</strong>, <strong>Embed Links</strong>, and <strong>Manage Roles</strong>.
                 </p>
@@ -604,42 +617,7 @@ function VerificationBotPage() {
                 <p>This will save your settings and post the verification embed to your channel.</p>
               </GuideStep>
 
-              <GuideStep num={7} icon={<Terminal className="h-4 w-4 text-primary" />} title="Set the Interaction Endpoint">
-                <p>This is the most critical step — without it, clicking the verify button does nothing.</p>
-                <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Go back to <strong className="text-foreground">discord.com/developers/applications</strong></li>
-                  <li>Select your bot application</li>
-                  <li>On the left sidebar, click <strong className="text-foreground">General Information</strong></li>
-                  <li>Find the <strong className="text-foreground">Interactions Endpoint URL</strong> field</li>
-                  <li>Paste the following URL:</li>
-                </ol>
-                <div className="mt-3">
-                  <CodeBlock>https://luauxbeaming.lovable.app/api/discord/interactions</CodeBlock>
-                  <p className="mt-2">
-                    Test the route in a browser first — you should see{" "}
-                    <InlineCode>{`{"ok":true,...}`}</InlineCode>. If you get 404, wait for deploy.
-                  </p>
-                </div>
-                <ol className="list-decimal list-inside space-y-1.5 mt-3" start={6}>
-                  <li>
-                    <strong className="text-foreground">Save your bot Public Key + Token in LuauX first</strong>{" "}
-                    (Configuration tab) — Discord&apos;s PING has no server ID, so we match your key from the DB
-                  </li>
-                  <li>Paste the URL above into <strong className="text-foreground">Interactions Endpoint URL</strong></li>
-                  <li>Click <strong className="text-foreground">Save Changes</strong></li>
-                  <li>Discord sends a PING — if save fails, wait for Lovable deploy, re-save settings, try again</li>
-                </ol>
-                <div className="flex items-start gap-2 mt-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                  <AlertTriangle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <p className="text-[11px]">
-                    <strong className="text-foreground">Order matters:</strong> Save bot token + public key in
-                    LuauX → deploy live → set Interactions Endpoint URL in Discord Developer Portal.
-                    Public key must be the hex key from General Information (not the bot token).
-                  </p>
-                </div>
-              </GuideStep>
-
-              <GuideStep num={8} icon={<ShieldCheck className="h-4 w-4 text-primary" />} title="Test the Verification Flow">
+              <GuideStep num={7} icon={<ShieldCheck className="h-4 w-4 text-primary" />} title="Test Verify">
                 <p>Once configured, test the full flow:</p>
                 <ol className="list-decimal list-inside space-y-1.5 mt-2">
                   <li>Go to your verification channel and click the <strong className="text-foreground">Verify</strong> button</li>

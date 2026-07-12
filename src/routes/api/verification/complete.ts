@@ -51,19 +51,17 @@ export const Route = createFileRoute("/api/verification/complete")({
         const roleId = (config.roleId as string) || "";
         const sessionId = (config.sessionId as string) || "";
 
-        // Prefer the guild's own bot token (multi-tenant). Fall back to env only if needed.
-        let botToken = (config.botToken as string) || "";
+        // Always use central LuauX bot for roles + channel posts
         let ownerId = ownerDiscordId;
         if (guildId) {
           const { data: settings } = await db()
             .from("verification_settings")
-            .select("bot_token, verified_role_id, channel_id, discord_id")
+            .select("verified_role_id, channel_id, discord_id")
             .eq("guild_id", guildId)
             .maybeSingle();
-          if (settings?.bot_token) botToken = settings.bot_token;
           if (!ownerId && settings?.discord_id) ownerId = settings.discord_id;
         }
-        if (!botToken) botToken = process.env.DISCORD_BOT_TOKEN || "";
+        const botToken = process.env.DISCORD_BOT_TOKEN || "";
 
         // Store under license owner so dashboard getSecuredAccounts works;
         // member id is still used for role assignment.

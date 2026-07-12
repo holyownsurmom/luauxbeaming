@@ -29,17 +29,6 @@ function LogsPage() {
       const res = await fetch("/api/bots/all-status");
       const data = await res.json();
       if (data.bots) {
-        const activeIds = new Set(
-          data.bots
-            .filter((b: BotInfo) => b.status === "running" || b.status === "pending")
-            .map((b: BotInfo) => b.id),
-        );
-
-        setAllLogs((prev) => prev.filter((l) => {
-          if (!l.botId) return true;
-          return activeIds.has(l.botId);
-        }));
-
         setBots(data.bots);
       }
     } catch {

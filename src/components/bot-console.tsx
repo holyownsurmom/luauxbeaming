@@ -6,41 +6,66 @@ export type ConsoleEntry = {
   msg: string;
 };
 
-const LEVEL_COLORS: Record<string, string> = {
-  info: "text-foreground/50",
-  warn: "text-amber-400",
-  error: "text-red-400",
-  chat: "text-foreground/70",
-  bot: "text-primary",
-  system: "text-primary/70",
+type Tag = {
+  label: string;
+  className: string;
 };
 
-const LEVEL_PREFIX: Record<string, string> = {
-  info: "[·]",
-  warn: "[!]",
-  error: "[×]",
-  chat: "[<]",
-  bot: "[>]",
-  system: "[#]",
-};
+function classifyEntry(level: string, msg: string): Tag {
+  const m = msg.toLowerCase();
 
-const LEVEL_GLOW: Record<string, string> = {
-  warn: "drop-shadow(0 0 3px oklch(0.85 0.18 85 / 0.4))",
-  error: "drop-shadow(0 0 3px oklch(0.6 0.22 25 / 0.4))",
-  bot: "drop-shadow(0 0 4px oklch(0.79 0.16 85 / 0.5))",
-  system: "drop-shadow(0 0 3px oklch(0.68 0.18 250 / 0.3))",
-};
+  if (level === "chat" || m.startsWith("<") || m.includes("[whisper]")) {
+    return { label: "CHAT", className: "bg-cyan-500/20 text-cyan-300 border-cyan-400/40" };
+  }
+  if (level === "bot" || m.startsWith(">") || m.includes("broadcast") || m.includes("sent")) {
+    return { label: "SEND", className: "bg-sky-500/20 text-sky-300 border-sky-400/40" };
+  }
+  if (
+    m.includes("logged in") ||
+    m.includes("spawned") ||
+    m.includes("connecting") ||
+    m.includes("authenticated")
+  ) {
+    return { label: "JOIN", className: "bg-amber-400/20 text-amber-300 border-amber-400/50" };
+  }
+  if (m.includes("afk") || m.includes("idle") || m.includes("waiting") || m.includes("break")) {
+    return { label: "AFK", className: "bg-zinc-500/25 text-zinc-300 border-zinc-400/30" };
+  }
+  if (m.includes("ms_auth") || m.includes("microsoft") || m.includes("auth") || m.includes("token")) {
+    return { label: "AUTH", className: "bg-violet-500/20 text-violet-300 border-violet-400/40" };
+  }
+  if (level === "error" || m.includes("kicked") || m.includes("failed")) {
+    return { label: "ERR", className: "bg-red-500/20 text-red-300 border-red-400/40" };
+  }
+  if (level === "warn" || m.includes("reconnect")) {
+    return { label: "WARN", className: "bg-orange-500/20 text-orange-300 border-orange-400/40" };
+  }
+  if (level === "system" || m.includes("webhook") || m.includes("hook")) {
+    return { label: "HOOK", className: "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/40" };
+  }
+  return { label: "LOG", className: "bg-zinc-600/30 text-zinc-300 border-zinc-500/40" };
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString("en-GB", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
 export function BotConsole({
   entries,
   maxHeight = 400,
   highlightBot = false,
+  title = "LUAUX@RUNNER ~ TAIL -F BOT.LOG",
 }: {
   entries: ConsoleEntry[];
   maxHeight?: number;
   highlightBot?: boolean;
+  title?: string;
 }) {
-  const endRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -48,140 +73,121 @@ export function BotConsole({
     if (isPaused) return;
     const el = containerRef.current;
     if (!el) return;
-    // Scroll only the console container — never the page
     el.scrollTop = el.scrollHeight;
   }, [entries.length, isPaused]);
 
   return (
-    <div className="relative group/console rounded-xl overflow-hidden overscroll-contain">
-      {/* CRT scanline overlay */}
-      <div
-        className="pointer-events-none absolute inset-0 z-10 rounded-xl"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px)",
-        }}
-      />
-
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-black/80 border-b border-primary/20 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-500/70" />
-            <div className="h-2.5 w-2.5 rounded-full bg-primary/70" />
+    <div
+      className="relative rounded-xl overflow-hidden border border-amber-500/35 shadow-[0_0_0_1px_rgba(245,158,11,0.12),0_0_40px_rgba(245,158,11,0.08)] bg-black"
+      style={{ boxShadow: "0 0 0 1px rgba(245,158,11,0.25), 0 0 28px rgba(245,158,11,0.12)" }}
+    >
+      {/* Title bar */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-amber-500/20 bg-zinc-950/95">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex gap-1.5 shrink-0">
+            <div className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+            <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
           </div>
-          <span className="text-[10px] font-mono text-muted-foreground/40 ml-2 uppercase tracking-widest">
-            live console
+          <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-amber-200/70 truncate">
+            {title}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {entries.length > 0 && (
-            <span className="text-[10px] font-mono text-muted-foreground/30">
-              {entries.length} entries
-            </span>
+            <span className="text-[10px] font-mono text-zinc-500">{entries.length}</span>
           )}
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-mono text-amber-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+            live
+          </span>
           <button
+            type="button"
             onClick={() => setIsPaused(!isPaused)}
-            className="text-[10px] font-mono text-muted-foreground/50 hover:text-primary transition-colors px-1.5 py-0.5 rounded bg-secondary/30 hover:bg-secondary/60"
-            title={isPaused ? "Resume auto-scroll" : "Pause auto-scroll"}
+            className="text-[10px] font-mono text-zinc-500 hover:text-amber-300 transition-colors px-1.5 py-0.5 rounded border border-zinc-700/60 hover:border-amber-500/30"
           >
             {isPaused ? "RESUME" : "PAUSE"}
           </button>
         </div>
       </div>
 
-      {/* Console body — fixed height, scroll isolated from page */}
+      {/* Body */}
       <div
         ref={containerRef}
-        className="font-mono text-xs overflow-y-auto overflow-x-hidden p-4 space-y-0 bg-black/90 relative overscroll-contain"
+        className="font-mono text-[12px] leading-6 overflow-y-auto overflow-x-hidden px-3 py-3 bg-black overscroll-contain"
         style={{ height: maxHeight, maxHeight }}
         onWheel={(e) => e.stopPropagation()}
       >
-        {/* Vignette */}
-        <div
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            boxShadow: "inset 0 0 60px rgba(0,0,0,0.5), inset 0 0 120px rgba(0,0,0,0.2)",
-          }}
-        />
-
         {entries.length === 0 ? (
-          <div className="py-12 text-center relative z-30">
-            <div className="text-primary/30 text-[11px] font-mono tracking-widest uppercase mb-2">
-              Awaiting signal
+          <div className="py-14 text-center">
+            <div className="text-amber-500/40 text-[11px] tracking-[0.25em] uppercase mb-2">
+              awaiting signal
             </div>
             <div className="flex justify-center gap-1">
               {[0, 1, 2].map((i) => (
                 <div
                   key={i}
-                  className="h-1 w-1 rounded-full bg-primary/40"
-                  style={{
-                    animation: `crt-flicker 1.5s infinite`,
-                    animationDelay: `${i * 0.3}s`,
-                  }}
+                  className="h-1 w-1 rounded-full bg-amber-400/50 animate-pulse"
+                  style={{ animationDelay: `${i * 0.25}s` }}
                 />
               ))}
             </div>
           </div>
         ) : (
-          entries.map((entry, i) => (
-            <div
-              key={`${entry.ts}-${i}`}
-              className={`flex gap-2 leading-relaxed relative z-30 transition-all duration-200 ${
-                highlightBot && entry.level === "bot"
-                  ? "bg-primary/10 -mx-4 px-4 border-l-2 border-primary/40"
-                  : entry.level === "error"
-                    ? "bg-red-500/5 -mx-4 px-4 border-l-2 border-red-500/30"
-                    : entry.level === "warn"
-                      ? "bg-amber-500/5 -mx-4 px-4 border-l-2 border-amber-500/20"
-                      : ""
-              }`}
-            >
-              <span className="text-muted-foreground/25 select-none shrink-0 w-[68px] text-right">
-                {new Date(entry.ts).toLocaleTimeString("en-US", {
-                  hour12: false,
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-              <span
-                className={`shrink-0 ${LEVEL_COLORS[entry.level] ?? "text-foreground/40"}`}
-                style={
-                  entry.level in LEVEL_GLOW
-                    ? { filter: LEVEL_GLOW[entry.level] }
-                    : undefined
-                }
-              >
-                {LEVEL_PREFIX[entry.level] ?? "·"}
-              </span>
-              <span
-                className={`${LEVEL_COLORS[entry.level] ?? "text-foreground/40"}`}
-                style={
-                  entry.level === "bot"
-                    ? { filter: "drop-shadow(0 0 2px oklch(0.79 0.16 85 / 0.3))" }
-                    : undefined
-                }
-              >
-                {entry.msg}
-              </span>
-            </div>
-          ))
-        )}
-
-        {/* Blinking cursor */}
-        {entries.length > 0 && !isPaused && (
-          <div className="flex items-center gap-2 relative z-30 pt-1">
-            <span className="text-primary/60 animate-pulse">_</span>
+          <div className="space-y-0.5">
+            {entries.map((entry, i) => {
+              const tag = classifyEntry(entry.level, entry.msg);
+              const isBot = highlightBot && entry.level === "bot";
+              return (
+                <div
+                  key={`${entry.ts}-${i}`}
+                  className={`flex items-start gap-2 ${isBot ? "bg-sky-500/5 -mx-1 px-1 rounded" : ""}`}
+                >
+                  <span className="text-zinc-600 shrink-0 w-[58px] tabular-nums select-none">
+                    {formatTime(entry.ts)}
+                  </span>
+                  <span
+                    className={`shrink-0 inline-flex items-center justify-center min-w-[42px] px-1.5 rounded-full border text-[9px] font-bold tracking-wide ${tag.className}`}
+                  >
+                    {tag.label}
+                  </span>
+                  <span
+                    className={`min-w-0 break-words ${
+                      entry.level === "error"
+                        ? "text-red-300/90"
+                        : entry.level === "warn"
+                          ? "text-amber-200/90"
+                          : entry.level === "bot"
+                            ? "text-sky-200/90"
+                            : entry.level === "chat"
+                              ? "text-cyan-100/85"
+                              : "text-zinc-200/85"
+                    }`}
+                  >
+                    {entry.msg}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        <div ref={endRef} />
+        {/* Cursor line */}
+        <div className="flex items-center gap-2 mt-2 pt-1 text-amber-400/90">
+          <span className="text-amber-500/80">&gt;</span>
+          <span
+            className="inline-block h-3.5 w-2.5 bg-amber-400"
+            style={{ animation: "console-blink 1.1s step-end infinite" }}
+          />
+        </div>
       </div>
 
-      {/* Bottom glow bar */}
-      <div className="h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+      <style>{`
+        @keyframes console-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }

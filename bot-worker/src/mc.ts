@@ -22,6 +22,9 @@ const CONNECTION_TIMEOUT_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 25;
 const RECONNECT_BASE_DELAY = 5000;
 
+/** Only one live socket per Minecraft account (prevents multi-login + Invalid sequence storms) */
+const activeAccounts = new Map<string, string>(); // uuid/name → jobId
+
 let mineflayerModule: typeof import("mineflayer") | null = null;
 
 async function loadMineflayer() {
@@ -344,9 +347,32 @@ export async function runMcBot(
     }
   }
 
+  // Account lock key (prefer UUID)
+  const accountKey = (
+    msSession?.id ||
+    ssidProfile?.id ||
+    msSession?.name ||
+    ssidProfile?.name ||
+    config.username ||
+    config.label ||
+    jobId
+  )
+    .toString()
+    .replace(/-/g, "")
+    .toLowerCase();
+
+  const existingJob = activeAccounts.get(accountKey);
+  if (existingJob && existingJob !== jobId) {
+    const msg = `Account already in use by another bot job (${existingJob.slice(0, 8)}…). Stop that bot first.`;
+    await log("error", msg);
+    await updateJob(jobId, "error", msg);
+    return { status: "error", error: msg };
+  }
+  activeAccounts.set(accountKey, jobId);
+
   await log(
     "system",
-    `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode v2)...`,
+    `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode v3)...`,
   );
 
   const mineflayer = await loadMineflayer();
@@ -365,6 +391,12 @@ export async function runMcBot(
   let shufflePosition = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentBot: any = null;
+
+  const releaseAccount = () => {
+    if (activeAccounts.get(accountKey) === jobId) {
+      activeAccounts.delete(accountKey);
+    }
+  };
 
   const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
 
@@ -403,13 +435,26 @@ export async function runMcBot(
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function startAntiAfk(_bot: any) {
-    // DISABLED: look/move/control packets cause "Invalid sequence" on modern SMP
-    // (ViaVersion / Paper / DonutSMP). Stay still — only chat keeps the session useful.
-    if (antiAfkTimer) {
-      clearTimeout(antiAfkTimer);
-      antiAfkTimer = null;
-    }
+  function startAntiAfk(bot: any) {
+    // Minimal anti-AFK: ONLY slow head look via bot.look (no walk/jump/sneak).
+    // Walking control packets cause Invalid sequence on Via/Donut when multi-connected.
+    if (antiAfkTimer) clearTimeout(antiAfkTimer);
+    const tick = () => {
+      if (stopped || abortSignal.aborted || currentBot !== bot) return;
+      try {
+        if (bot.entity && Math.random() < 0.4) {
+          const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.25;
+          const pitch = Math.max(-0.4, Math.min(0.3, (Math.random() - 0.5) * 0.15));
+          bot.look(yaw, pitch, false);
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!stopped && currentBot === bot) {
+        antiAfkTimer = setTimeout(tick, randomBetween(15000, 35000));
+      }
+    };
+    antiAfkTimer = setTimeout(tick, randomBetween(20000, 40000));
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -615,8 +660,8 @@ export async function runMcBot(
       checkTimeoutInterval: 60_000,
       keepAlive: true,
       respawn: true,
-      // MUST keep physics plugin loaded — it sends teleport_confirm (1.9+).
-      // Disabling it causes "Invalid sequence" kicks on Paper/Via/DonutSMP.
+      // physics plugin MUST load (teleport_confirm). physicsEnabled true = simulate ticks.
+      // Keep true so position stays in sync with server teleports on Via/Donut.
       physicsEnabled: true,
       viewDistance: "tiny",
       brand: "vanilla",
@@ -769,12 +814,12 @@ export async function runMcBot(
       log("info", "Spawned in world (idle mode — no movement packets)").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Sit completely still; only chat after settle
+      // Sit completely still; only chat after long settle (no movement AFK)
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
-      }, randomBetween(25000, 40000));
+      }, randomBetween(35000, 55000));
     });
 
     bot.on("chat", (username: string, message: string) => {
@@ -850,6 +895,7 @@ export async function runMcBot(
         clearInterval(checkDone);
         cleanup();
         disconnectBot();
+        releaseAccount();
         if (cleanupTimer) clearInterval(cleanupTimer);
         if (abortSignal.aborted && terminal.status === "completed") {
           terminal = { status: "stopped", error: "Stopped by user" };

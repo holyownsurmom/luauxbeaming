@@ -17,6 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVerificationBotRouteImport } from './routes/dashboard.verification-bot'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
+import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
 import { Route as DashboardPurchaseRouteImport } from './routes/dashboard.purchase'
 import { Route as DashboardLogsRouteImport } from './routes/dashboard.logs'
 import { Route as DashboardDiscordSpamRouteImport } from './routes/dashboard.discord-spam'
@@ -94,6 +95,11 @@ const DashboardVerificationBotRoute =
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSupportRoute = DashboardSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardPurchaseRoute = DashboardPurchaseRouteImport.update({
@@ -667,6 +673,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/support': {
+      id: '/dashboard/support'
+      path: '/support'
+      fullPath: '/dashboard/support'
+      preLoaderRoute: typeof DashboardSupportRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/purchase': {
       id: '/dashboard/purchase'
       path: '/purchase'
@@ -938,6 +951,7 @@ interface DashboardRouteChildren {
   DashboardLogsRoute: typeof DashboardLogsRoute
   DashboardPurchaseRoute: typeof DashboardPurchaseRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardSupportRoute: typeof DashboardSupportRoute
   DashboardVerificationBotRoute: typeof DashboardVerificationBotRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
@@ -951,6 +965,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardLogsRoute: DashboardLogsRoute,
   DashboardPurchaseRoute: DashboardPurchaseRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardSupportRoute: DashboardSupportRoute,
   DashboardVerificationBotRoute: DashboardVerificationBotRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }

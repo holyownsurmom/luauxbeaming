@@ -79,27 +79,24 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           config.uuid = account.uuid || body.uuid || "";
         }
 
-        // Stop any other active MC jobs for this account so the server doesn't
-        // kick for "logged in from another location" / duplicate sessions.
+        // Nuke ALL other active MC jobs for this user before starting a new one.
+        // Multiple sockets for the same premium account → Invalid sequence on Donut/Via.
         const { data: existingJobs } = await db
           .from("bot_jobs")
           .select("id, config, status")
           .eq("discord_id", user.id)
           .eq("type", "mc")
-          .in("status", ["pending", "running"]);
+          .in("status", ["pending", "running", "stopping"]);
 
-        const toStop = (existingJobs || []).filter((j) => {
-          const cfg = (j.config || {}) as { accountId?: string };
-          return cfg.accountId === body.accountId;
-        });
-
-        if (toStop.length > 0) {
+        if (existingJobs && existingJobs.length > 0) {
           await db
             .from("bot_jobs")
-            .update({ status: "stopping" })
+            .update({ status: "stopped", error: "Replaced by new launch" })
+            .eq("discord_id", user.id)
+            .eq("type", "mc")
             .in(
               "id",
-              toStop.map((j) => j.id),
+              existingJobs.map((j) => j.id),
             );
         }
 

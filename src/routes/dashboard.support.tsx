@@ -6,6 +6,11 @@ import {
   Key, Wifi, RefreshCw,
 } from "lucide-react";
 
+export const Route = createFileRoute("/dashboard/support")({
+  head: () => ({ meta: [{ title: "Support — LuauX" }] }),
+  component: SupportPage,
+});
+
 const DISCORD_INVITE = "https://discord.gg/n6nEcvwzYQ";
 
 type FAQItem = {

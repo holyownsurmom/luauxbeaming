@@ -1,15 +1,24 @@
-// Simple cookie jar for maintaining session across requests
+// Cookie jar that correctly handles multi Set-Cookie headers
 export class CookieJar {
   private cookies = new Map<string, string>();
 
   setFromResponse(res: Response) {
-    const h = res.headers.get("set-cookie");
-    if (!h) return;
-    for (const entry of h.split(",")) {
-      const parts = entry.split(";")[0].trim();
-      const eqIdx = parts.indexOf("=");
+    const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+    const entries =
+      typeof headers.getSetCookie === "function"
+        ? headers.getSetCookie()
+        : (() => {
+            const single = res.headers.get("set-cookie");
+            return single ? [single] : [];
+          })();
+
+    for (const entry of entries) {
+      const first = entry.split(";")[0];
+      const eqIdx = first.indexOf("=");
       if (eqIdx === -1) continue;
-      this.cookies.set(parts.slice(0, eqIdx).trim(), parts.slice(eqIdx + 1));
+      const name = first.slice(0, eqIdx).trim();
+      const value = first.slice(eqIdx + 1);
+      if (name) this.cookies.set(name, value);
     }
   }
 
@@ -27,26 +36,39 @@ export async function fetchWithJar(
 ): Promise<Response> {
   const headers = new Headers(init.headers);
   const jarCookies = jar.getHeader();
-  if (jarCookies) {
-    const existing = headers.get("cookie");
-    if (!existing) headers.set("cookie", jarCookies);
+  if (jarCookies && !headers.get("cookie")) {
+    headers.set("cookie", jarCookies);
   }
 
-  const res = await fetch(url, { ...init, headers, redirect: "manual" });
-  jar.setFromResponse(res);
+  let currentUrl = url;
+  let currentInit: RequestInit = { ...init, headers, redirect: "manual" };
+  let redirects = 0;
 
-  if (res.status >= 301 && res.status <= 308) {
-    const loc = res.headers.get("location");
-    if (loc) {
-      const redirectUrl = new URL(loc, url).toString();
-      return fetchWithJar(jar, redirectUrl, {
-        method: "GET",
-        headers: { cookie: jar.getHeader() },
-      });
+  while (true) {
+    const res = await fetch(currentUrl, currentInit);
+    jar.setFromResponse(res);
+
+    if (res.status >= 301 && res.status <= 308 && redirects < 10) {
+      const loc = res.headers.get("location");
+      if (!loc) return res;
+      redirects++;
+      currentUrl = new URL(loc, currentUrl).toString();
+      const method = (currentInit.method || "GET").toUpperCase();
+      if ((res.status === 301 || res.status === 302) && method !== "GET" && method !== "HEAD") {
+        currentInit = {
+          method: "GET",
+          headers: { cookie: jar.getHeader() },
+          redirect: "manual",
+        };
+      } else {
+        const nextHeaders = new Headers(currentInit.headers);
+        nextHeaders.set("cookie", jar.getHeader());
+        currentInit = { ...currentInit, headers: nextHeaders, redirect: "manual" };
+      }
+      continue;
     }
+    return res;
   }
-
-  return res;
 }
 
 export type AuthMethodInfo =
@@ -74,7 +96,7 @@ function decodeUnicodeEscapes(s: string): string {
 export async function getLiveData(jar?: CookieJar): Promise<LiveData> {
   const useJar = jar ?? new CookieJar();
   const res = await fetchWithJar(useJar, "https://login.live.com", {
-    method: "POST",
+    method: "GET",
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -85,29 +107,48 @@ export async function getLiveData(jar?: CookieJar): Promise<LiveData> {
   });
   const text = await res.text();
 
-  const urlPost = extractValue(
-    text,
-    /https:\/\/login\.live\.com\/ppsecure\/post\.srf\?contextid=[0-9a-zA-Z]{1,100}&opid=[0-9a-zA-Z]{1,100}&bk=[a-zA-Z0-9]{1,100}&uaid=[0-9a-zA-Z]{1,100}&pid=0/,
-  );
+  const urlPost =
+    extractValue(
+      text,
+      /https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/,
+    ) ||
+    extractValue(text, /urlPost['"]\s*:\s*['"]([^'"]+)['"]/);
+
   if (!urlPost) throw new Error("Failed to extract urlPost from login.live.com");
 
-  const ppftMatch = extractValue(text, /value=\\?"([^"]+)"/);
+  const ppftMatch =
+    extractValue(text, /name="PPFT"[^>]*value="([^"]+)"/) ||
+    extractValue(text, /sFTTag.*?value=\\"([^\\"]+)/) ||
+    extractValue(text, /value=\\?"([^"]+)"/);
+
   if (!ppftMatch) throw new Error("Failed to extract PPFT from login.live.com");
 
-  return { urlPost, ppft: ppftMatch };
+  return { urlPost: decodeUnicodeEscapes(urlPost), ppft: ppftMatch };
 }
 
 /** Send auth request to Microsoft to check available verification methods */
 export async function sendAuth(email: string): Promise<{
   credentials: Record<string, unknown> | null;
   raw: Record<string, unknown>;
+  flowToken?: string;
 }> {
+  const jar = new CookieJar();
+  // Warm session + get a fresh flow token when possible
+  let flowToken = "";
+  try {
+    const live = await getLiveData(jar);
+    flowToken = live.ppft;
+  } catch {
+    /* continue with empty flow token */
+  }
+
   const res = await fetch("https://login.live.com/GetCredentialType.srf", {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json; charset=utf-8",
       Referer: "https://login.live.com/",
+      Cookie: jar.getHeader(),
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     },
@@ -115,8 +156,7 @@ export async function sendAuth(email: string): Promise<{
       checkPhones: true,
       country: "",
       federationFlags: 3,
-      flowToken:
-        "-DgAlkPotvHRxxasQViSq!n6!RCUSpfUm9bdVClpM6KR98HGq7plohQHfFANfGn4P7PN2GnUuAtn6Nu3dwU!Tisic5PrgO7w8Rn*LCKKQhcTDUPMM2QJJdjr4QkcdUXmPnuK!JOqW7GdIx3*icazjg5ZaS8w1ily5GLFRwdvobIOBDZP11n4dWICmPafkNpj5fKAMg3!ZY2EhKB7pVJ8ir4A$",
+      flowToken: flowToken || undefined,
       forceotclogin: true,
       isCookieBannerShown: true,
       isExternalFederationDisallowed: true,
@@ -132,7 +172,12 @@ export async function sendAuth(email: string): Promise<{
   });
   const data = (await res.json()) as Record<string, unknown>;
   const creds = (data?.Credentials as Record<string, unknown>) ?? null;
-  return { credentials: creds, raw: data };
+  const returnedFlow =
+    (data?.FlowToken as string) ||
+    (data?.flowToken as string) ||
+    flowToken ||
+    undefined;
+  return { credentials: creds, raw: data, flowToken: returnedFlow };
 }
 
 /** Detect which auth method is available for the account */
@@ -141,7 +186,7 @@ export function detectAuthMethod(
 ): AuthMethodInfo {
   if (!credentials) return { method: "none", detail: "No credentials returned" };
 
-  if ("RemoteNgcParams" in credentials) {
+  if ("RemoteNgcParams" in credentials && credentials.RemoteNgcParams) {
     const ngc = credentials.RemoteNgcParams as Record<string, unknown>;
     const entropy =
       (ngc.Entropy as string) ??
@@ -154,13 +199,24 @@ export function detectAuthMethod(
   if ("OtcLoginEligibleProofs" in credentials) {
     const proofs = credentials.OtcLoginEligibleProofs as Array<Record<string, string>>;
     if (proofs && proofs.length > 0) {
+      const emailProof =
+        proofs.find((p) => /@/.test(p.display || "") || /email/i.test(p.type || "")) ||
+        proofs[0];
       return {
         method: "email_otp",
-        securityEmail: proofs[0].display ?? "unknown",
-        flowToken: proofs[0].data ?? "",
+        securityEmail: emailProof.display ?? "unknown",
+        flowToken: emailProof.data ?? "",
       };
     }
     return { method: "none", detail: "No eligible proofs" };
+  }
+
+  // HasPassword / other fields only — no OTP path
+  if (credentials.HasPassword === true || credentials.PrefCredential === 1) {
+    return {
+      method: "none",
+      detail: "Account requires password login only (no email OTP / recovery email).",
+    };
   }
 
   return { method: "none", detail: "No auth methods available" };
@@ -182,6 +238,8 @@ export async function sendOtt(
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: "https://login.live.com",
         "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
       },
       body: new URLSearchParams({
         ps: "2",
@@ -196,17 +254,23 @@ export async function sendOtt(
     const loginText = await loginRes.text();
 
     // Step 2: Parse MFA page for proof list
-    const actionMatch = loginText.match(/action="([^"]+)"/);
+    const actionMatch =
+      loginText.match(/action="([^"]+)"/i) ||
+      loginText.match(/urlPost['"]\s*:\s*['"]([^'"]+)['"]/);
     if (!actionMatch) {
       console.error("[sendOtt] Failed to parse action URL");
       return false;
     }
-    const action = actionMatch[1];
+    const action = decodeUnicodeEscapes(actionMatch[1]);
 
-    const iptMatch = loginText.match(/name="ipt"[^>]+value="([^"]+)"/);
-    const ppridMatch = loginText.match(/name="pprid"[^>]+value="([^"]+)"/);
+    const iptMatch =
+      loginText.match(/name="ipt"[^>]*value="([^"]+)"/i) ||
+      loginText.match(/"ipt"\s*:\s*"([^"]+)"/);
+    const ppridMatch =
+      loginText.match(/name="pprid"[^>]*value="([^"]+)"/i) ||
+      loginText.match(/"pprid"\s*:\s*"([^"]+)"/);
     if (!iptMatch || !ppridMatch) {
-      console.error("[sendOtt] Failed to parse ipt/pprid");
+      console.error("[sendOtt] Failed to parse ipt/pprid — may need password or account locked");
       return false;
     }
     const ipt = decodeURIComponent(iptMatch[1]);
@@ -280,6 +344,10 @@ export async function sendOtt(
       }),
     });
 
+    if (!otpRes.ok) {
+      const t = await otpRes.text().catch(() => "");
+      console.error("[sendOtt] SendOtt failed:", otpRes.status, t.slice(0, 200));
+    }
     return otpRes.ok;
   } catch (e) {
     console.error("[sendOtt] Error:", e);

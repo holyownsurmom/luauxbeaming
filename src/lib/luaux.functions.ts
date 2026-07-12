@@ -533,3 +533,28 @@ export const revokeKey = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export const resetMyAccess = createServerFn({ method: "POST" }).handler(async () => {
+  const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+  const user = await requireUser();
+  const isAdm = await isAdminSession();
+  if (!isAdm) throw new Error("Admin only");
+  const db = admin();
+
+  await db
+    .from("profiles")
+    .update({
+      active_plan_id: null,
+      plan_expires_at: null,
+      bot_hours_remaining: 0,
+    })
+    .eq("discord_id", user.id);
+
+  await db
+    .from("verification_keys")
+    .update({ expires_at: new Date().toISOString() })
+    .eq("discord_id", user.id)
+    .gt("expires_at", new Date().toISOString());
+
+  return { ok: true };
+});

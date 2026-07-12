@@ -14,7 +14,7 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { getMyProfile } from "@/lib/luaux.functions";
+import { getMyProfile, resetMyAccess } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +41,7 @@ const WORKSPACE: { id: Tab; label: string; icon: React.ComponentType<{ className
 
 function SettingsPage() {
   const fetchProfile = useServerFn(getMyProfile);
+  const doResetAccess = useServerFn(resetMyAccess);
   const s = useSettings();
   const [data, setData] = useState<{
     profile: {
@@ -377,9 +378,34 @@ function SettingsPage() {
           {tab === "admin" && (
             <Panel title="Admin Access" subtitle="Enter the admin password to unlock all features.">
               {isAdmin ? (
-                <div className="rounded-xl bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-                  <ShieldCheck className="h-4 w-4 inline mr-1" />
-                  Admin mode active. All features unlocked.
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
+                    <ShieldCheck className="h-4 w-4 inline mr-1" />
+                    Admin mode active. All features unlocked.
+                  </div>
+
+                  <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
+                    <div>
+                      <div className="text-xs font-semibold">Reset My Access</div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Clears your plan, bot hours, and plugin keys so you can test the payment bypass flow from scratch.
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm("This will remove your plan, hours, and all keys. Continue?")) return;
+                        try {
+                          await doResetAccess();
+                          window.location.reload();
+                        } catch (e) {
+                          alert(e instanceof Error ? e.message : "Failed");
+                        }
+                      }}
+                      className="rounded-lg bg-destructive/10 border border-destructive/20 text-destructive px-5 py-2 text-xs font-semibold hover:bg-destructive/20 transition-all"
+                    >
+                      Reset My Access
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">

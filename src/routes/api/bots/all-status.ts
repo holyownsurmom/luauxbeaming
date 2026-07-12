@@ -16,18 +16,31 @@ export const Route = createFileRoute("/api/bots/all-status")({
           .in("status", ["pending", "running", "stopping", "stopped", "error"])
           .order("created_at", { ascending: false });
 
-        const bots = (jobs ?? []).map((j) => ({
-          id: j.id,
-          type: j.type,
-          status: j.status,
-          label:
-            j.type === "mc"
-              ? (j.config as Record<string, unknown>)?.label || "MC Bot"
-              : `Spam-${(j.config as Record<string, unknown>)?.channelId || "???"}`,
-          error: j.error,
-          startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
-          config: j.config,
-        }));
+        const bots = (jobs ?? []).map((j) => {
+          const cfg = (j.config || {}) as Record<string, unknown>;
+          let label = "Bot";
+          if (j.type === "mc") {
+            label = (cfg.label as string) || "MC Bot";
+          } else if (j.type === "discord") {
+            const subType = cfg.subType as string | undefined;
+            if (subType === "autoreply") {
+              label = `Auto-Reply`;
+            } else {
+              label = `Spam-${(cfg.channelId as string) || "???"}`;
+            }
+          } else if (j.type === "secure") {
+            label = `Secure-${(cfg.mcUsername as string) || "???"}`;
+          }
+          return {
+            id: j.id,
+            type: j.type,
+            status: j.status,
+            label,
+            error: j.error,
+            startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
+            config: j.config,
+          };
+        });
 
         return Response.json({ bots });
       },

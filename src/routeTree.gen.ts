@@ -47,6 +47,7 @@ import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
 import { Route as ApiBotsMcStartRouteImport } from './routes/api/bots/mc/start'
 import { Route as ApiBotsMcPingRouteImport } from './routes/api/bots/mc/ping'
+import { Route as ApiBotsMcClearAllRouteImport } from './routes/api/bots/mc/clear-all'
 import { Route as ApiBotsDiscordStopRouteImport } from './routes/api/bots/discord/stop'
 import { Route as ApiBotsDiscordStatusRouteImport } from './routes/api/bots/discord/status'
 import { Route as ApiBotsDiscordStartRouteImport } from './routes/api/bots/discord/start'
@@ -232,6 +233,11 @@ const ApiBotsMcStopRoute = ApiBotsMcStopRouteImport.update({
   path: '/api/bots/mc/stop',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsMcClearAllRoute = ApiBotsMcClearAllRouteImport.update({
+  id: '/api/bots/mc/clear-all',
+  path: '/api/bots/mc/clear-all',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBotsMcStatusRoute = ApiBotsMcStatusRouteImport.update({
   id: '/api/bots/mc/status',
   path: '/api/bots/mc/status',
@@ -321,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
@@ -366,6 +373,7 @@ export interface FileRoutesByTo {
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
@@ -413,6 +421,7 @@ export interface FileRoutesById {
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
@@ -461,6 +470,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
+    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/status'
@@ -506,6 +516,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
+    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/status'
@@ -552,6 +563,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
+    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/status'
@@ -589,6 +601,7 @@ export interface RootRouteChildren {
   ApiBotsMcStartRoute: typeof ApiBotsMcStartRoute
   ApiBotsMcStatusRoute: typeof ApiBotsMcStatusRoute
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
+  ApiBotsMcClearAllRoute: typeof ApiBotsMcClearAllRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
   ApiBotsWorkerPollRoute: typeof ApiBotsWorkerPollRoute
   ApiBotsWorkerStatusRoute: typeof ApiBotsWorkerStatusRoute
@@ -843,6 +856,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsMcStopRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/mc/clear-all': {
+      id: '/api/bots/mc/clear-all'
+      path: '/api/bots/mc/clear-all'
+      fullPath: '/api/bots/mc/clear-all'
+      preLoaderRoute: typeof ApiBotsMcClearAllRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/mc/status': {
       id: '/api/bots/mc/status'
       path: '/api/bots/mc/status'
@@ -969,6 +989,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcStartRoute: ApiBotsMcStartRoute,
   ApiBotsMcStatusRoute: ApiBotsMcStatusRoute,
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
+  ApiBotsMcClearAllRoute: ApiBotsMcClearAllRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
   ApiBotsWorkerStatusRoute: ApiBotsWorkerStatusRoute,

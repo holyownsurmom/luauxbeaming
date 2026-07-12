@@ -413,21 +413,20 @@ function BotsPage() {
   const stopAndClearAll = async () => {
     setStoppingId("all");
     try {
-      const targets = runningBots.filter(
-        (b) => b.status === "running" || b.status === "pending",
-      );
-      await Promise.all(
-        targets.map((b) =>
-          fetch("/api/bots/mc/stop", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ botId: b.id }),
-          }).catch(() => {}),
-        ),
-      );
+      // Nuke: force-stop every MC job + hide stopped/error from Active list + wipe logs
+      const res = await fetch("/api/bots/mc/clear-all", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Clear all failed");
       setConsoleEntries([]);
       setSelectedBotId(null);
+      selectedBotIdRef.current = null;
+      setMsAuth(null);
+      setMsAuthWaiting(false);
+      setRunningBots([]);
+      toast.success("All MC bots nuked");
       await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Clear all failed");
     } finally {
       setStoppingId(null);
     }

@@ -32,6 +32,30 @@ export type Database = {
         }
         Relationships: []
       }
+      blacklisted_ips: {
+        Row: {
+          created_at: string | null
+          id: string
+          ip: string
+          reason: string | null
+          source_discord_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          ip: string
+          reason?: string | null
+          source_discord_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          ip?: string
+          reason?: string | null
+          source_discord_id?: string
+        }
+        Relationships: []
+      }
       blacklisted_users: {
         Row: {
           created_at: string | null
@@ -356,6 +380,27 @@ export type Database = {
           new_email?: string | null
           new_password?: string | null
           new_recovery_code?: string | null
+        }
+        Relationships: []
+      }
+      user_login_ips: {
+        Row: {
+          created_at: string | null
+          discord_id: string
+          id: string
+          ip: string
+        }
+        Insert: {
+          created_at?: string | null
+          discord_id: string
+          id?: string
+          ip: string
+        }
+        Update: {
+          created_at?: string | null
+          discord_id?: string
+          id?: string
+          ip?: string
         }
         Relationships: []
       }

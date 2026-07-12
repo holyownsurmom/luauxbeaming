@@ -26,8 +26,9 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
     !!profile?.active_plan_id &&
     !!profile?.plan_expires_at &&
     new Date(profile.plan_expires_at).getTime() > Date.now();
-  const sessionData = await getSessionData();
-  const isAdmin = sessionData.isAdmin === true;
+  const { isAdminSession } = await import("./luaux-server.server");
+  const isAdmin = await isAdminSession();
+  // Admin UI bypass only — never invent a paid plan for display
   return { profile, plan, active: active || isAdmin, isAdmin };
 });
 

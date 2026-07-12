@@ -42,24 +42,23 @@ export async function requireUser(): Promise<LuauxSessionUser> {
 export async function isAdminSession(): Promise<boolean> {
   const data = await getSessionData();
   if (data.isAdmin !== true) return false;
-  // Re-validate against admins table when possible (session flag alone is not enough)
+  const user = data.user;
+  if (!user?.id) return false;
+  // Must re-validate against admins table — never trust cookie alone after re-login bugs
   try {
-    const user = data.user;
-    if (!user?.id) return false;
     const { data: row } = await admin()
       .from("admins")
       .select("discord_id")
       .eq("discord_id", user.id)
       .maybeSingle();
-    // If admins table is empty/unused, fall back to session flag (break-glass password flow)
     if (row) return true;
+    // Break-glass: only if admins table has zero rows AND session flag set via password
     const { count } = await admin()
       .from("admins")
       .select("discord_id", { count: "exact", head: true });
-    if ((count ?? 0) === 0) return true; // no admins configured → password unlock still works
-    return false;
+    return (count ?? 0) === 0;
   } catch {
-    return data.isAdmin === true;
+    return false;
   }
 }
 

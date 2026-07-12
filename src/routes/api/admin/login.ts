@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
-import { sessionConfig, timingSafeEqualStrings } from "@/lib/luaux-server.server";
+import {
+  sessionConfig,
+  timingSafeEqualStrings,
+  admin as adminDb,
+} from "@/lib/luaux-server.server";
 
 type SessionData = {
   user?: { id: string; username: string; global_name: string | null; avatar: string | null };
@@ -26,6 +30,22 @@ export const Route = createFileRoute("/api/admin/login")({
         const password = process.env.ADMIN_PASSWORD || "";
         if (!body.password || !timingSafeEqualStrings(String(body.password), password)) {
           return Response.json({ error: "Wrong password" }, { status: 403 });
+        }
+
+        const db = adminDb();
+        const discordId = session.data.user.id;
+
+        // Ensure this Discord user is registered as admin (prevents accidental free access)
+        const { data: existing } = await db
+          .from("admins")
+          .select("discord_id")
+          .eq("discord_id", discordId)
+          .maybeSingle();
+        if (!existing) {
+          await db.from("admins").insert({
+            discord_id: discordId,
+            note: "password unlock",
+          });
         }
 
         await session.update({ ...session.data, isAdmin: true });

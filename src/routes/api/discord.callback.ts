@@ -124,10 +124,12 @@ export const Route = createFileRoute("/api/discord/callback")({
           ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
           : null;
 
+        // Never carry isAdmin across Discord accounts / re-logins
         await session.update({
           ...session.data,
           oauth_state: undefined,
           vpnBlocked,
+          isAdmin: false,
           user: {
             id: user.id,
             username: user.username,

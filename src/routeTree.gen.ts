@@ -16,7 +16,6 @@ import { Route as AccountBannedRouteImport } from './routes/account-banned'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVerificationBotRouteImport } from './routes/dashboard.verification-bot'
-import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardPurchaseRouteImport } from './routes/dashboard.purchase'
 import { Route as DashboardLogsRouteImport } from './routes/dashboard.logs'
@@ -91,11 +90,6 @@ const DashboardVerificationBotRoute =
     path: '/verification-bot',
     getParentRoute: () => DashboardRoute,
   } as any)
-const DashboardSupportRoute = DashboardSupportRouteImport.update({
-  id: '/support',
-  path: '/support',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -302,7 +296,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
@@ -348,7 +341,6 @@ export interface FileRoutesByTo {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
@@ -396,7 +388,6 @@ export interface FileRoutesById {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
-  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
@@ -445,7 +436,6 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
-    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
     | '/api/admin/blacklist'
@@ -491,7 +481,6 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
-    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard'
     | '/api/admin/blacklist'
@@ -538,7 +527,6 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
-    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
     | '/api/admin/blacklist'
@@ -657,13 +645,6 @@ declare module '@tanstack/react-router' {
       path: '/verification-bot'
       fullPath: '/dashboard/verification-bot'
       preLoaderRoute: typeof DashboardVerificationBotRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/support': {
-      id: '/dashboard/support'
-      path: '/support'
-      fullPath: '/dashboard/support'
-      preLoaderRoute: typeof DashboardSupportRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/settings': {
@@ -937,7 +918,6 @@ interface DashboardRouteChildren {
   DashboardLogsRoute: typeof DashboardLogsRoute
   DashboardPurchaseRoute: typeof DashboardPurchaseRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
-  DashboardSupportRoute: typeof DashboardSupportRoute
   DashboardVerificationBotRoute: typeof DashboardVerificationBotRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
@@ -951,7 +931,6 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardLogsRoute: DashboardLogsRoute,
   DashboardPurchaseRoute: DashboardPurchaseRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
-  DashboardSupportRoute: DashboardSupportRoute,
   DashboardVerificationBotRoute: DashboardVerificationBotRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }

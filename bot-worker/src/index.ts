@@ -12,6 +12,7 @@ import { runMcBot, type McJobConfig, type JobRunResult } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 import { runSecureBot, type SecureJobConfig } from "./secure.js";
 import { syncPresenceBots, stopAllPresence } from "./verification-presence.js";
+import { setJobPaused, clearJobPaused } from "./pause-state.js";
 
 const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
@@ -116,6 +117,7 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
     await updateJob(job.id, "error", msg);
   } finally {
     runningJobs.delete(job.id);
+    clearJobPaused(job.id);
   }
 }
 
@@ -139,7 +141,12 @@ async function checkRunningJobs() {
   const statuses = await checkJobStatuses(WORKER_ID, jobIds);
 
   for (const { id, status } of statuses) {
-    if (status === "stopping" || status === "stopped") {
+    if (status === "paused") {
+      setJobPaused(id, true);
+    } else if (status === "running" || status === "pending") {
+      setJobPaused(id, false);
+    } else if (status === "stopping" || status === "stopped") {
+      clearJobPaused(id);
       console.log(`[worker] job ${id} marked ${status} in DB, aborting`);
       const controller = runningJobs.get(id);
       if (controller) controller.abort();

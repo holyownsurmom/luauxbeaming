@@ -16,7 +16,7 @@ export const Route = createFileRoute("/api/bots/mc/clear-all")({
           .select("id, status")
           .eq("discord_id", user.id)
           .eq("type", "mc")
-          .in("status", ["pending", "running", "stopping"]);
+            .in("status", ["pending", "running", "stopping", "paused"]);
 
         const activeIds = (active ?? []).map((j) => j.id);
 
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/api/bots/mc/clear-all")({
             .update({ status: "stopping", error: "Nuked by user" })
             .eq("discord_id", user.id)
             .eq("type", "mc")
-            .in("status", ["pending", "running", "stopping"]);
+          .in("status", ["pending", "running", "stopping", "paused"]);
 
           // Immediately mark stopped so they leave the Active list
           await db
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/api/bots/mc/clear-all")({
           .update({ status: "completed" })
           .eq("discord_id", user.id)
           .eq("type", "mc")
-          .in("status", ["stopped", "error", "stopping"]);
+          .in("status", ["stopped", "error", "stopping", "paused"]);
 
         // Clear all bot logs for this user (MC jobs)
         const { data: allJobs } = await db

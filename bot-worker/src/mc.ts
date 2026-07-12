@@ -1,4 +1,5 @@
 import { createLogger, updateJob } from "./api.js";
+import { isJobPaused } from "./pause-state.js";
 
 export type JobRunResult = {
   status: "completed" | "error" | "stopped";
@@ -459,8 +460,26 @@ export async function runMcBot(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function startMessageLoop(bot: any) {
+    let pauseNotified = false;
+
     const scheduleNext = () => {
       if (stopped || abortSignal.aborted) return;
+
+      // User paused bot from console — stay connected, don't send
+      if (isJobPaused(jobId)) {
+        if (!pauseNotified) {
+          pauseNotified = true;
+          log("system", "Bot PAUSED — messages stopped (stay online). Press RESUME to continue.").catch(
+            () => {},
+          );
+        }
+        currentTimer = setTimeout(() => scheduleNext(), 2000);
+        return;
+      }
+      if (pauseNotified) {
+        pauseNotified = false;
+        log("system", "Bot RESUMED — message loop active again.").catch(() => {});
+      }
 
       const rt = runtimeMinutes();
 
@@ -497,6 +516,10 @@ export async function runMcBot(
 
     const sendOneMessage = async (botArg: typeof bot) => {
       if (stopped || abortSignal.aborted) return;
+      if (isJobPaused(jobId)) {
+        scheduleNext();
+        return;
+      }
 
       try {
         if (shufflePosition >= messageOrder.length) {

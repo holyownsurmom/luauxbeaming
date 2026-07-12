@@ -868,7 +868,39 @@ function BotsPage() {
               </button>
             </div>
           </div>
-          <BotConsole entries={consoleEntries} highlightBot={true} />
+          <BotConsole
+            entries={consoleEntries}
+            highlightBot={true}
+            botPaused={activeBot?.status === "paused"}
+            pauseDisabled={!selectedBotId || stoppingId === selectedBotId}
+            onTogglePause={async () => {
+              if (!selectedBotId) return;
+              const pause = activeBot?.status !== "paused";
+              try {
+                const res = await fetch("/api/bots/mc/pause", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ botId: selectedBotId, pause }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || "Pause failed");
+                toast.success(pause ? "Bot paused (still online)" : "Bot resumed");
+                setConsoleEntries((prev) => [
+                  ...prev,
+                  {
+                    ts: Date.now(),
+                    level: "system",
+                    msg: pause
+                      ? "Bot PAUSED — messages stopped (stay online)."
+                      : "Bot RESUMED — message loop active again.",
+                  },
+                ]);
+                await refreshBots();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : "Pause failed");
+              }
+            }}
+          />
         </div>
       )}
 

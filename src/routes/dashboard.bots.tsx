@@ -147,23 +147,39 @@ function BotsPage() {
       try {
         const data = JSON.parse(ev.data);
         if (data.type === "log") {
-          const msg = String(data.msg || "");
+          const msg = String(data.msg || data.message || "");
+          const botId = data.botId || data.job_id || data.jobId;
           if (msg.startsWith("MS_AUTH_REQUIRED|")) {
             const parts = msg.split("|");
-            if (parts.length >= 4) {
-              setMsAuth({
-                uri: parts[1],
-                code: parts[2],
-                mins: parseInt(parts[3], 10) || 15,
-                botId: data.botId,
+            const uri = parts[1] || "https://www.microsoft.com/link";
+            const code = parts[2] || "";
+            const mins = parseInt(parts[3], 10) || 15;
+            // Always open popup when we get a real code (ignore "undefined")
+            if (code && code !== "undefined" && code !== "null") {
+              setMsAuth({ uri, code, mins, botId: botId || selectedBotId || "" });
+              if (botId) setSelectedBotId(botId);
+              toast.message("Microsoft login required", {
+                description: `Code: ${code} — open the popup and authorize`,
+                duration: 20000,
               });
-              if (!selectedBotId) setSelectedBotId(data.botId);
             }
           }
-          if (data.botId === selectedBotId && !msg.startsWith("MS_AUTH_REQUIRED|")) {
+          // Also parse human-readable line as fallback
+          const codeMatch = msg.match(/enter code\s+([A-Z0-9]{4,12})/i);
+          const urlMatch = msg.match(/https?:\/\/(?:www\.)?microsoft\.com\/link[^\s]*/i);
+          if (codeMatch && !msg.startsWith("MS_AUTH_REQUIRED|")) {
+            setMsAuth({
+              uri: urlMatch?.[0] || "https://www.microsoft.com/link",
+              code: codeMatch[1],
+              mins: 15,
+              botId: botId || selectedBotId || "",
+            });
+            if (botId) setSelectedBotId(botId);
+          }
+          if (botId === selectedBotId && !msg.startsWith("MS_AUTH_REQUIRED|")) {
             setConsoleEntries((prev) => [
               ...prev.slice(-499),
-              { ts: data.ts, level: data.level, msg: data.msg },
+              { ts: data.ts || Date.now(), level: data.level || "info", msg },
             ]);
           }
         }

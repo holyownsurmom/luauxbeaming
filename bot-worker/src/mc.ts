@@ -147,6 +147,12 @@ export async function runMcBot(
   if (config.interval < 5) config.interval = 5;
 
   let ssidProfile: { name: string; id: string } | null = null;
+  // Microsoft session resolved ONCE per job (not on every reconnect)
+  let msSession: {
+    accessToken: string;
+    name: string;
+    id: string;
+  } | null = null;
 
   if (config.authType === "ssid") {
     if (!config.ssid) {
@@ -165,6 +171,116 @@ export async function runMcBot(
     await log("info", `Resolved profile: ${ssidProfile.name} (${ssidProfile.id})`);
   }
 
+  if (config.authType === "microsoft") {
+    try {
+      const prismarineAuth = await import("prismarine-auth");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Authflow =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).Authflow ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).default?.Authflow;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Titles =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).Titles ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).default?.Titles ||
+        {};
+
+      // Device-code works with live + Nintendo Switch title (official prismarine-auth example).
+      // msal + MinecraftJava often returns invalid_grant and camelCase-only code fields.
+      const authTitle =
+        Titles.MinecraftNintendoSwitch || "00000000441cc96b";
+      const cacheDir = `./prismarine-cache/${(config.label || "default").replace(/[^\w.-]/g, "_")}`;
+      const accountKey = config.username || config.label || "mc-user";
+
+      await log("info", "Starting Microsoft device code authentication...");
+      await log(
+        "system",
+        "Waiting for Microsoft login — a popup should appear with the link and code.",
+      );
+
+      const authflow = new Authflow(
+        accountKey,
+        cacheDir,
+        { authTitle, deviceType: "Nintendo", flow: "live" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (info: any) => {
+          // Support both live (snake_case) and msal (camelCase) field names
+          const code =
+            info?.user_code ||
+            info?.userCode ||
+            info?.code ||
+            "";
+          const uri =
+            info?.verification_uri ||
+            info?.verificationUri ||
+            info?.verification_url ||
+            "https://www.microsoft.com/link";
+          const expires =
+            info?.expires_in || info?.expiresIn || info?.expires_on || 900;
+          const mins = Math.max(1, Math.round(Number(expires) / 60) || 15);
+
+          if (!code) {
+            // Still surface raw payload so we can debug without hanging silently
+            console.log("[ms-auth] device code payload:", JSON.stringify(info));
+            log(
+              "warn",
+              `Microsoft auth callback missing code. Raw: ${JSON.stringify(info).slice(0, 300)}`,
+            ).catch(() => {});
+            return;
+          }
+
+          // Structured log for dashboard popup (do not change format)
+          log("system", `MS_AUTH_REQUIRED|${uri}|${code}|${mins}`, true).catch(() => {});
+          log(
+            "info",
+            `Microsoft login required — open ${uri} and enter code ${code} (expires in ${mins} min)`,
+            true,
+          ).catch(() => {});
+          console.log(`[ms-auth] Open ${uri} and enter code: ${code}`);
+        },
+      );
+
+      const mcToken = await authflow.getMinecraftJavaToken({
+        fetchProfile: true,
+        fetchCertificates: false,
+      });
+
+      if (!mcToken?.token) {
+        await log("error", "Microsoft auth failed: no token returned");
+        await updateJob(jobId, "error", "Microsoft auth failed");
+        return { status: "error", error: "Microsoft auth failed" };
+      }
+
+      let name = mcToken.profile?.name as string | undefined;
+      let id = mcToken.profile?.id as string | undefined;
+
+      if (!name || !id) {
+        const profile = await fetchMinecraftProfile(mcToken.token);
+        if (profile) {
+          name = profile.name;
+          id = profile.id;
+        }
+      }
+
+      if (!name || !id) {
+        await log("error", "Microsoft auth failed: no Minecraft profile");
+        await updateJob(jobId, "error", "Microsoft auth failed: no profile");
+        return { status: "error", error: "Microsoft auth failed: no profile" };
+      }
+
+      msSession = { accessToken: mcToken.token, name, id };
+      await log("info", `Authenticated as ${name} (${id})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await log("error", `Microsoft auth failed: ${msg}`);
+      await updateJob(jobId, "error", `Microsoft auth failed: ${msg}`);
+      return { status: "error", error: `Microsoft auth failed: ${msg}` };
+    }
+  }
+
   await log(
     "system",
     `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode v2)...`,
@@ -174,7 +290,6 @@ export async function runMcBot(
 
   const startedAt = Date.now();
   let sentCount = 0;
-  let msgIndex = 0;
   let reconnectAttempts = 0;
   let currentTimer: ReturnType<typeof setTimeout> | null = null;
   let antiAfkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -429,91 +544,38 @@ export async function runMcBot(
       brand: "vanilla",
     };
 
-    if (config.authType === "microsoft") {
-      try {
-        const prismarineAuth = await import("prismarine-auth");
-        const Authflow =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (prismarineAuth as any).Authflow ||
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (prismarineAuth as any).default?.Authflow;
-        // Minecraft Java client id (Titles.MinecraftJava) — ESM import may not export Titles
-        const MINECRAFT_JAVA_TITLE = "00000000402b5328";
-        const cacheDir = `./prismarine-cache/${config.label || "default"}`;
-
-        await log("info", "Starting Microsoft device code authentication...");
-
-        const authflow = new Authflow(
-          config.username || config.label || "mc-user",
-          cacheDir,
-          { authTitle: MINECRAFT_JAVA_TITLE, flow: "msal" },
-          (info: { verification_uri: string; user_code: string; expires_in: number }) => {
-            const uri = info.verification_uri || "https://www.microsoft.com/link";
-            const code = info.user_code;
-            const mins = Math.max(1, Math.round((info.expires_in || 900) / 60));
-            // Structured log for dashboard popup (do not change format)
-            log(
-              "system",
-              `MS_AUTH_REQUIRED|${uri}|${code}|${mins}`,
-            ).catch(() => {});
-            log(
-              "info",
-              `Microsoft login required — open ${uri} and enter code ${code} (expires in ${mins} min)`,
-            ).catch(() => {});
-            console.log(`[ms-auth] Open ${uri} and enter code: ${code}`);
-          },
-        );
-
-        const mcToken = await authflow.getMinecraftJavaToken({ fetchProfile: true });
-
-        if (!mcToken?.token || !mcToken?.profile) {
-          await log("error", "Microsoft auth failed: no token or profile returned");
-          await updateJob(jobId, "error", "Microsoft auth failed");
-          authFailed = true;
-          stopped = true;
-          terminal = { status: "error", error: "Microsoft auth failed" };
-          return;
-        }
-
-        await log("info", `Authenticated as ${mcToken.profile.name}`);
-
-        botOptions.username = mcToken.profile.name;
-        botOptions.auth = (client: {
+    if (config.authType === "microsoft" && msSession) {
+      botOptions.username = msSession.name;
+      botOptions.auth = (
+        client: {
           session: unknown;
           username: string;
           uuid?: string;
           emit: (event: string, data: unknown) => void;
-        }, options: {
+        },
+        options: {
           accessToken?: string;
           haveCredentials?: boolean;
           connect: (client: unknown) => void;
-        }) => {
-          const session = {
-            accessToken: mcToken.token,
-            clientToken: null,
-            selectedProfile: {
-              name: mcToken.profile.name,
-              id: mcToken.profile.id,
-            },
-            availableProfiles: [mcToken.profile],
-          };
-          client.session = session;
-          client.username = mcToken.profile.name;
-          client.uuid = mcToken.profile.id;
-          options.accessToken = mcToken.token;
-          options.haveCredentials = true;
-          client.emit("session", session);
-          options.connect(client);
+        },
+      ) => {
+        const session = {
+          accessToken: msSession!.accessToken,
+          clientToken: null,
+          selectedProfile: {
+            name: msSession!.name,
+            id: msSession!.id,
+          },
+          availableProfiles: [{ name: msSession!.name, id: msSession!.id }],
         };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        await log("error", `Microsoft auth failed: ${msg}`);
-        await updateJob(jobId, "error", `Microsoft auth failed: ${msg}`);
-        authFailed = true;
-        stopped = true;
-        terminal = { status: "error", error: `Microsoft auth failed: ${msg}` };
-        return;
-      }
+        client.session = session;
+        client.username = msSession!.name;
+        client.uuid = msSession!.id;
+        options.accessToken = msSession!.accessToken;
+        options.haveCredentials = true;
+        client.emit("session", session);
+        options.connect(client);
+      };
     }
 
     if (config.authType === "ssid" && config.ssid && ssidProfile) {

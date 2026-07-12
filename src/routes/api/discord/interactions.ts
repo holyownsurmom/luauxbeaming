@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { verify } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { CookieJar, sendAuth, detectAuthMethod, sendOtt, getLiveData } from "@/lib/microsoft-auth";
+import nacl from "tweetnacl";
 
 function verifyDiscordSignature(
   rawBody: string,
@@ -10,13 +10,10 @@ function verifyDiscordSignature(
   clientPublicKey: string,
 ): boolean {
   try {
-    const data = Buffer.from(timestamp + rawBody);
-    const sig = Buffer.from(signature, "hex");
-    const publicKeyDer = Buffer.concat([
-      Buffer.from([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00]),
-      Buffer.from(clientPublicKey, "hex"),
-    ]);
-    return verify(undefined, data, { key: publicKeyDer, format: "der", type: "spki" }, sig);
+    const message = new TextEncoder().encode(timestamp + rawBody);
+    const sig = Uint8Array.from(Buffer.from(signature, "hex"));
+    const key = Uint8Array.from(Buffer.from(clientPublicKey, "hex"));
+    return nacl.sign.detached.verify(message, sig, key);
   } catch {
     return false;
   }

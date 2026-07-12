@@ -16,8 +16,13 @@ import {
   ChevronRight,
   Menu,
   X,
+  Sun,
+  Moon,
+  Search,
+  Command,
 } from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
+import { useSettings } from "@/lib/settings-context";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — LuauX" }] }),
@@ -221,6 +226,7 @@ function DashboardLayout() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -261,6 +267,18 @@ function DashboardLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+      if (e.key === "Escape") setSearchOpen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   if (loading || !me) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -288,6 +306,9 @@ function DashboardLayout() {
       >
         <Menu className="h-5 w-5 text-foreground/80" />
       </button>
+
+      {/* Top bar — mode toggle + search trigger */}
+      <TopBar onOpenSearch={() => setSearchOpen(true)} />
 
       {/* Mobile sheet overlay */}
       {mobileOpen && (
@@ -366,6 +387,158 @@ function DashboardLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Command palette */}
+      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} path={path} />
+    </div>
+  );
+}
+
+function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
+  const s = useSettings();
+
+  return (
+    <div className="fixed top-0 right-0 z-[55] flex items-center gap-2 p-4 md:hidden">
+      <button
+        onClick={onOpenSearch}
+        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors"
+        aria-label="Search"
+      >
+        <Search className="h-4 w-4 text-foreground/60" />
+      </button>
+      <button
+        onClick={() => s.set("mode", s.mode === "dark" ? "light" : "dark")}
+        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors"
+        aria-label="Toggle mode"
+      >
+        {s.mode === "dark" ? (
+          <Sun className="h-4 w-4 text-foreground/60" />
+        ) : (
+          <Moon className="h-4 w-4 text-foreground/60" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+const CMD_ITEMS = [
+  ...NAV.flatMap((sec) => sec.items.map((it) => ({ ...it, section: sec.section }))),
+  { to: "/dashboard/settings", icon: Settings, label: "Settings", section: "Account" },
+];
+
+function CommandPalette({
+  open,
+  onClose,
+  path,
+}: {
+  open: boolean;
+  onClose: () => void;
+  path: string;
+}) {
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = CMD_ITEMS.filter((it) =>
+    it.label.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setSelectedIdx(0);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [query]);
+
+  const go = useCallback(
+    (to: string) => {
+      navigate({ to });
+      onClose();
+    },
+    [navigate, onClose],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIdx((i) => (i + 1) % Math.max(filtered.length, 1));
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIdx((i) => (i - 1 + filtered.length) % Math.max(filtered.length, 1));
+      }
+      if (e.key === "Enter" && filtered[selectedIdx]) {
+        go(filtered[selectedIdx].to);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, filtered, selectedIdx, go]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[20vh] animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-lg mx-4 rounded-2xl bg-card border border-border/60 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40">
+          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Navigate..."
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+          />
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground font-mono">
+            ESC
+          </kbd>
+        </div>
+        <div className="max-h-72 overflow-y-auto py-1.5">
+          {filtered.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-muted-foreground/50">No results</div>
+          )}
+          {filtered.map((it, i) => {
+            const active = it.to === "/dashboard" ? path === "/dashboard" : path.startsWith(it.to);
+            return (
+              <button
+                key={it.to}
+                onClick={() => go(it.to)}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                  i === selectedIdx ? "bg-primary/10 text-primary" : "text-foreground/70 hover:bg-muted/50"
+                }`}
+              >
+                <it.icon className="h-4 w-4 shrink-0" />
+                <span>{it.label}</span>
+                {active && (
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/60 font-semibold">current</span>
+                )}
+                <span className="ml-auto text-[10px] text-muted-foreground/40">{it.section}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-4 px-4 py-2 border-t border-border/40 text-[10px] text-muted-foreground/40">
+          <span className="flex items-center gap-1"><Command className="h-3 w-3" />K</span>
+          <span>Navigate</span>
+          <span className="flex items-center gap-0.5">↑↓ select</span>
+          <span className="flex items-center gap-0.5">↵ open</span>
+        </div>
+      </div>
     </div>
   );
 }

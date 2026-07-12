@@ -12,6 +12,37 @@ function db() {
   });
 }
 
+async function notifyErrorDiscord(userId: string, jobType: string, errorMsg: string) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token) return;
+
+  const typeLabel =
+    jobType === "mc" ? "MC Auto-Message" :
+    jobType === "discord" ? "Discord Auto-Spam" :
+    jobType === "secure" ? "Verification Bot" :
+    "Bot";
+
+  const message = `⚠️ **${typeLabel}** crashed or errored.\n\n**Error:** \`${errorMsg.slice(0, 500)}\`\n\nCheck your logs at https://luauxbeaming.lovable.app/dashboard/logs`;
+
+  try {
+    const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    if (!dmRes.ok) return;
+    const dm = (await dmRes.json()) as { id: string };
+
+    await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+  } catch {
+    /* DM failed — not critical */
+  }
+}
+
 export const Route = createFileRoute("/api/bots/worker/update")({
   server: {
     handlers: {
@@ -41,6 +72,18 @@ export const Route = createFileRoute("/api/bots/worker/update")({
         const { error } = await query;
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
+
+        if (body.status === "error") {
+          const { data: job } = await db()
+            .from("bot_jobs")
+            .select("discord_id, type")
+            .eq("id", body.job_id)
+            .maybeSingle();
+
+          if (job?.discord_id && job?.type) {
+            notifyErrorDiscord(job.discord_id, job.type, body.error || "Unknown error");
+          }
+        }
 
         return Response.json({ ok: true });
       },

@@ -224,18 +224,6 @@ function GoldDivider() {
 function FloatingParticles() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div
-        className="absolute left-1/2 top-0 h-[700px] w-[900px] -translate-x-1/2 rounded-full blur-[150px] animate-glow-breathe"
-        style={{
-          background: "radial-gradient(circle, color-mix(in oklch, var(--primary) 15%, transparent), transparent 70%)",
-        }}
-      />
-      <div
-        className="absolute right-0 bottom-0 h-[500px] w-[500px] rounded-full blur-[120px] opacity-40"
-        style={{
-          background: "radial-gradient(circle, color-mix(in oklch, var(--primary) 8%, transparent), transparent 70%)",
-        }}
-      />
       <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
       <div className="absolute top-[40%] right-[15%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float-slow" style={{ animationDelay: "2s" }} />
       <div className="absolute top-[60%] left-[20%] w-1 h-1 rounded-full bg-primary/25 animate-float" style={{ animationDelay: "4s" }} />

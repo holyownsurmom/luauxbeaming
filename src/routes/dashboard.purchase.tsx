@@ -356,8 +356,8 @@ function PaymentView({
             Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Send the exact amount to the address below (LTC or SOL only). After payment is
-            confirmed by support, your access unlocks.
+            Send the exact amount to the address below (LTC or SOL only). Detected automatically
+            on-chain — access unlocks in ~1–2 minutes.
           </p>
         </div>
 

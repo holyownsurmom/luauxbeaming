@@ -44,6 +44,8 @@ import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worke
 import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
 import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerPresenceTokensRouteImport } from './routes/api/bots/worker/presence-tokens'
+import { Route as ApiBotsWorkerPaymentsPendingRouteImport } from './routes/api/bots/worker/payments-pending'
+import { Route as ApiBotsWorkerPaymentsConfirmRouteImport } from './routes/api/bots/worker/payments-confirm'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
@@ -237,6 +239,18 @@ const ApiBotsWorkerPresenceTokensRoute = ApiBotsWorkerPresenceTokensRouteImport.
   path: '/api/bots/worker/presence-tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsWorkerPaymentsPendingRoute =
+  ApiBotsWorkerPaymentsPendingRouteImport.update({
+    id: '/api/bots/worker/payments-pending',
+    path: '/api/bots/worker/payments-pending',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiBotsWorkerPaymentsConfirmRoute =
+  ApiBotsWorkerPaymentsConfirmRouteImport.update({
+    id: '/api/bots/worker/payments-confirm',
+    path: '/api/bots/worker/payments-confirm',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiBotsWorkerLogRoute = ApiBotsWorkerLogRouteImport.update({
   id: '/api/bots/worker/log',
   path: '/api/bots/worker/log',
@@ -353,7 +367,10 @@ export interface FileRoutesByFullPath {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
+  '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
@@ -399,7 +416,10 @@ export interface FileRoutesByTo {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
+  '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
@@ -447,7 +467,10 @@ export interface FileRoutesById {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
+  '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
+  '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
@@ -627,7 +650,10 @@ export interface RootRouteChildren {
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
   ApiBotsMcClearAllRoute: typeof ApiBotsMcClearAllRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
+  ApiBotsWorkerPaymentsConfirmRoute: typeof ApiBotsWorkerPaymentsConfirmRoute
+  ApiBotsWorkerPaymentsPendingRoute: typeof ApiBotsWorkerPaymentsPendingRoute
   ApiBotsWorkerPollRoute: typeof ApiBotsWorkerPollRoute
+  ApiBotsWorkerPresenceTokensRoute: typeof ApiBotsWorkerPresenceTokensRoute
   ApiBotsWorkerStatusRoute: typeof ApiBotsWorkerStatusRoute
   ApiBotsWorkerUpdateRoute: typeof ApiBotsWorkerUpdateRoute
   ApiPublicNowpaymentsWebhookRoute: typeof ApiPublicNowpaymentsWebhookRoute
@@ -880,6 +906,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsWorkerLogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/payments-pending': {
+      id: '/api/bots/worker/payments-pending'
+      path: '/api/bots/worker/payments-pending'
+      fullPath: '/api/bots/worker/payments-pending'
+      preLoaderRoute: typeof ApiBotsWorkerPaymentsPendingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/worker/payments-confirm': {
+      id: '/api/bots/worker/payments-confirm'
+      path: '/api/bots/worker/payments-confirm'
+      fullPath: '/api/bots/worker/payments-confirm'
+      preLoaderRoute: typeof ApiBotsWorkerPaymentsConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/mc/stop': {
       id: '/api/bots/mc/stop'
       path: '/api/bots/mc/stop'
@@ -1026,6 +1066,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcPauseRoute: ApiBotsMcPauseRoute,
   ApiBotsClearAllRoute: ApiBotsClearAllRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
+  ApiBotsWorkerPaymentsConfirmRoute: ApiBotsWorkerPaymentsConfirmRoute,
+  ApiBotsWorkerPaymentsPendingRoute: ApiBotsWorkerPaymentsPendingRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
   ApiBotsWorkerPresenceTokensRoute: ApiBotsWorkerPresenceTokensRoute,
   ApiBotsWorkerStatusRoute: ApiBotsWorkerStatusRoute,
@@ -1035,3 +1077,4 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+

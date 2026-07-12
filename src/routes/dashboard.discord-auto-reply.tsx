@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { getPluginKeys, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { PluginPage } from "@/components/plugin-page";
+import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
 
 export const Route = createFileRoute("/dashboard/discord-auto-reply")({
   head: () => ({ meta: [{ title: "Discord Auto-Reply — LuauX" }] }),
@@ -48,6 +49,7 @@ function DiscordAutoReplyPage() {
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showPaywalls, setShowPaywalls] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -77,9 +79,21 @@ function DiscordAutoReplyPage() {
       .finally(() => setLoading(false));
   }, [fetchKeys, fetchProfile]);
 
-  const activeKey = isAdmin
+  useEffect(() => {
+    setShowPaywalls(getAdminShowPaywalls());
+    const on = () => setShowPaywalls(getAdminShowPaywalls());
+    window.addEventListener("luaux-admin-preview", on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener("luaux-admin-preview", on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  const activeKey = adminBypassesPaywall(isAdmin)
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
     : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
+  void showPaywalls;
 
   const refreshBots = useCallback(async () => {
     try {

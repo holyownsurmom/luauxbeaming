@@ -150,8 +150,8 @@ export function PluginPage({
               Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Send the exact amount to the address below. After payment, open a ticket or wait for
-              admin confirmation — then your key appears here and in Discord DM.
+              Send the exact amount to the address below. Payment is detected automatically on-chain
+              (usually within 1–2 minutes). Your key unlocks here and is DM&apos;d.
             </p>
           </div>
           <div>

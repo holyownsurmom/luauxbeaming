@@ -1,0 +1,45 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { createClient } from "@supabase/supabase-js";
+import { timingSafeEqual } from "node:crypto";
+
+function authWorker(request: Request): boolean {
+  const secret = process.env.WORKER_SECRET;
+  if (!secret) return false;
+  const token = request.headers.get("x-worker-secret") || "";
+  try {
+    const a = Buffer.from(token);
+    const b = Buffer.from(secret);
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+function db() {
+  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+export const Route = createFileRoute("/api/bots/worker/payments-pending")({
+  server: {
+    handlers: {
+      GET: async ({ request }) => {
+        if (!authWorker(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+        const client = db();
+        const { data, error } = await client
+          .from("payments")
+          .select(
+            "id, discord_id, plan_id, pay_currency, pay_amount, pay_address, price_amount, status, created_at, np_payment_id",
+          )
+          .eq("status", "waiting")
+          .in("pay_currency", ["ltc", "sol"])
+          .order("created_at", { ascending: true })
+          .limit(40);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        return Response.json({ payments: data ?? [] });
+      },
+    },
+  },
+});

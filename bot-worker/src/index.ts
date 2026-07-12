@@ -13,6 +13,7 @@ import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 import { runSecureBot, type SecureJobConfig } from "./secure.js";
 import { syncPresenceBots, stopAllPresence } from "./verification-presence.js";
 import { setJobPaused, clearJobPaused } from "./pause-state.js";
+import { scanPendingPayments } from "./payment-watch.js";
 
 const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
@@ -166,18 +167,28 @@ async function refreshPresence() {
   }
 }
 
+const PAY_WATCH_INTERVAL = Math.max(
+  15_000,
+  parseInt(process.env.PAYMENT_WATCH_MS || "30000", 10) || 30_000,
+);
+
 const pollTimer = setInterval(poll, POLL_INTERVAL);
 const statusCheckTimer = setInterval(checkRunningJobs, STATUS_CHECK_INTERVAL);
 const presenceTimer = setInterval(refreshPresence, 60_000);
+const payWatchTimer = setInterval(() => {
+  scanPendingPayments().catch((e) => console.error("[pay-watch]", e));
+}, PAY_WATCH_INTERVAL);
 poll();
 checkRunningJobs();
 refreshPresence();
+scanPendingPayments().catch((e) => console.error("[pay-watch]", e));
 
 async function shutdown() {
   console.log("[worker] shutting down...");
   clearInterval(pollTimer);
   clearInterval(statusCheckTimer);
   clearInterval(presenceTimer);
+  clearInterval(payWatchTimer);
   stopAllPresence();
 
   const abortPromises: Promise<void>[] = [];

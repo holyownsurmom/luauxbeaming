@@ -801,163 +801,26 @@ export const listPendingPayments = createServerFn({ method: "GET" }).handler(asy
   return data ?? [];
 });
 
-/** Admin: mark a manual payment as paid and fulfill plan/plugin keys */
+/** Admin: mark a payment as paid (fallback if chain watch misses) */
 export const confirmManualPayment = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ payment_id: z.string().uuid() }).parse(input))
+  .inputValidator((input) =>
+    z
+      .object({
+        payment_id: z.string().uuid(),
+        txid: z.string().min(8).max(128).optional(),
+      })
+      .parse(input),
+  )
   .handler(async ({ data }) => {
     const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
     await requireUser();
     if (!(await isAdminSession())) throw new Error("Admin only");
-    const db = admin();
-
-    const { data: pmt } = await db
-      .from("payments")
-      .select("*")
-      .eq("id", data.payment_id)
-      .maybeSingle();
-    if (!pmt) throw new Error("Payment not found");
-    if (pmt.fulfilled_at) return { ok: true, already: true };
-
-    const { data: claimed, error: claimErr } = await db
-      .from("payments")
-      .update({
-        status: "finished",
-        confirmations: 1,
-        fulfilled_at: new Date().toISOString(),
-      })
-      .eq("id", pmt.id)
-      .is("fulfilled_at", null)
-      .select("id")
-      .maybeSingle();
-    if (claimErr) throw new Error(claimErr.message);
-    if (!claimed) return { ok: true, already: true };
-
-    const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
-    if (!plan) throw new Error("Plan missing");
-
-    const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
-      verification: { prefix: "LX-VB", label: "Verification Bot" },
-      "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
-      "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
-    };
-    const PLUGIN_GRANTS: Record<string, string[]> = {
-      verification: ["verification"],
-      "discord-spam": ["discord-spam"],
-      "discord-autoreply": ["discord-autoreply"],
-      "discord-bundle": ["discord-spam", "discord-autoreply"],
-    };
-    const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
-
-    if (plan.kind === "plugin" && grantPluginIds.length > 0) {
-      const rand = (n: number) => {
-        const bytes = new Uint8Array(n);
-        crypto.getRandomValues(bytes);
-        return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
-          .join("")
-          .toUpperCase();
-      };
-      const expires = new Date(
-        Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
-      ).toISOString();
-      const isLifetime = plan.duration_days >= 3650;
-      const issued: { label: string; key: string; id: string }[] = [];
-
-      for (const pluginId of grantPluginIds) {
-        const meta = PLUGIN_META[pluginId];
-        if (!meta) continue;
-        const { data: existing } = await db
-          .from("verification_keys")
-          .select("id, key, delivered")
-          .eq("source_payment_id", pmt.id)
-          .eq("plugin_id", pluginId)
-          .maybeSingle();
-        if (existing) {
-          issued.push({ label: meta.label, key: existing.key, id: existing.id });
-          continue;
-        }
-        const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
-        const { data: inserted } = await db
-          .from("verification_keys")
-          .insert({
-            discord_id: pmt.discord_id,
-            key,
-            expires_at: expires,
-            source_payment_id: pmt.id,
-            plugin_id: pluginId,
-            delivered: false,
-          })
-          .select("id, key")
-          .single();
-        if (inserted) issued.push({ label: meta.label, key: inserted.key, id: inserted.id });
-      }
-
-      if (issued.length > 0) {
-        try {
-          const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
-            method: "POST",
-            headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ recipient_id: pmt.discord_id }),
-          });
-          if (dmRes.ok) {
-            const dm = (await dmRes.json()) as { id: string };
-            const title =
-              plan.id === "discord-bundle"
-                ? "Discord Bundle"
-                : PLUGIN_META[grantPluginIds[0]]?.label ?? plan.name;
-            const keyLines = issued
-              .map((k) => `**${k.label}**\n\`\`\`${k.key}\`\`\``)
-              .join("\n");
-            await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                content:
-                  `✅ **LuauX ${title} activated**\n\n` +
-                  `${keyLines}\n` +
-                  (isLifetime
-                    ? `These keys never expire.\n\n`
-                    : `Expires: <t:${Math.floor(new Date(expires).getTime() / 1000)}:F>\n\n`) +
-                  `Keep keys private. You can view them anytime in your dashboard.`,
-              }),
-            });
-            for (const k of issued) {
-              await db.from("verification_keys").update({ delivered: true }).eq("id", k.id);
-            }
-          }
-        } catch (e) {
-          console.warn("[confirmManualPayment] DM failed", e);
-        }
-      }
-    } else {
-      const { data: profile } = await db
-        .from("profiles")
-        .select("plan_expires_at, bot_hours_remaining")
-        .eq("discord_id", pmt.discord_id)
-        .maybeSingle();
-      const now = Date.now();
-      const existingExpiry = profile?.plan_expires_at
-        ? new Date(profile.plan_expires_at).getTime()
-        : 0;
-      const base = Math.max(existingExpiry, now);
-      const expiryDays = plan.duration_days || 90;
-      await db
-        .from("profiles")
-        .update({
-          bot_hours_remaining:
-            Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
-          active_plan_id: plan.id,
-          plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .eq("discord_id", pmt.discord_id);
-    }
-
-    return { ok: true, already: false };
+    const { fulfillPayment } = await import("./payment-fulfill.server");
+    return fulfillPayment(admin(), data.payment_id, {
+      txid: data.txid,
+      confirmations: 1,
+      raw: { source: "admin_manual" },
+    });
   });
 
 /** Admin: grant plan hours / activate a plan for a user (payment issues) */

@@ -17,6 +17,7 @@ import {
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { PluginPage } from "@/components/plugin-page";
+import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
   head: () => ({ meta: [{ title: "Verification Bot — LuauX" }] }),
@@ -100,6 +101,7 @@ function VerificationBotPage() {
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showPaywalls, setShowPaywalls] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [securedAccounts, setSecuredAccounts] = useState<Array<Record<string, unknown>>>([]);
@@ -160,9 +162,21 @@ function VerificationBotPage() {
       .finally(() => setLoading(false));
   }, [fetchKeys, fetchProfile, fetchSettings, fetchSecuredAccounts, fetchInvite]);
 
-  const activeKey = isAdmin
+  useEffect(() => {
+    setShowPaywalls(getAdminShowPaywalls());
+    const on = () => setShowPaywalls(getAdminShowPaywalls());
+    window.addEventListener("luaux-admin-preview", on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener("luaux-admin-preview", on);
+      window.removeEventListener("storage", on);
+    };
+  }, []);
+
+  const activeKey = adminBypassesPaywall(isAdmin)
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
     : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
+  void showPaywalls;
 
   const copy = async (v: string) => {
     await navigator.clipboard.writeText(v);

@@ -26,6 +26,7 @@ import {
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { useSettings } from "@/lib/settings-context";
 import { Switch } from "@/components/ui/switch";
+import { getAdminShowPaywalls, setAdminShowPaywalls } from "@/lib/admin-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/dashboard/settings")({
@@ -396,6 +397,8 @@ function SettingsPage() {
                     Admin mode active. All features unlocked.
                   </div>
 
+                  <AdminShowPaywallsToggle />
+
                   <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
                     <div>
                       <div className="text-xs font-semibold">Reset My Access</div>
@@ -493,6 +496,45 @@ function RedeemKeyPanel() {
   );
 }
 
+function AdminShowPaywallsToggle() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    setOn(getAdminShowPaywalls());
+    const sync = () => setOn(getAdminShowPaywalls());
+    window.addEventListener("luaux-admin-preview", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("luaux-admin-preview", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  return (
+    <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-xs font-semibold">Show paywalls</div>
+          <p className="text-[11px] text-muted-foreground">
+            When on, you see purchase screens like a normal user (no free unlock). Turn off to bypass again.
+          </p>
+        </div>
+        <Switch
+          checked={on}
+          onCheckedChange={(v) => {
+            setAdminShowPaywalls(v);
+            setOn(v);
+          }}
+        />
+      </div>
+      {on && (
+        <div className="text-[11px] text-amber-400">
+          Preview mode: plugin + MC plan paywalls are visible. Reload plugin pages if they still look unlocked.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPendingPaymentsPanel() {
   const listPending = useServerFn(listPendingPayments);
   const confirmPay = useServerFn(confirmManualPayment);
@@ -523,7 +565,7 @@ function AdminPendingPaymentsPanel() {
   return (
     <Panel
       title="Pending crypto payments"
-      subtitle="Confirm LTC/SOL payments after you see them on-chain. This unlocks keys/plans."
+      subtitle="Usually auto-confirmed on-chain by the worker. Use Mark paid only if detection fails."
     >
       <div className="space-y-3">
         {err && <div className="text-xs text-destructive">{err}</div>}

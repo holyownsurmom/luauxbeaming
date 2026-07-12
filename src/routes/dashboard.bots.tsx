@@ -22,6 +22,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { getMyProfile, getMcAccounts, addMcAccount, deleteMcAccount } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
+import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -67,6 +68,7 @@ function BotsPage() {
 
   const [active, setActive] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showPaywalls, setShowPaywalls] = useState(false);
   const [maxBots, setMaxBots] = useState(0);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -153,12 +155,29 @@ function BotsPage() {
       isAdmin?: boolean;
       plan: { max_bots: number } | null;
     };
-    setActive(p.active);
     setIsAdmin(p.isAdmin ?? false);
-    setMaxBots(p.isAdmin ? 999 : (p.plan?.max_bots ?? 0));
+    const bypass = adminBypassesPaywall(!!p.isAdmin);
+    setActive(bypass ? true : p.active);
+    setMaxBots(bypass ? 999 : (p.plan?.max_bots ?? 0));
     const a = (await fetchAccounts()) as Account[];
     setAccounts(a);
   };
+
+  useEffect(() => {
+    setShowPaywalls(getAdminShowPaywalls());
+    const on = () => {
+      setShowPaywalls(getAdminShowPaywalls());
+      void reload();
+    };
+    window.addEventListener("luaux-admin-preview", on);
+    window.addEventListener("storage", on);
+    return () => {
+      window.removeEventListener("luaux-admin-preview", on);
+      window.removeEventListener("storage", on);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  void showPaywalls;
 
   const refreshBots = useCallback(async () => {
     try {

@@ -450,11 +450,10 @@ export async function runMcBot(
         return;
       }
 
-      botOptions.auth = "mojang";
+      botOptions.auth = "offline";
       botOptions.username = profileName;
       botOptions.session = {
         accessToken: config.ssid,
-        clientToken: config.ssid,
         selectedProfile: {
           name: profileName,
           id: cleanUuid,

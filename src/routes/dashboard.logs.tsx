@@ -159,9 +159,9 @@ function LogsPage() {
           </div>
           <button
             onClick={() => setAllLogs([])}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="text-xs rounded-full bg-secondary/60 hover:bg-secondary px-3 py-1.5 font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
-            Clear
+            Clear All Consoles
           </button>
         </div>
         {loading && allLogs.length === 0 ? (

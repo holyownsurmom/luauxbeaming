@@ -783,6 +783,15 @@ function BotsPage() {
                 Clear
               </button>
               <button
+                onClick={() => {
+                  setConsoleEntries([]);
+                  toast.success("Console cleared");
+                }}
+                className="text-xs rounded-full bg-secondary/60 hover:bg-secondary px-2.5 py-1 font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear All Consoles
+              </button>
+              <button
                 onClick={() => setSelectedBotId(null)}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
@@ -799,13 +808,24 @@ function BotsPage() {
         <div className="rounded-2xl animated-border bg-card/60 p-5 space-y-3 noise-texture">
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-widest text-muted-foreground">Active Bots</div>
-            <button
-              onClick={stopAndClearAll}
-              disabled={stoppingId !== null}
-              className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-            >
-              <Square className="h-3 w-3" /> Stop & Clear All
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setConsoleEntries([]);
+                  toast.success("All consoles cleared");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground px-3 py-1.5 text-xs font-semibold transition-all duration-200"
+              >
+                Clear All Consoles
+              </button>
+              <button
+                onClick={stopAndClearAll}
+                disabled={stoppingId !== null}
+                className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+              >
+                <Square className="h-3 w-3" /> Stop & Clear All
+              </button>
+            </div>
           </div>
           {runningBots.map((bot) => (
             <div

@@ -110,6 +110,41 @@ function BotsPage() {
     mins: number;
     botId: string;
   } | null>(null);
+  const [msAuthWaiting, setMsAuthWaiting] = useState(false);
+  const selectedBotIdRef = useRef<string | null>(null);
+  const msAuthCodeRef = useRef<string | null>(null);
+  const logPollSinceRef = useRef<number>(Date.now());
+
+  const handleMsAuthMessage = useCallback((msg: string, botId?: string) => {
+    const tryOpen = (uri: string, code: string, mins: number, id?: string) => {
+      if (!code || code === "undefined" || code === "null") return;
+      if (msAuthCodeRef.current === code) return;
+      msAuthCodeRef.current = code;
+      setMsAuth({
+        uri: uri || "https://www.microsoft.com/link",
+        code,
+        mins: mins || 15,
+        botId: id || selectedBotIdRef.current || "",
+      });
+      setMsAuthWaiting(false);
+      if (id) setSelectedBotId(id);
+      toast.message("Microsoft login required", {
+        description: `Code: ${code}`,
+        duration: 30000,
+      });
+    };
+
+    if (msg.startsWith("MS_AUTH_REQUIRED|")) {
+      const parts = msg.split("|");
+      tryOpen(parts[1] || "https://www.microsoft.com/link", parts[2] || "", parseInt(parts[3], 10) || 15, botId);
+      return;
+    }
+    const codeMatch = msg.match(/enter code[:\s]+([A-Z0-9]{4,12})/i);
+    if (codeMatch) {
+      const urlMatch = msg.match(/https?:\/\/(?:www\.)?microsoft\.com\/link[^\s|]*/i);
+      tryOpen(urlMatch?.[0] || "https://www.microsoft.com/link", codeMatch[1], 15, botId);
+    }
+  }, []);
 
   const reload = async () => {
     const p = (await fetchProfile()) as {
@@ -135,10 +170,15 @@ function BotsPage() {
   }, []);
 
   useEffect(() => {
+    selectedBotIdRef.current = selectedBotId;
+  }, [selectedBotId]);
+
+  useEffect(() => {
     reload();
     refreshBots();
   }, []);
 
+  // Stable SSE — do NOT reconnect when selected bot changes (that was dropping MS auth logs)
   useEffect(() => {
     if (eventSourceRef.current) eventSourceRef.current.close();
     const es = new EventSource("/api/bots/stream");
@@ -146,49 +186,67 @@ function BotsPage() {
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.type === "log") {
-          const msg = String(data.msg || data.message || "");
-          const botId = data.botId || data.job_id || data.jobId;
-          if (msg.startsWith("MS_AUTH_REQUIRED|")) {
-            const parts = msg.split("|");
-            const uri = parts[1] || "https://www.microsoft.com/link";
-            const code = parts[2] || "";
-            const mins = parseInt(parts[3], 10) || 15;
-            // Always open popup when we get a real code (ignore "undefined")
-            if (code && code !== "undefined" && code !== "null") {
-              setMsAuth({ uri, code, mins, botId: botId || selectedBotId || "" });
-              if (botId) setSelectedBotId(botId);
-              toast.message("Microsoft login required", {
-                description: `Code: ${code} — open the popup and authorize`,
-                duration: 20000,
-              });
-            }
-          }
-          // Also parse human-readable line as fallback
-          const codeMatch = msg.match(/enter code\s+([A-Z0-9]{4,12})/i);
-          const urlMatch = msg.match(/https?:\/\/(?:www\.)?microsoft\.com\/link[^\s]*/i);
-          if (codeMatch && !msg.startsWith("MS_AUTH_REQUIRED|")) {
-            setMsAuth({
-              uri: urlMatch?.[0] || "https://www.microsoft.com/link",
-              code: codeMatch[1],
-              mins: 15,
-              botId: botId || selectedBotId || "",
-            });
-            if (botId) setSelectedBotId(botId);
-          }
-          if (botId === selectedBotId && !msg.startsWith("MS_AUTH_REQUIRED|")) {
-            setConsoleEntries((prev) => [
-              ...prev.slice(-499),
-              { ts: data.ts || Date.now(), level: data.level || "info", msg },
-            ]);
-          }
+        if (data.type !== "log") return;
+        const msg = String(data.msg || data.message || "");
+        const botId = data.botId || data.job_id || data.jobId;
+        handleMsAuthMessage(msg, botId);
+        if (msg.startsWith("MS_AUTH_REQUIRED|")) return;
+        if (botId && botId === selectedBotIdRef.current) {
+          setConsoleEntries((prev) => [
+            ...prev.slice(-499),
+            { ts: data.ts || Date.now(), level: data.level || "info", msg },
+          ]);
         }
       } catch {
         /* ignore parse errors */
       }
     };
-    return () => es.close();
-  }, [selectedBotId]);
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, [handleMsAuthMessage]);
+
+  // Backup poll for MS auth codes (SSE can lag or miss on Lovable)
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const since = logPollSinceRef.current;
+        const res = await fetch(`/api/bots/logs?since=${since}&limit=50`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const logs = (data.logs || []) as Array<{
+          ts: number;
+          msg: string;
+          botId?: string;
+          level?: string;
+        }>;
+        for (const row of logs) {
+          if (row.ts > logPollSinceRef.current) logPollSinceRef.current = row.ts;
+          handleMsAuthMessage(String(row.msg || ""), row.botId);
+          if (
+            row.botId &&
+            row.botId === selectedBotIdRef.current &&
+            !String(row.msg || "").startsWith("MS_AUTH_REQUIRED|")
+          ) {
+            setConsoleEntries((prev) => {
+              const exists = prev.some((p) => p.ts === row.ts && p.msg === row.msg);
+              if (exists) return prev;
+              return [
+                ...prev.slice(-499),
+                { ts: row.ts, level: (row.level as ConsoleEntry["level"]) || "info", msg: row.msg },
+              ];
+            });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    const id = setInterval(poll, 1500);
+    poll();
+    return () => clearInterval(id);
+  }, [handleMsAuthMessage]);
 
   useEffect(() => {
     const interval = setInterval(refreshBots, 5000);
@@ -312,10 +370,21 @@ function BotsPage() {
       if (!res.ok) throw new Error(data.error || "Failed to start");
       toast.success(`Launched ${account.label}`);
       setSelectedBotId(data.botId);
+      selectedBotIdRef.current = data.botId;
       setConsoleEntries([]);
+      logPollSinceRef.current = Date.now() - 5000;
+      msAuthCodeRef.current = null;
+      if (account.auth_type === "microsoft") {
+        setMsAuthWaiting(true);
+        toast.message("Waiting for Microsoft code…", {
+          description: "A login popup will open when the code is ready",
+          duration: 15000,
+        });
+      }
       await refreshBots();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Launch failed");
+      setMsAuthWaiting(false);
     } finally {
       setLaunching(false);
     }
@@ -862,58 +931,81 @@ function BotsPage() {
         </div>
       )}
 
-      {/* Microsoft device-code auth popup */}
-      <AlertDialog
-        open={!!msAuth}
-        onOpenChange={(open) => {
-          if (!open) setMsAuth(null);
-        }}
-      >
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Microsoft login required</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>Sign in before the bot can join the server.</p>
-                <ol className="list-decimal list-inside space-y-1.5 text-foreground/80">
+      {/* Microsoft auth — fixed overlay (always on top, not AlertDialog which can fail silently) */}
+      {(msAuth || msAuthWaiting) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold tracking-tight">
+                {msAuth ? "Microsoft login required" : "Waiting for Microsoft code…"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {msAuth
+                  ? "Sign in before the bot can join the server."
+                  : "Device code is being generated. Keep this page open."}
+              </p>
+            </div>
+
+            {msAuth ? (
+              <div className="space-y-3 text-sm">
+                <ol className="list-decimal list-inside space-y-2 text-foreground/90">
                   <li>
                     Open{" "}
                     <a
-                      href={msAuth?.uri || "https://www.microsoft.com/link"}
+                      href={msAuth.uri}
                       target="_blank"
                       rel="noreferrer"
                       className="text-primary underline font-mono break-all"
                     >
-                      {msAuth?.uri || "https://www.microsoft.com/link"}
+                      {msAuth.uri}
                     </a>
                   </li>
                   <li>
-                    Enter this code:{" "}
-                    <span className="font-mono text-lg font-bold tracking-widest text-primary">
-                      {msAuth?.code}
-                    </span>
+                    Enter this code:
+                    <div className="mt-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.25em] text-primary select-all">
+                      {msAuth.code}
+                    </div>
                   </li>
-                  <li>Authorize the account that owns Minecraft Java</li>
+                  <li>Authorize the Microsoft account that owns Minecraft Java</li>
                 </ol>
-                <p className="text-xs">
-                  Code expires in about {msAuth?.mins ?? 15} minutes. The bot will connect
-                  automatically after you authorize.
+                <p className="text-xs text-muted-foreground">
+                  Expires in about {msAuth.mins} minutes. Bot connects automatically after you authorize.
                 </p>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Close</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (msAuth?.uri) window.open(msAuth.uri, "_blank", "noopener,noreferrer");
-              }}
-            >
-              Open login page
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMsAuth(null);
+                  setMsAuthWaiting(false);
+                }}
+                className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+              >
+                Close
+              </button>
+              {msAuth && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.open(msAuth.uri, "_blank", "noopener,noreferrer");
+                    navigator.clipboard?.writeText(msAuth.code).catch(() => {});
+                    toast.success("Code copied — paste on Microsoft page");
+                  }}
+                  className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold hover:opacity-90"
+                >
+                  Open login & copy code
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>

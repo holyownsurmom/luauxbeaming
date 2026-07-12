@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { CookieJar, sendAuth, detectAuthMethod, sendOtt } from "@/lib/microsoft-auth";
 import nacl from "tweetnacl";
 
+function normalizePublicKey(clientPublicKey: string): string {
+  return clientPublicKey.replace(/\s+/g, "").replace(/^0x/i, "").trim().toLowerCase();
+}
+
 function verifyDiscordSignature(
   rawBody: string,
   signature: string,
@@ -10,19 +14,29 @@ function verifyDiscordSignature(
   clientPublicKey: string,
 ): boolean {
   try {
+    if (!rawBody || !signature || !timestamp) return false;
+
     const ts = Number(timestamp);
     if (!Number.isFinite(ts)) return false;
-    // Allow 10 min clock skew (Discord recommends ~5; serverless clocks can drift)
+    // Discord recommends ~5 min; allow 15 min for serverless clock skew
     const ageSec = Math.abs(Date.now() / 1000 - ts);
-    if (ageSec > 600) return false;
+    if (ageSec > 900) return false;
 
-    const keyHex = clientPublicKey.replace(/\s+/g, "").trim();
-    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) return false;
+    const keyHex = normalizePublicKey(clientPublicKey);
+    const sigHex = signature.replace(/\s+/g, "").trim().toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(keyHex)) return false;
+    if (!/^[0-9a-f]+$/.test(sigHex) || sigHex.length % 2 !== 0) return false;
 
-    const message = new TextEncoder().encode(timestamp + rawBody);
-    const sig = Uint8Array.from(Buffer.from(signature, "hex"));
-    const key = Uint8Array.from(Buffer.from(keyHex, "hex"));
-    return nacl.sign.detached.verify(message, sig, key);
+    const message = Buffer.from(timestamp + rawBody, "utf8");
+    const sig = Buffer.from(sigHex, "hex");
+    const key = Buffer.from(keyHex, "hex");
+    if (sig.length !== 64 || key.length !== 32) return false;
+
+    return nacl.sign.detached.verify(
+      new Uint8Array(message),
+      new Uint8Array(sig),
+      new Uint8Array(key),
+    );
   } catch {
     return false;
   }
@@ -91,73 +105,85 @@ async function resolveBotCredentials(
   signature: string,
   timestamp: string,
   guildId?: string,
-): Promise<{ ok: boolean; botToken: string | null; publicKey: string | null }> {
-  const centralPublicKey = (
-    process.env.DISCORD_PUBLIC_KEY ||
-    process.env.DISCORD_CLIENT_PUBLIC_KEY ||
-    ""
-  )
-    .replace(/\s+/g, "")
-    .trim();
+): Promise<{ ok: boolean; botToken: string | null; publicKey: string | null; tried: number }> {
+  const candidates: Array<{ key: string; token: string | null }> = [];
+  const seen = new Set<string>();
 
+  const push = (key?: string | null, token?: string | null) => {
+    if (!key) return;
+    const n = normalizePublicKey(key);
+    if (!n || seen.has(n)) return;
+    seen.add(n);
+    candidates.push({ key: n, token: token || null });
+  };
+
+  // 1) Guild-specific first
   if (guildId) {
     const { data: settings } = await db()
       .from("verification_settings")
       .select("bot_public_key, bot_token")
       .eq("guild_id", guildId)
       .maybeSingle();
-
-    if (settings?.bot_public_key) {
-      if (verifyDiscordSignature(rawBody, signature, timestamp, settings.bot_public_key)) {
-        return {
-          ok: true,
-          botToken: settings.bot_token || null,
-          publicKey: settings.bot_public_key,
-        };
-      }
-    }
+    push(settings?.bot_public_key, settings?.bot_token);
   }
 
-  if (
-    centralPublicKey &&
-    verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)
-  ) {
-    return {
-      ok: true,
-      botToken: process.env.DISCORD_BOT_TOKEN || null,
-      publicKey: centralPublicKey,
-    };
-  }
-
-  // PING has no guild_id — try all stored public keys
+  // 2) All stored keys (covers PING + wrong guild key order + multi-tenant)
   const { data: allSettings } = await db()
     .from("verification_settings")
-    .select("bot_public_key, bot_token")
+    .select("bot_public_key, bot_token, guild_id")
     .not("bot_public_key", "is", null);
 
-  const tried = new Set<string>();
   for (const row of allSettings || []) {
-    const key = (row.bot_public_key || "").replace(/\s+/g, "").trim();
-    if (!key || tried.has(key)) continue;
-    tried.add(key);
-    if (verifyDiscordSignature(rawBody, signature, timestamp, key)) {
-      return { ok: true, botToken: row.bot_token || null, publicKey: key };
+    push(row.bot_public_key, row.bot_token);
+  }
+
+  // 3) Central env key last
+  push(
+    process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "",
+    process.env.DISCORD_BOT_TOKEN || null,
+  );
+
+  for (const c of candidates) {
+    if (verifyDiscordSignature(rawBody, signature, timestamp, c.key)) {
+      return { ok: true, botToken: c.token, publicKey: c.key, tried: candidates.length };
     }
   }
 
-  return { ok: false, botToken: null, publicKey: null };
+  return { ok: false, botToken: null, publicKey: null, tried: candidates.length };
 }
 
 export const Route = createFileRoute("/api/discord/interactions")({
   server: {
     handlers: {
+      // Health check — open this in browser to confirm route is live
+      GET: async () => {
+        return Response.json({
+          ok: true,
+          service: "luaux-discord-interactions",
+          message: "POST Discord interactions here. Set this URL as Interactions Endpoint URL.",
+          path: "/api/discord/interactions",
+        });
+      },
       POST: async ({ request }) => {
-        const signature = request.headers.get("x-signature-ed25519") || "";
-        const timestamp = request.headers.get("x-signature-timestamp") || "";
+        const signature =
+          request.headers.get("x-signature-ed25519") ||
+          request.headers.get("X-Signature-Ed25519") ||
+          "";
+        const timestamp =
+          request.headers.get("x-signature-timestamp") ||
+          request.headers.get("X-Signature-Timestamp") ||
+          "";
+
+        // Critical: use exact raw bytes Discord signed (do not re-serialize JSON)
         const rawBody = await request.text();
 
         if (!signature || !timestamp) {
+          console.error("[interactions] missing signature headers");
           return new Response("Missing signature headers", { status: 401 });
+        }
+        if (!rawBody) {
+          console.error("[interactions] empty body — cannot verify signature");
+          return new Response("Empty body", { status: 400 });
         }
 
         let body: Record<string, unknown>;
@@ -168,12 +194,18 @@ export const Route = createFileRoute("/api/discord/interactions")({
         }
 
         const guildId = body.guild_id as string | undefined;
+
+        // PING first path: verify signature then return type 1 ASAP
         const resolved = await resolveBotCredentials(rawBody, signature, timestamp, guildId);
 
         if (!resolved.ok) {
           console.error("[interactions] Invalid signature", {
             type: body.type,
             guildId: guildId || null,
+            bodyLen: rawBody.length,
+            triedKeys: resolved.tried,
+            hasSig: !!signature,
+            hasTs: !!timestamp,
           });
           return new Response("Invalid signature", { status: 401 });
         }

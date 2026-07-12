@@ -615,6 +615,10 @@ function VerificationBotPage() {
                 </ol>
                 <div className="mt-3">
                   <CodeBlock>https://luauxbeaming.lovable.app/api/discord/interactions</CodeBlock>
+                  <p className="mt-2">
+                    Test the route in a browser first — you should see{" "}
+                    <InlineCode>{`{"ok":true,...}`}</InlineCode>. If you get 404, wait for deploy.
+                  </p>
                 </div>
                 <ol className="list-decimal list-inside space-y-1.5 mt-3" start={6}>
                   <li>

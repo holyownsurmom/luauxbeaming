@@ -380,25 +380,39 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
 
     const activeKey = keys?.find((k) => new Date(k.expires_at).getTime() > Date.now());
 
-    const { getSessionData } = await import("./luaux-server.server");
+    const { getSessionData, isAdminSession } = await import("./luaux-server.server");
     const sessionData = await getSessionData();
-    const isAdmin = sessionData.isAdmin === true;
+    const isAdmin = sessionData.isAdmin === true || (await isAdminSession());
 
     if (!activeKey && !isAdmin) {
       throw new Error("No active Verification Bot license");
     }
 
+    // Normalize public key: Discord signs with 64-char hex ed25519 public key
+    const publicKey = data.bot_public_key.replace(/\s+/g, "").replace(/^0x/i, "").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(publicKey)) {
+      throw new Error(
+        "Bot Public Key must be the 64-character hex Public Key from Discord Developer Portal → General Information (not the bot token).",
+      );
+    }
+    if (data.bot_token.includes(".")) {
+      // Discord bot tokens usually have dots; public keys never do — catch swap
+    }
+    if (publicKey === data.bot_token.replace(/\s+/g, "")) {
+      throw new Error("You pasted the bot token into Public Key. Use the Public Key field instead.");
+    }
+
     const { error } = await db.from("verification_settings").upsert(
       {
         discord_id: user.id,
-        guild_id: data.guild_id,
-        verified_role_id: data.verified_role_id,
-        channel_id: data.channel_id,
+        guild_id: data.guild_id.trim(),
+        verified_role_id: data.verified_role_id.trim(),
+        channel_id: data.channel_id.trim(),
         message_title: data.message_title,
         message_description: data.message_description,
         button_text: data.button_text,
-        bot_token: data.bot_token || null,
-        bot_public_key: data.bot_public_key || null,
+        bot_token: data.bot_token.trim() || null,
+        bot_public_key: publicKey.toLowerCase(),
       },
       { onConflict: "discord_id" },
     );

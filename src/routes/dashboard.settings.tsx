@@ -13,6 +13,14 @@ import {
   ShieldCheck,
   Sun,
   Moon,
+  KeyRound,
+  Gift,
+  Wallet,
+  Ban,
+  Settings2,
+  Copy,
+  RefreshCw,
+  LogOut,
 } from "lucide-react";
 import {
   getMyProfile,
@@ -71,6 +79,9 @@ function SettingsPage() {
   const [adminPw, setAdminPw] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminSection, setAdminSection] = useState<
+    "overview" | "keys" | "plans" | "payments" | "blacklist"
+  >("overview");
 
   useEffect(() => {
     fetchProfile()
@@ -389,97 +400,218 @@ function SettingsPage() {
           )}
 
           {tab === "admin" && (
-            <Panel title="Admin Access" subtitle="Enter the admin password to unlock all features.">
-              {isAdmin ? (
-                <div className="space-y-4">
-                  <div className="rounded-xl bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-                    <ShieldCheck className="h-4 w-4 inline mr-1" />
-                    Admin mode active. All features unlocked.
-                  </div>
-
-                  <AdminShowPaywallsToggle />
-
-                  <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
-                    <div>
-                      <div className="text-xs font-semibold">Reset My Access</div>
-                      <p className="text-[11px] text-muted-foreground">
-                        Clears your plan, bot hours, and plugin keys so you can test the payment bypass flow from scratch.
-                      </p>
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!window.confirm("This will remove your plan, hours, and all keys. Continue?")) return;
-                        try {
-                          await doResetAccess();
-                          window.location.reload();
-                        } catch (e) {
-                          alert(e instanceof Error ? e.message : "Failed");
-                        }
-                      }}
-                      className="rounded-lg bg-destructive/10 border border-destructive/20 text-destructive px-5 py-2 text-xs font-semibold hover:bg-destructive/20 transition-all"
-                    >
-                      Reset My Access
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <label className="text-xs space-y-1">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Admin Password
-                    </span>
-                    <input
-                      type="password"
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                      value={adminPw}
-                      onChange={(e) => {
-                        setAdminPw(e.target.value);
-                        setAdminError(null);
-                      }}
-                      placeholder="Enter admin password"
-                    />
-                  </label>
-                  {adminError && <div className="text-xs text-destructive">{adminError}</div>}
-                  <button
-                    onClick={async () => {
-                      setAdminLoading(true);
-                      setAdminError(null);
-                      try {
-                        const res = await fetch("/api/admin/login", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ password: adminPw }),
-                        });
-                        if (!res.ok) {
-                          const d = await res.json();
-                          throw new Error(d.error || "Wrong password");
-                        }
-                        setIsAdmin(true);
-                        setAdminPw("");
-                      } catch (e) {
-                        setAdminError(e instanceof Error ? e.message : "Failed");
-                      } finally {
-                        setAdminLoading(false);
-                      }
-                    }}
-                    disabled={adminLoading || !adminPw.trim()}
-                    className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50 btn-premium"
-                  >
-                    {adminLoading ? "Checking..." : "Unlock Admin"}
-                  </button>
-                </div>
-              )}
-            </Panel>
-          )}
-
-          {tab === "admin" && isAdmin && (
-            <>
-              <AdminPendingPaymentsPanel />
-              <AdminIssueAccessPanel />
-              <BlacklistPanel />
-            </>
+            <AdminWorkspace
+              isAdmin={isAdmin}
+              adminPw={adminPw}
+              setAdminPw={setAdminPw}
+              adminLoading={adminLoading}
+              adminError={adminError}
+              setAdminError={setAdminError}
+              setAdminLoading={setAdminLoading}
+              setIsAdmin={setIsAdmin}
+              adminSection={adminSection}
+              setAdminSection={setAdminSection}
+              doResetAccess={doResetAccess}
+            />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+type AdminSection = "overview" | "keys" | "plans" | "payments" | "blacklist";
+
+function AdminWorkspace({
+  isAdmin,
+  adminPw,
+  setAdminPw,
+  adminLoading,
+  adminError,
+  setAdminError,
+  setAdminLoading,
+  setIsAdmin,
+  adminSection,
+  setAdminSection,
+  doResetAccess,
+}: {
+  isAdmin: boolean;
+  adminPw: string;
+  setAdminPw: (v: string) => void;
+  adminLoading: boolean;
+  adminError: string | null;
+  setAdminError: (v: string | null) => void;
+  setAdminLoading: (v: boolean) => void;
+  setIsAdmin: (v: boolean) => void;
+  adminSection: AdminSection;
+  setAdminSection: (v: AdminSection) => void;
+  doResetAccess: () => Promise<unknown>;
+}) {
+  if (!isAdmin) {
+    return (
+      <div className="max-w-md space-y-6">
+        <div>
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Admin</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Unlock with your admin password. This Discord account will be registered as admin.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-card/50 p-5 space-y-4">
+          <label className="block space-y-1.5">
+            <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Password
+            </span>
+            <input
+              type="password"
+              className="w-full rounded-xl border border-border/80 bg-background px-3.5 py-2.5 text-sm font-mono outline-none focus:ring-2 focus:ring-primary/30"
+              value={adminPw}
+              onChange={(e) => {
+                setAdminPw(e.target.value);
+                setAdminError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && adminPw.trim() && !adminLoading) {
+                  (e.target as HTMLInputElement).form?.requestSubmit?.();
+                }
+              }}
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </label>
+          {adminError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {adminError}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              setAdminLoading(true);
+              setAdminError(null);
+              try {
+                const res = await fetch("/api/admin/login", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ password: adminPw }),
+                });
+                if (!res.ok) {
+                  const d = await res.json();
+                  throw new Error(d.error || "Wrong password");
+                }
+                setIsAdmin(true);
+                setAdminPw("");
+                setAdminSection("overview");
+              } catch (e) {
+                setAdminError(e instanceof Error ? e.message : "Failed");
+              } finally {
+                setAdminLoading(false);
+              }
+            }}
+            disabled={adminLoading || !adminPw.trim()}
+            className="w-full rounded-xl bg-primary text-primary-foreground py-2.5 text-sm font-semibold disabled:opacity-50"
+          >
+            {adminLoading ? "Unlocking…" : "Unlock admin"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const nav: { id: AdminSection; label: string; icon: React.ComponentType<{ className?: string }> }[] =
+    [
+      { id: "overview", label: "Overview", icon: Settings2 },
+      { id: "keys", label: "Keys", icon: KeyRound },
+      { id: "plans", label: "Plans", icon: Gift },
+      { id: "payments", label: "Payments", icon: Wallet },
+      { id: "blacklist", label: "Blacklist", icon: Ban },
+    ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            Admin active
+          </div>
+          <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">Admin</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Support tools — keep this private.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await fetch("/api/admin/logout", { method: "POST" });
+            } catch {
+              /* ignore */
+            }
+            setIsAdmin(false);
+            setAdminSection("overview");
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Lock
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 rounded-2xl border border-border/60 bg-secondary/20 p-1.5">
+        {nav.map((item) => {
+          const Icon = item.icon;
+          const active = adminSection === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setAdminSection(item.id)}
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                active
+                  ? "bg-background text-foreground shadow-sm border border-border/60"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="min-h-[280px]">
+        {adminSection === "overview" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AdminShowPaywallsToggle />
+            <div className="rounded-2xl border border-border/70 bg-card/40 p-4 flex flex-col justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold">Reset my access</div>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  Clear your plan, hours, and keys to test checkout as a normal user.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm("Remove your plan, hours, and all keys?")) return;
+                  try {
+                    await doResetAccess();
+                    window.location.reload();
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : "Failed");
+                  }
+                }}
+                className="self-start rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/15"
+              >
+                Reset access
+              </button>
+            </div>
+          </div>
+        )}
+        {adminSection === "keys" && <AdminIssueKeysPanel />}
+        {adminSection === "plans" && <AdminGrantPlanPanel />}
+        {adminSection === "payments" && <AdminPendingPaymentsPanel />}
+        {adminSection === "blacklist" && <BlacklistPanel />}
       </div>
     </div>
   );
@@ -496,6 +628,24 @@ function RedeemKeyPanel() {
   );
 }
 
+function AdminField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-[11px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const adminInputClass =
+  "w-full rounded-xl border border-border/80 bg-background px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/25 font-mono";
+
 function AdminShowPaywallsToggle() {
   const [on, setOn] = useState(false);
   useEffect(() => {
@@ -510,12 +660,12 @@ function AdminShowPaywallsToggle() {
   }, []);
 
   return (
-    <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
-      <div className="flex items-center justify-between gap-4">
+    <div className="rounded-2xl border border-border/70 bg-card/40 p-4 flex flex-col justify-between gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold">Show paywalls</div>
-          <p className="text-[11px] text-muted-foreground">
-            When on, you see purchase screens like a normal user (no free unlock). Turn off to bypass again.
+          <div className="text-sm font-semibold">Show paywalls</div>
+          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+            Preview purchase screens as a normal user. Off = admin bypass.
           </p>
         </div>
         <Switch
@@ -527,8 +677,8 @@ function AdminShowPaywallsToggle() {
         />
       </div>
       {on && (
-        <div className="text-[11px] text-amber-400">
-          Preview mode: plugin + MC plan paywalls are visible. Reload plugin pages if they still look unlocked.
+        <div className="text-[11px] text-amber-500/90">
+          Paywalls visible — reload plugin pages if still unlocked.
         </div>
       )}
     </div>
@@ -563,29 +713,51 @@ function AdminPendingPaymentsPanel() {
   }, [listPending]);
 
   return (
-    <Panel
-      title="Pending crypto payments"
-      subtitle="Usually auto-confirmed on-chain by the worker. Use Mark paid only if detection fails."
-    >
-      <div className="space-y-3">
-        {err && <div className="text-xs text-destructive">{err}</div>}
-        {rows.length === 0 ? (
-          <div className="text-xs text-muted-foreground">No waiting payments.</div>
-        ) : (
-          rows.map((r) => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">Pending payments</h3>
+          <p className="text-xs text-muted-foreground">
+            NOWPayments IPN auto-confirms. Mark paid only if stuck.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={refresh}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border/70 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
+      </div>
+      {err && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {err}
+        </div>
+      )}
+      {rows.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground">
+          No waiting payments
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => (
             <div
               key={r.id}
-              className="rounded-xl brutal-border bg-background/40 p-3 flex flex-wrap items-center justify-between gap-3"
+              className="rounded-2xl border border-border/70 bg-card/40 p-4 flex flex-wrap items-center justify-between gap-3"
             >
-              <div className="min-w-0 text-xs space-y-0.5">
-                <div className="font-mono break-all">{r.discord_id}</div>
-                <div>
-                  <span className="font-semibold">{r.plan_id}</span> · ${Number(r.price_amount).toFixed(2)} ·{" "}
-                  {r.pay_amount} {String(r.pay_currency).toUpperCase()}
+              <div className="min-w-0 text-xs space-y-1">
+                <div className="font-mono text-[11px] text-muted-foreground truncate max-w-[280px]">
+                  {r.discord_id}
                 </div>
-                <div className="text-muted-foreground">
-                  {new Date(r.created_at).toLocaleString()}
+                <div className="text-sm font-semibold">
+                  {r.plan_id}{" "}
+                  <span className="font-normal text-muted-foreground">
+                    · ${Number(r.price_amount).toFixed(2)} · {r.pay_amount}{" "}
+                    {String(r.pay_currency).toUpperCase()}
+                  </span>
                 </div>
+                <div className="text-muted-foreground">{new Date(r.created_at).toLocaleString()}</div>
               </div>
               <button
                 disabled={busyId === r.id}
@@ -601,234 +773,224 @@ function AdminPendingPaymentsPanel() {
                     setBusyId(null);
                   }
                 }}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50"
+                className="rounded-xl bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50"
               >
                 {busyId === r.id ? "Confirming…" : "Mark paid"}
               </button>
             </div>
-          ))
-        )}
-        <button
-          type="button"
-          onClick={refresh}
-          className="text-xs text-muted-foreground hover:text-foreground underline"
-        >
-          Refresh
-        </button>
-      </div>
-    </Panel>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-function AdminIssueAccessPanel() {
+function AdminIssueKeysPanel() {
   const issueKey = useServerFn(createAdminLicenseKey);
-  const grantPlan = useServerFn(grantAdminPlanAccess);
-  const fetchPlans = useServerFn(getPlans);
-
   const [discordId, setDiscordId] = useState("");
   const [unassigned, setUnassigned] = useState(false);
   const [pluginId, setPluginId] = useState<"verification" | "discord-spam" | "discord-autoreply">(
     "verification",
   );
   const [days, setDays] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [lastKey, setLastKey] = useState<string | null>(null);
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">Issue plugin key</h3>
+        <p className="text-xs text-muted-foreground">Create a license key for support / gifts.</p>
+      </div>
+      <div className="rounded-2xl border border-border/70 bg-card/40 p-5 space-y-4">
+        <label className="flex items-center gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            className="rounded border-border"
+            checked={unassigned}
+            onChange={(e) => setUnassigned(e.target.checked)}
+          />
+          Unassigned (user redeems)
+        </label>
+        {!unassigned && (
+          <AdminField label="Discord ID">
+            <input
+              className={adminInputClass}
+              value={discordId}
+              onChange={(e) => setDiscordId(e.target.value)}
+              placeholder="123456789012345678"
+            />
+          </AdminField>
+        )}
+        <AdminField label="Plugin">
+          <select
+            className={`${adminInputClass} font-sans`}
+            value={pluginId}
+            onChange={(e) =>
+              setPluginId(e.target.value as "verification" | "discord-spam" | "discord-autoreply")
+            }
+          >
+            <option value="verification">Verification Bot</option>
+            <option value="discord-spam">Discord Spam</option>
+            <option value="discord-autoreply">Discord Auto-Reply</option>
+          </select>
+        </AdminField>
+        <AdminField label="Duration (days) — 3650 = lifetime">
+          <input
+            type="number"
+            min={1}
+            max={36500}
+            className={adminInputClass}
+            value={days}
+            onChange={(e) => setDays(parseInt(e.target.value, 10) || 30)}
+          />
+        </AdminField>
+        <button
+          disabled={busy || (!unassigned && !discordId.trim())}
+          onClick={async () => {
+            setBusy(true);
+            setErr(null);
+            setMsg(null);
+            setLastKey(null);
+            try {
+              const r = (await issueKey({
+                data: {
+                  discord_id: unassigned ? undefined : discordId.trim(),
+                  unassigned,
+                  plugin_id: pluginId,
+                  duration_days: days,
+                  dm_user: !unassigned,
+                },
+              })) as { key: string; unassigned?: boolean };
+              setLastKey(r.key);
+              setMsg(r.unassigned ? "Key created — send to user." : "Key created · DM attempted.");
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="w-full rounded-xl bg-primary text-primary-foreground py-2.5 text-sm font-semibold disabled:opacity-50"
+        >
+          {busy ? "Working…" : unassigned ? "Create redeem key" : "Create & DM key"}
+        </button>
+        {lastKey && (
+          <div className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3 py-2.5 font-mono text-xs break-all">
+            <span className="flex-1">{lastKey}</span>
+            <button
+              type="button"
+              className="shrink-0 inline-flex items-center gap-1 text-primary font-semibold"
+              onClick={() => navigator.clipboard.writeText(lastKey)}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copy
+            </button>
+          </div>
+        )}
+        {msg && <p className="text-xs text-primary">{msg}</p>}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+function AdminGrantPlanPanel() {
+  const grantPlan = useServerFn(grantAdminPlanAccess);
+  const fetchPlans = useServerFn(getPlans);
+  const [discordId, setDiscordId] = useState("");
   const [planId, setPlanId] = useState("");
   const [extraHours, setExtraHours] = useState(0);
   const [plans, setPlans] = useState<{ id: string; name: string; kind?: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [lastKey, setLastKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetchPlans()
       .then((p) => {
         const list = (p as { id: string; name: string; kind?: string }[]) || [];
-        setPlans(list.filter((x) => x.kind !== "plugin"));
-        if (list[0]?.id) setPlanId(list.find((x) => x.kind !== "plugin")?.id || list[0].id);
+        const mc = list.filter((x) => x.kind !== "plugin");
+        setPlans(mc);
+        if (mc[0]?.id) setPlanId(mc[0].id);
       })
       .catch(() => {});
   }, [fetchPlans]);
 
   return (
-    <Panel
-      title="Issue access (support)"
-      subtitle="Create plugin keys or grant plan hours when payment fails."
-    >
-      <div className="space-y-6">
-        <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
-          <div className="text-xs font-semibold">Plugin license key</div>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={unassigned}
-              onChange={(e) => setUnassigned(e.target.checked)}
-            />
-            <span>Unassigned key (user redeems themselves)</span>
-          </label>
-          {!unassigned && (
-            <label className="text-xs space-y-1 block">
-              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                User Discord ID
-              </span>
-              <input
-                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                value={discordId}
-                onChange={(e) => setDiscordId(e.target.value)}
-                placeholder="123456789012345678"
-              />
-            </label>
-          )}
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-              Tool
-            </span>
-            <select
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-              value={pluginId}
-              onChange={(e) =>
-                setPluginId(e.target.value as "verification" | "discord-spam" | "discord-autoreply")
-              }
-            >
-              <option value="verification">Verification Bot</option>
-              <option value="discord-spam">Discord Spam</option>
-              <option value="discord-autoreply">Discord Auto-Reply</option>
-            </select>
-          </label>
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-              Duration (days) — use 3650 for lifetime
-            </span>
-            <input
-              type="number"
-              min={1}
-              max={36500}
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-              value={days}
-              onChange={(e) => setDays(parseInt(e.target.value, 10) || 30)}
-            />
-          </label>
-          <button
-            disabled={busy || (!unassigned && !discordId.trim())}
-            onClick={async () => {
-              setBusy(true);
-              setErr(null);
-              setMsg(null);
-              setLastKey(null);
-              try {
-                const r = (await issueKey({
-                  data: {
-                    discord_id: unassigned ? undefined : discordId.trim(),
-                    unassigned,
-                    plugin_id: pluginId,
-                    duration_days: days,
-                    dm_user: !unassigned,
-                  },
-                })) as { key: string; unassigned?: boolean };
-                setLastKey(r.key);
-                setMsg(
-                  r.unassigned
-                    ? "Unassigned key created — send to user to redeem."
-                    : "Key created and DM attempted.",
-                );
-              } catch (e) {
-                setErr(e instanceof Error ? e.message : "Failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
-          >
-            {busy ? "Working…" : unassigned ? "Create redeem key" : "Create & DM key"}
-          </button>
-          {lastKey && (
-            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 font-mono text-xs break-all">
-              {lastKey}
-              <button
-                type="button"
-                className="ml-2 text-primary underline"
-                onClick={() => navigator.clipboard.writeText(lastKey)}
-              >
-                Copy
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
-          <div className="text-xs font-semibold">Grant MC plan / hours</div>
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-              User Discord ID
-            </span>
-            <input
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-              value={discordId}
-              onChange={(e) => setDiscordId(e.target.value)}
-              placeholder="123456789012345678"
-            />
-          </label>
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">Plan</span>
-            <select
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-              value={planId}
-              onChange={(e) => setPlanId(e.target.value)}
-            >
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.id})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-              Extra hours (optional)
-            </span>
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-              value={extraHours}
-              onChange={(e) => setExtraHours(parseInt(e.target.value, 10) || 0)}
-            />
-          </label>
-          <button
-            disabled={busy || !discordId.trim() || !planId}
-            onClick={async () => {
-              setBusy(true);
-              setErr(null);
-              setMsg(null);
-              try {
-                const r = (await grantPlan({
-                  data: {
-                    discord_id: discordId.trim(),
-                    plan_id: planId,
-                    extra_hours: extraHours,
-                  },
-                })) as { bot_hours_remaining: number };
-                setMsg(`Plan granted. Hours now: ${r.bot_hours_remaining}`);
-              } catch (e) {
-                setErr(e instanceof Error ? e.message : "Failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
-          >
-            {busy ? "Working…" : "Grant plan access"}
-          </button>
-        </div>
-
-        {msg && <div className="text-xs text-primary">{msg}</div>}
-        {err && <div className="text-xs text-destructive">{err}</div>}
+    <div className="max-w-lg space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">Grant MC plan</h3>
+        <p className="text-xs text-muted-foreground">Activate a plan + optional hours for a user.</p>
       </div>
-    </Panel>
+      <div className="rounded-2xl border border-border/70 bg-card/40 p-5 space-y-4">
+        <AdminField label="Discord ID">
+          <input
+            className={adminInputClass}
+            value={discordId}
+            onChange={(e) => setDiscordId(e.target.value)}
+            placeholder="123456789012345678"
+          />
+        </AdminField>
+        <AdminField label="Plan">
+          <select
+            className={`${adminInputClass} font-sans`}
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+          >
+            {plans.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </AdminField>
+        <AdminField label="Extra hours">
+          <input
+            type="number"
+            min={0}
+            className={adminInputClass}
+            value={extraHours}
+            onChange={(e) => setExtraHours(parseInt(e.target.value, 10) || 0)}
+          />
+        </AdminField>
+        <button
+          disabled={busy || !discordId.trim() || !planId}
+          onClick={async () => {
+            setBusy(true);
+            setErr(null);
+            setMsg(null);
+            try {
+              const r = (await grantPlan({
+                data: {
+                  discord_id: discordId.trim(),
+                  plan_id: planId,
+                  extra_hours: extraHours,
+                },
+              })) as { bot_hours_remaining: number };
+              setMsg(`Granted. Hours now: ${r.bot_hours_remaining}`);
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="w-full rounded-xl bg-primary text-primary-foreground py-2.5 text-sm font-semibold disabled:opacity-50"
+        >
+          {busy ? "Working…" : "Grant plan"}
+        </button>
+        {msg && <p className="text-xs text-primary">{msg}</p>}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    </div>
   );
 }
 
 function BlacklistPanel() {
-  const [users, setUsers] = useState<{ discord_id: string; reason: string; created_at: string }[]>([]);
+  const [users, setUsers] = useState<{ discord_id: string; reason: string; created_at: string }[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [blDiscordId, setBlDiscordId] = useState("");
   const [blReason, setBlReason] = useState("");
@@ -888,19 +1050,26 @@ function BlacklistPanel() {
   };
 
   return (
-    <Panel title="User Blacklist" subtitle="Block specific Discord accounts from logging in.">
-      <div className="space-y-4">
-        <div className="flex gap-2">
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">Blacklist</h3>
+        <p className="text-xs text-muted-foreground">Block Discord accounts from logging in.</p>
+      </div>
+      <div className="rounded-2xl border border-border/70 bg-card/40 p-4 space-y-3">
+        <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
           <input
             type="text"
-            className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+            className={adminInputClass}
             placeholder="Discord ID"
             value={blDiscordId}
-            onChange={(e) => { setBlDiscordId(e.target.value); setBlError(null); }}
+            onChange={(e) => {
+              setBlDiscordId(e.target.value);
+              setBlError(null);
+            }}
           />
           <input
             type="text"
-            className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+            className={`${adminInputClass} font-sans`}
             placeholder="Reason (optional)"
             value={blReason}
             onChange={(e) => setBlReason(e.target.value)}
@@ -908,40 +1077,44 @@ function BlacklistPanel() {
           <button
             onClick={addBlacklist}
             disabled={blLoading || !blDiscordId.trim()}
-            className="rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50 whitespace-nowrap"
+            className="rounded-xl bg-destructive text-destructive-foreground px-4 py-2.5 text-xs font-semibold disabled:opacity-50"
           >
-            {blLoading ? "Adding..." : "Blacklist"}
+            {blLoading ? "…" : "Block"}
           </button>
         </div>
-        {blError && <div className="text-xs text-destructive">{blError}</div>}
-
-        {loading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-xs text-muted-foreground">No blacklisted users.</div>
-        ) : (
-          <div className="space-y-2">
-            {users.map((u) => (
-              <div key={u.discord_id} className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-2">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-mono">{u.discord_id}</div>
-                  {u.reason && <div className="text-xs text-muted-foreground">{u.reason}</div>}
-                </div>
-                <button
-                  onClick={() => removeBlacklist(u.discord_id)}
-                  className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1 text-xs ml-3 shrink-0"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        {blError && <p className="text-xs text-destructive">{blError}</p>}
       </div>
-    </Panel>
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+        </div>
+      ) : users.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+          No blacklisted users
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {users.map((u) => (
+            <div
+              key={u.discord_id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-secondary/20 px-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-mono truncate">{u.discord_id}</div>
+                {u.reason && <div className="text-xs text-muted-foreground">{u.reason}</div>}
+              </div>
+              <button
+                onClick={() => removeBlacklist(u.discord_id)}
+                className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

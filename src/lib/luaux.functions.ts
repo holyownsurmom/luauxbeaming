@@ -217,11 +217,16 @@ async function createNowPaymentsInvoice(opts: {
     );
   }
 
+  // Prefer explicit IPN URL, then SITE_URL / VERCEL_URL (custom domain / Vercel)
+  const siteBase =
+    process.env.SITE_URL?.replace(/\/$/, "") ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/^https?:\/\//, "")}`
+      : "") ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   const ipn =
     process.env.IPN_CALLBACK_URL?.trim() ||
-    (process.env.SITE_URL
-      ? `${process.env.SITE_URL.replace(/\/$/, "")}/api/public/nowpayments/webhook`
-      : "") ||
+    (siteBase ? `${siteBase}/api/public/nowpayments/webhook` : "") ||
     "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook";
 
   const res = await fetch("https://api.nowpayments.io/v1/payment", {

@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { Check, Copy, Clock, ShoppingCart, Package, Timer, Sparkles } from "lucide-react";
 import { getPlans, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
+import { addToCart, isInCart, subscribeCart } from "@/lib/cart";
 
 export const Route = createFileRoute("/dashboard/purchase")({
   component: PurchasePage,
@@ -73,6 +75,34 @@ function PurchasePage() {
   }, [payment, getPay]);
 
   const [adminActivated, setAdminActivated] = useState(false);
+  const [cartTick, setCartTick] = useState(0);
+
+  useEffect(() => subscribeCart(() => setCartTick((t) => t + 1)), []);
+
+  const addPlanToCart = (plan: Plan) => {
+    const r = addToCart({
+      planId: plan.id,
+      name: plan.name,
+      priceUsd: Number(plan.price_usd),
+      kind: "plan",
+    });
+    if (!r.ok) toast.message(r.reason || "Already in cart");
+    else toast.success(`${plan.name} added to cart`);
+    setCartTick((t) => t + 1);
+  };
+
+  const addHoursToCart = () => {
+    const planId = `hours_${selectedHours}`;
+    const r = addToCart({
+      planId,
+      name: `${selectedHours} bot hour${selectedHours === 1 ? "" : "s"}`,
+      priceUsd: selectedHours * 1.5,
+      kind: "hours",
+    });
+    if (!r.ok) toast.message(r.reason || "Already in cart");
+    else toast.success("Hours added to cart");
+    setCartTick((t) => t + 1);
+  };
 
   const start = async (planId: string) => {
     setSelectedPlan(planId);
@@ -193,16 +223,27 @@ function PurchasePage() {
             </div>
           </div>
 
-          <button
-            disabled={creating}
-            onClick={() => start(hourPlanId)}
-            className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-3 text-sm font-semibold disabled:opacity-50"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            {creating && selectedPlan === hourPlanId
-              ? "Creating…"
-              : `Buy ${selectedHours} ${selectedHours === 1 ? "hour" : "hours"} — ${s.formatPrice(hourTotal)}`}
-          </button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={addHoursToCart}
+              className="inline-flex items-center justify-center gap-2 rounded-xl brutal-border bg-secondary/50 hover:bg-secondary px-5 py-3 text-sm font-semibold"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {isInCart(hourPlanId) && cartTick >= 0
+                ? "In cart"
+                : `Add ${selectedHours}h to cart`}
+            </button>
+            <button
+              disabled={creating}
+              onClick={() => start(hourPlanId)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-3 text-sm font-semibold disabled:opacity-50"
+            >
+              {creating && selectedPlan === hourPlanId
+                ? "Creating…"
+                : `Buy now — ${s.formatPrice(hourTotal)}`}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -291,17 +332,27 @@ function PurchasePage() {
                   ))}
                 </ul>
 
-                <button
-                  disabled={creating}
-                  onClick={() => start(plan.id)}
-                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold disabled:opacity-50 brutal-border btn-premium ${
-                    isPro
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                      : "bg-background hover:bg-secondary/40"
-                  }`}
-                >
-                  {creating && selectedPlan === plan.id ? "Creating…" : s.t("get_started")}
-                </button>
+                <div className="mt-6 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => addPlanToCart(plan)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-3 text-xs font-semibold brutal-border bg-background hover:bg-secondary/40"
+                  >
+                    <ShoppingCart className="h-3.5 w-3.5" />
+                    {isInCart(plan.id) ? "In cart" : "Add to cart"}
+                  </button>
+                  <button
+                    disabled={creating}
+                    onClick={() => start(plan.id)}
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-semibold disabled:opacity-50 brutal-border btn-premium ${
+                      isPro
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "bg-secondary/50 hover:bg-secondary"
+                    }`}
+                  >
+                    {creating && selectedPlan === plan.id ? "…" : "Buy now"}
+                  </button>
+                </div>
               </div>
             );
           })}

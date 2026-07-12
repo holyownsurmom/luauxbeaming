@@ -6,10 +6,22 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// Nitro target: Cloudflare on Lovable; Vercel when VERCEL=1 (or NITRO_PRESET=vercel)
+const nitroPreset =
+  process.env.NITRO_PRESET ||
+  (process.env.VERCEL ? "vercel" : undefined);
+
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  ...(nitroPreset
+    ? {
+        nitro: {
+          preset: nitroPreset,
+        },
+      }
+    : {}),
   vite: {
     build: {
       rollupOptions: {

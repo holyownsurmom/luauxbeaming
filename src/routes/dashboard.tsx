@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
 import { useSettings } from "@/lib/settings-context";
+import { CartButton, CartDrawer } from "@/components/cart-drawer";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — LuauX" }] }),
@@ -227,6 +228,7 @@ function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -307,8 +309,11 @@ function DashboardLayout() {
         <Menu className="h-5 w-5 text-foreground/80" />
       </button>
 
-      {/* Top bar — mode toggle + search trigger */}
-      <TopBar onOpenSearch={() => setSearchOpen(true)} />
+      {/* Top bar — cart, mode toggle + search */}
+      <TopBar
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenCart={() => setCartOpen(true)}
+      />
 
       {/* Mobile sheet overlay */}
       {mobileOpen && (
@@ -390,25 +395,33 @@ function DashboardLayout() {
 
       {/* Command palette */}
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} path={path} />
+      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
     </div>
   );
 }
 
-function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
+function TopBar({
+  onOpenSearch,
+  onOpenCart,
+}: {
+  onOpenSearch: () => void;
+  onOpenCart: () => void;
+}) {
   const s = useSettings();
 
   return (
-    <div className="fixed top-0 right-0 z-[55] flex items-center gap-2 p-4 md:hidden">
+    <div className="fixed top-0 right-0 z-[55] flex items-center gap-2 p-4">
+      <CartButton onOpen={onOpenCart} />
       <button
         onClick={onOpenSearch}
-        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors"
+        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
         aria-label="Search"
       >
         <Search className="h-4 w-4 text-foreground/60" />
       </button>
       <button
         onClick={() => s.set("mode", s.mode === "dark" ? "light" : "dark")}
-        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors"
+        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
         aria-label="Toggle mode"
       >
         {s.mode === "dark" ? (

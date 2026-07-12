@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Copy, Clock, Bitcoin, KeyRound, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { Check, Copy, Clock, Bitcoin, KeyRound, ArrowLeft, ShoppingCart } from "lucide-react";
 import { getPluginKeys, createInvoice, getPayment } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
+import { addToCart, isInCart, subscribeCart } from "@/lib/cart";
 
 type KeyRow = {
   id: string;
@@ -68,11 +70,14 @@ export function PluginPage({
   const [adminActivated, setAdminActivated] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(planId || pluginId);
   const [selectedPrice, setSelectedPrice] = useState(price);
+  const [cartTick, setCartTick] = useState(0);
 
   useEffect(() => {
     setSelectedPlan(planId || pluginId);
     setSelectedPrice(price);
   }, [planId, pluginId, price]);
+
+  useEffect(() => subscribeCart(() => setCartTick((t) => t + 1)), []);
 
   useEffect(() => {
     fetchKeys({ data: { plugin_id: pluginId } })
@@ -378,12 +383,32 @@ export function PluginPage({
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => setCheckout(true)}
-              className="block w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 text-center py-4 text-sm font-semibold"
-            >
-              Unlock for ${selectedPrice.toFixed(2)}
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const r = addToCart({
+                    planId: selectedPlan,
+                    name: title,
+                    priceUsd: selectedPrice,
+                    kind: "plugin",
+                  });
+                  if (!r.ok) toast.message(r.reason || "Already in cart");
+                  else toast.success("Added to cart");
+                  setCartTick((t) => t + 1);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl brutal-border bg-secondary/50 hover:bg-secondary py-4 text-sm font-semibold"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                {isInCart(selectedPlan) && cartTick >= 0 ? "In cart" : "Cart"}
+              </button>
+              <button
+                onClick={() => setCheckout(true)}
+                className="rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 text-center py-4 text-sm font-semibold"
+              >
+                Buy ${selectedPrice.toFixed(2)}
+              </button>
+            </div>
           )}
 
           <div className="rounded-xl brutal-border bg-background/40 px-4 py-3 flex items-center gap-2 text-[12px] text-muted-foreground">

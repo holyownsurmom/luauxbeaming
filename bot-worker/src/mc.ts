@@ -293,6 +293,7 @@ export async function runMcBot(
   let reconnectAttempts = 0;
   let currentTimer: ReturnType<typeof setTimeout> | null = null;
   let antiAfkTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let authFailed = false;
@@ -312,6 +313,10 @@ export async function runMcBot(
     if (antiAfkTimer) {
       clearTimeout(antiAfkTimer);
       antiAfkTimer = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
   };
 
@@ -465,7 +470,7 @@ export async function runMcBot(
       scheduleNext();
     };
 
-    const initialDelay = randomBetween(15000, 40000);
+    const initialDelay = randomBetween(25000, 55000);
     log("info", `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message...`).catch(() => {});
     currentTimer = setTimeout(() => {
       if (stopped || abortSignal.aborted || currentBot !== bot) return;
@@ -480,6 +485,14 @@ export async function runMcBot(
     if (Array.isArray(node)) return node.map(extractChatText).join("");
     if (typeof node === "object") {
       const obj = node as Record<string, unknown>;
+      // NBT-style chat component from modern servers: { type: "string", value: "Timed out." }
+      if (typeof obj.value === "string" && (obj.type === "string" || obj.type === "text" || !obj.text)) {
+        return obj.value;
+      }
+      if (obj.value != null && typeof obj.value === "object") {
+        const nested = extractChatText(obj.value);
+        if (nested) return nested;
+      }
       let out = "";
       if (typeof obj.text === "string") out += obj.text;
       if (Array.isArray(obj.extra)) out += obj.extra.map(extractChatText).join("");
@@ -528,20 +541,43 @@ export async function runMcBot(
     return true;
   }
 
+  let connecting = false;
+
   async function connect() {
-    if (stopped || abortSignal.aborted || authFailed) return;
+    if (stopped || abortSignal.aborted || authFailed || connecting) return;
+    connecting = true;
+
+    // Always tear down any previous bot before opening a new socket
+    if (currentBot) {
+      try {
+        currentBot.removeAllListeners();
+        currentBot.quit("reconnect");
+      } catch {
+        try {
+          currentBot.end("reconnect");
+        } catch {
+          /* ignore */
+        }
+      }
+      currentBot = null;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
 
     const botOptions: Record<string, unknown> = {
       host: config.serverHost,
       port: config.serverPort,
       username: config.username || config.label || "Player",
       hideErrors: true,
-      checkTimeoutInterval: 60_000,
+      // Longer keep-alive interval reduces false timeouts on laggy proxies
+      checkTimeoutInterval: 120_000,
       keepAlive: true,
       respawn: true,
-      physicsEnabled: true,
+      // Physics can desync on some servers and contribute to "Invalid sequence"
+      physicsEnabled: false,
       viewDistance: "tiny",
       brand: "vanilla",
+      version: false, // auto-negotiate
+      skipValidation: true,
     };
 
     if (config.authType === "microsoft" && msSession) {
@@ -580,29 +616,39 @@ export async function runMcBot(
 
     if (config.authType === "ssid" && config.ssid && ssidProfile) {
       // Custom auth: inject SSID token directly. auth:"microsoft" ignores session and re-auths.
+      // UUID must be dashed for some protocol paths and undashed for others — provide both forms.
+      const rawId = ssidProfile.id.replace(/-/g, "");
+      const dashedId =
+        rawId.length === 32
+          ? `${rawId.slice(0, 8)}-${rawId.slice(8, 12)}-${rawId.slice(12, 16)}-${rawId.slice(16, 20)}-${rawId.slice(20)}`
+          : ssidProfile.id;
+
       botOptions.username = ssidProfile.name;
-      botOptions.auth = (client: {
-        session: unknown;
-        username: string;
-        uuid?: string;
-        emit: (event: string, data: unknown) => void;
-      }, options: {
-        accessToken?: string;
-        haveCredentials?: boolean;
-        connect: (client: unknown) => void;
-      }) => {
+      botOptions.auth = (
+        client: {
+          session: unknown;
+          username: string;
+          uuid?: string;
+          emit: (event: string, data: unknown) => void;
+        },
+        options: {
+          accessToken?: string;
+          haveCredentials?: boolean;
+          connect: (client: unknown) => void;
+        },
+      ) => {
         const session = {
           accessToken: config.ssid,
           clientToken: null,
           selectedProfile: {
             name: ssidProfile!.name,
-            id: ssidProfile!.id,
+            id: rawId,
           },
-          availableProfiles: [{ name: ssidProfile!.name, id: ssidProfile!.id }],
+          availableProfiles: [{ name: ssidProfile!.name, id: rawId }],
         };
         client.session = session;
         client.username = ssidProfile!.name;
-        client.uuid = ssidProfile!.id;
+        client.uuid = dashedId;
         options.accessToken = config.ssid;
         options.haveCredentials = true;
         client.emit("session", session);
@@ -611,8 +657,24 @@ export async function runMcBot(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bot = (mineflayer as any).createBot(botOptions);
+    let bot: any;
+    try {
+      bot = (mineflayer as any).createBot(botOptions);
+    } catch (e) {
+      connecting = false;
+      const msg = e instanceof Error ? e.message : String(e);
+      log("error", `createBot failed: ${msg}`).catch(() => {});
+      reconnectAttempts++;
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && !stopped) {
+        reconnectTimer = setTimeout(() => connect(), randomBetween(8000, 15000));
+      } else {
+        stopped = true;
+        terminal = { status: "error", error: msg };
+      }
+      return;
+    }
     currentBot = bot;
+    connecting = false;
 
     let connected = false;
     let handlingDisconnect = false;
@@ -622,12 +684,20 @@ export async function runMcBot(
       if (handlingDisconnect) return;
       handlingDisconnect = true;
       cleanup();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       if (currentBot === bot) {
         try {
           bot.removeAllListeners();
-          bot.end("reconnect");
+          bot.quit("reconnect");
         } catch {
-          /* ignore */
+          try {
+            bot.end("reconnect");
+          } catch {
+            /* ignore */
+          }
         }
         currentBot = null;
       }
@@ -635,7 +705,6 @@ export async function runMcBot(
       if (stopped || abortSignal.aborted || authFailed) return;
 
       const lower = reasonText.toLowerCase();
-      // Another session of this account is already online
       if (
         lower.includes("logged in from another") ||
         lower.includes("already connected") ||
@@ -675,39 +744,49 @@ export async function runMcBot(
       }
 
       reconnectAttempts++;
-      const baseDelay = reconnectAttempts <= 3
-        ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
-        : randomBetween(45, 150) * 1000;
+      // Protocol kicks ("Invalid sequence", "Timed out") need longer cool-down
+      const isProtocolKick =
+        lower.includes("invalid sequence") ||
+        lower.includes("timed out") ||
+        lower.includes("timeout");
+      const baseDelay = isProtocolKick
+        ? randomBetween(20, 45) * 1000
+        : reconnectAttempts <= 3
+          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
+          : randomBetween(45, 150) * 1000;
       const delay = baseDelay + randomBetween(0, 8000);
       log(
         "info",
-        `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})${fromKick ? " after kick" : ""}`,
+        `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})${fromKick ? " after kick" : ""}: ${reasonText.slice(0, 80)}`,
       ).catch(() => {});
-      setTimeout(() => connect(), delay);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
     };
 
     bot.on("login", () => {
       connected = true;
-      reconnectAttempts = 0;
       log("info", `Logged in as ${bot.username}`).catch(() => {});
     });
 
     bot.on("spawn", () => {
-      if (loopsStarted && currentBot === bot) {
+      if (currentBot !== bot) return;
+      if (loopsStarted) {
         log("info", "Respawned in world").catch(() => {});
         return;
       }
       loopsStarted = true;
+      reconnectAttempts = 0;
       log("info", "Spawned in world").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
-      reconnectAttempts = 0;
 
-      // Wait a bit after spawn before AFK/messages — reduces proxy/anticheat kicks
+      // Longer settle time before any activity — reduces Timed out / Invalid sequence
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
-      }, randomBetween(3000, 8000));
+      }, randomBetween(12000, 25000));
     });
 
     bot.on("chat", (username: string, message: string) => {

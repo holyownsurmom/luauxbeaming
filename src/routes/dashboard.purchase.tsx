@@ -23,8 +23,6 @@ type Plan = {
 const CURRENCIES = [
   { code: "ltc", label: "Litecoin (LTC)" },
   { code: "sol", label: "Solana (SOL)" },
-  { code: "usdttrc20", label: "USDT (TRC20)" },
-  { code: "usdcsol", label: "USDC (Solana)" },
 ];
 
 function PurchasePage() {
@@ -358,8 +356,8 @@ function PaymentView({
             Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            To the address below. Access unlocks automatically after{" "}
-            {payment.required_confirmations} confirmations.
+            Send the exact amount to the address below (LTC or SOL only). After payment is
+            confirmed by support, your access unlocks.
           </p>
         </div>
 

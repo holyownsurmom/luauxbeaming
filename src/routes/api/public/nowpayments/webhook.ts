@@ -117,63 +117,86 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           return new Response("ok");
         }
 
-        const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
-          verification: { prefix: "LX-VB", label: "Verification Bot" },
-          "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
-          "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
+        const PLUGIN_META: Record<string, { prefix: string; label: string; pluginId: string }> = {
+          verification: { prefix: "LX-VB", label: "Verification Bot", pluginId: "verification" },
+          "discord-spam": { prefix: "LX-DS", label: "Discord Spam", pluginId: "discord-spam" },
+          "discord-autoreply": {
+            prefix: "LX-AR",
+            label: "Discord Auto-Reply",
+            pluginId: "discord-autoreply",
+          },
         };
-        const meta = PLUGIN_META[plan.id];
+        const PLUGIN_GRANTS: Record<string, string[]> = {
+          verification: ["verification"],
+          "discord-spam": ["discord-spam"],
+          "discord-autoreply": ["discord-autoreply"],
+          "discord-bundle": ["discord-spam", "discord-autoreply"],
+        };
+        const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
 
-        if (plan.kind === "plugin" && meta) {
-          const { data: existingKey } = await db
-            .from("verification_keys")
-            .select("id, key, expires_at, delivered")
-            .eq("source_payment_id", pmt.id)
-            .maybeSingle();
+        if (plan.kind === "plugin" && grantPluginIds.length > 0) {
+          const rand = (n: number) => {
+            const bytes = new Uint8Array(n);
+            crypto.getRandomValues(bytes);
+            return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+              .join("")
+              .toUpperCase();
+          };
+          const expires = new Date(
+            Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
+          ).toISOString();
+          const isLifetime = plan.duration_days >= 3650;
+          const issued: { pluginId: string; label: string; key: string; id: string; delivered: boolean }[] =
+            [];
 
-          let keyRow = existingKey;
-          let key = existingKey?.key;
-          let expires = existingKey?.expires_at;
-
-          if (!existingKey) {
-            const rand = (n: number) => {
-              const bytes = new Uint8Array(n);
-              crypto.getRandomValues(bytes);
-              return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
-                .join("")
-                .toUpperCase();
-            };
-            key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
-            expires = new Date(
-              Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
-            ).toISOString();
-            const { data: inserted, error: insErr } = await db
+          for (const pluginId of grantPluginIds) {
+            const meta = PLUGIN_META[pluginId];
+            if (!meta) continue;
+            const { data: existingKeys } = await db
               .from("verification_keys")
-              .insert({
-                discord_id: pmt.discord_id,
-                key,
-                expires_at: expires,
-                source_payment_id: pmt.id,
-                plugin_id: plan.id,
-              })
-              .select("id, key, expires_at, delivered")
-              .single();
-            if (insErr) {
-              // Unique race — fetch existing
-              const { data: raced } = await db
+              .select("id, key, expires_at, delivered, plugin_id")
+              .eq("source_payment_id", pmt.id)
+              .eq("plugin_id", pluginId)
+              .limit(1);
+            let keyRow = existingKeys?.[0] ?? null;
+            if (!keyRow) {
+              const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+              const { data: inserted, error: insErr } = await db
                 .from("verification_keys")
-                .select("id, key, expires_at, delivered")
-                .eq("source_payment_id", pmt.id)
-                .maybeSingle();
-              keyRow = raced;
-              key = raced?.key;
-              expires = raced?.expires_at;
-            } else {
-              keyRow = inserted;
+                .insert({
+                  discord_id: pmt.discord_id,
+                  key,
+                  expires_at: expires,
+                  source_payment_id: pmt.id,
+                  plugin_id: pluginId,
+                })
+                .select("id, key, expires_at, delivered, plugin_id")
+                .single();
+              if (insErr) {
+                const { data: raced } = await db
+                  .from("verification_keys")
+                  .select("id, key, expires_at, delivered, plugin_id")
+                  .eq("source_payment_id", pmt.id)
+                  .eq("plugin_id", pluginId)
+                  .maybeSingle();
+                keyRow = raced;
+              } else {
+                keyRow = inserted;
+              }
+            }
+            if (keyRow?.key) {
+              issued.push({
+                pluginId,
+                label: meta.label,
+                key: keyRow.key,
+                id: keyRow.id,
+                delivered: !!keyRow.delivered,
+              });
             }
           }
 
-          if (key && !keyRow?.delivered) {
+          const undelivered = issued.filter((k) => !k.delivered);
+          if (undelivered.length > 0) {
             try {
               const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
                 method: "POST",
@@ -185,7 +208,16 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
               });
               if (dmRes.ok) {
                 const dm = (await dmRes.json()) as { id: string };
-                const isLifetime = plan.duration_days >= 3650;
+                const title =
+                  plan.id === "discord-bundle"
+                    ? "Discord Bundle"
+                    : PLUGIN_META[grantPluginIds[0]]?.label ?? plan.name;
+                const keyLines = undelivered
+                  .map(
+                    (k) =>
+                      `**${k.label}**\n\`\`\`${k.key}\`\`\``,
+                  )
+                  .join("\n");
                 await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
                   method: "POST",
                   headers: {
@@ -194,19 +226,16 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
                   },
                   body: JSON.stringify({
                     content:
-                      `✅ **LuauX ${meta.label} activated**\n\n` +
-                      `Your ${isLifetime ? "lifetime" : "monthly"} license key:\n\`\`\`${key}\`\`\`\n` +
+                      `✅ **LuauX ${title} activated**\n\n` +
+                      `${keyLines}\n` +
                       (isLifetime
-                        ? `This key never expires.\n\n`
-                        : `Expires: <t:${Math.floor(new Date(expires!).getTime() / 1000)}:F>\n\n`) +
-                      `Keep this key private. You can view it anytime in your dashboard.`,
+                        ? `These keys never expire.\n\n`
+                        : `Expires: <t:${Math.floor(new Date(expires).getTime() / 1000)}:F>\n\n`) +
+                      `Keep keys private. You can view them anytime in your dashboard.`,
                   }),
                 });
-                if (keyRow) {
-                  await db
-                    .from("verification_keys")
-                    .update({ delivered: true })
-                    .eq("id", keyRow.id);
+                for (const k of undelivered) {
+                  await db.from("verification_keys").update({ delivered: true }).eq("id", k.id);
                 }
               } else {
                 console.warn(

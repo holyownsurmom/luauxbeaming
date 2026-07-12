@@ -30,7 +30,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "What payment methods do you accept?",
-    a: "We accept Bitcoin, Ethereum, USDT, USDC, Litecoin, Dogecoin, and 50+ other cryptocurrencies through NOWPayments. No credit card needed.",
+    a: "We only accept Litecoin (LTC) and Solana (SOL). No credit cards or other coins.",
     category: "Getting Started",
     icon: CreditCard,
   },
@@ -194,7 +194,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Does the Verification Bot require a license key?",
-    a: "Yes. The Verification Bot costs $10/month. Purchase it in the Purchase tab. The key is delivered via Discord DM and visible in your dashboard.",
+    a: "Yes. The Verification Bot costs $10/month (LTC/SOL only). Purchase on the Verification Bot page. After payment is confirmed, the key is DM'd and shown in your dashboard. Lifetime keys are admin-issued only.",
     category: "Verification Bot",
     icon: Key,
   },

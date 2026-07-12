@@ -26,28 +26,33 @@ type Payment = {
 const CURRENCIES = [
   { code: "ltc", label: "Litecoin (LTC)" },
   { code: "sol", label: "Solana (SOL)" },
-  { code: "usdttrc20", label: "USDT (TRC20)" },
-  { code: "usdcsol", label: "USDC (Solana)" },
 ];
 
 export function PluginPage({
   pluginId,
+  planId,
   title,
   tagline,
   cardTitle,
   cardDescription,
-  price,
   icon: Icon,
   features,
+  price = 20,
+  priceNote = "One-time lifetime purchase",
+  showBundleOffer,
 }: {
   pluginId: string;
+  /** Invoice plan id (defaults to pluginId). Use discord-bundle for bundle. */
+  planId?: string;
   title: string;
   tagline: string;
   cardTitle: string;
   cardDescription: string;
-  price: number;
   icon: React.ComponentType<{ className?: string }>;
   features: string[];
+  price?: number;
+  priceNote?: string;
+  showBundleOffer?: boolean;
 }) {
   const fetchKeys = useServerFn(getPluginKeys);
   const invoice = useServerFn(createInvoice);
@@ -60,6 +65,14 @@ export function PluginPage({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
+  const [adminActivated, setAdminActivated] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(planId || pluginId);
+  const [selectedPrice, setSelectedPrice] = useState(price);
+
+  useEffect(() => {
+    setSelectedPlan(planId || pluginId);
+    setSelectedPrice(price);
+  }, [planId, pluginId, price]);
 
   useEffect(() => {
     fetchKeys({ data: { plugin_id: pluginId } })
@@ -84,14 +97,16 @@ export function PluginPage({
     return () => clearInterval(t);
   }, [payment, getPay, fetchKeys, pluginId]);
 
-  const [adminActivated, setAdminActivated] = useState(false);
-
   const startCheckout = async () => {
     setError(null);
     setCreating(true);
     try {
-      const p = (await invoice({ data: { plan_id: pluginId, pay_currency: currency } })) as Payment;
-      // Admin bypass: skip payment view
+      const p = (await invoice({
+        data: {
+          plan_id: selectedPlan,
+          pay_currency: currency as "ltc" | "sol",
+        },
+      })) as Payment;
       if (p.pay_currency === "admin" && p.status === "finished") {
         setAdminActivated(true);
         fetchKeys({ data: { plugin_id: pluginId } }).then((d) => setKeys(d as KeyRow[]));
@@ -105,8 +120,10 @@ export function PluginPage({
     }
   };
 
-  // Lifetime: use most recent key (never expires practically)
-  const activeKey = keys[0];
+  const activeKey = keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
+  const isLifetimeKey =
+    !!activeKey &&
+    new Date(activeKey.expires_at).getTime() - Date.now() > 3000 * 24 * 60 * 60 * 1000;
 
   const copy = async (v: string) => {
     await navigator.clipboard.writeText(v);
@@ -133,8 +150,8 @@ export function PluginPage({
               Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              To the address below. Access unlocks automatically after{" "}
-              {payment.required_confirmations} confirmations.
+              Send the exact amount to the address below. After payment, open a ticket or wait for
+              admin confirmation — then your key appears here and in Discord DM.
             </p>
           </div>
           <div>
@@ -178,16 +195,14 @@ export function PluginPage({
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Confirmations
+                Network
               </div>
-              <div className="mt-1 font-mono">
-                {payment.confirmations} / {payment.required_confirmations}
-              </div>
+              <div className="mt-1 font-mono uppercase">{payment.pay_currency}</div>
             </div>
           </div>
           {done && (
             <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-              Payment confirmed. Your license key has been generated and DM'd by the LuauX bot.
+              Payment confirmed. Your license key is ready.
             </div>
           )}
         </div>
@@ -228,13 +243,52 @@ export function PluginPage({
             </div>
           </div>
 
+          {showBundleOffer && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPlan(pluginId);
+                  setSelectedPrice(20);
+                }}
+                className={`rounded-xl brutal-border p-4 text-left transition-colors ${
+                  selectedPlan === pluginId
+                    ? "bg-primary/15 ring-1 ring-primary/40"
+                    : "bg-background/60 hover:bg-secondary/30"
+                }`}
+              >
+                <div className="font-display text-2xl font-semibold">$20</div>
+                <div className="text-xs text-muted-foreground mt-0.5">This plugin only</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPlan("discord-bundle");
+                  setSelectedPrice(30);
+                }}
+                className={`rounded-xl brutal-border p-4 text-left transition-colors ${
+                  selectedPlan === "discord-bundle"
+                    ? "bg-primary/15 ring-1 ring-primary/40"
+                    : "bg-background/60 hover:bg-secondary/30"
+                }`}
+              >
+                <div className="font-display text-2xl font-semibold">$30</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Spam + Auto-Reply bundle</div>
+              </button>
+            </div>
+          )}
+
           <div className="rounded-xl brutal-border bg-background/60 p-5 flex items-center justify-between gap-4">
             <div>
-              <div className="font-display text-4xl font-semibold">${price.toFixed(2)}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">One-time lifetime purchase</div>
+              <div className="font-display text-4xl font-semibold">${selectedPrice.toFixed(2)}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {selectedPlan === "discord-bundle"
+                  ? "Lifetime — both Discord plugins"
+                  : priceNote}
+              </div>
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-primary/15 text-primary px-3 py-1.5 text-xs font-semibold">
-              <Bitcoin className="h-3.5 w-3.5" /> Pay with crypto
+              <Bitcoin className="h-3.5 w-3.5" /> LTC / SOL only
             </div>
           </div>
 
@@ -262,7 +316,8 @@ export function PluginPage({
           ) : activeKey ? (
             <div className="rounded-xl brutal-border bg-primary/10 p-4 space-y-3">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-primary">
-                <Check className="h-3.5 w-3.5" /> Lifetime license active
+                <Check className="h-3.5 w-3.5" />{" "}
+                {isLifetimeKey ? "Lifetime license active" : "License active"}
               </div>
               <div className="flex items-center gap-2">
                 <code className="flex-1 rounded-lg bg-background/70 brutal-border px-3 py-2 font-mono text-sm break-all">
@@ -279,11 +334,11 @@ export function PluginPage({
                   )}
                 </button>
               </div>
-              {!activeKey.delivered && (
-                <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
-                  <Clock className="h-3 w-3" /> DM pending — open a DM with the LuauX bot
-                </div>
-              )}
+              <div className="text-[11px] text-muted-foreground">
+                {isLifetimeKey
+                  ? "Never expires"
+                  : `Expires ${new Date(activeKey.expires_at).toLocaleDateString()}`}
+              </div>
             </div>
           ) : checkout ? (
             <div className="space-y-4">
@@ -312,7 +367,7 @@ export function PluginPage({
                 onClick={startCheckout}
                 className="w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 py-3 text-sm font-semibold disabled:opacity-50"
               >
-                {creating ? "Creating invoice…" : `Pay $${price.toFixed(2)} with crypto`}
+                {creating ? "Creating invoice…" : `Pay $${selectedPrice.toFixed(2)} with crypto`}
               </button>
               {error && <div className="text-xs text-destructive">{error}</div>}
               <button
@@ -327,13 +382,13 @@ export function PluginPage({
               onClick={() => setCheckout(true)}
               className="block w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 text-center py-4 text-sm font-semibold"
             >
-              Unlock for ${price.toFixed(2)}
+              Unlock for ${selectedPrice.toFixed(2)}
             </button>
           )}
 
           <div className="rounded-xl brutal-border bg-background/40 px-4 py-3 flex items-center gap-2 text-[12px] text-muted-foreground">
             <KeyRound className="h-3.5 w-3.5 text-primary" />
-            Already have a key? The LuauX bot DMs it to you the moment payment confirms.
+            We only accept LTC and SOL. Keys unlock after payment is confirmed.
           </div>
         </div>
       </div>

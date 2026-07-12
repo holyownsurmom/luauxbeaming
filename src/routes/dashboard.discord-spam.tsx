@@ -57,8 +57,6 @@ type Payment = {
 const CURRENCIES = [
   { code: "ltc", label: "Litecoin (LTC)" },
   { code: "sol", label: "Solana (SOL)" },
-  { code: "usdttrc20", label: "USDT (TRC20)" },
-  { code: "usdcsol", label: "USDC (Solana)" },
 ];
 
 function DiscordSpamPage() {
@@ -77,6 +75,8 @@ function DiscordSpamPage() {
   const [creating, setCreating] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
+  const [spamPlanId, setSpamPlanId] = useState<"discord-spam" | "discord-bundle">("discord-spam");
+  const spamPrice = spamPlanId === "discord-bundle" ? 30 : 20;
 
   const [runningBots, setRunningBots] = useState<DiscordBotStatus[]>([]);
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
@@ -170,7 +170,10 @@ function DiscordSpamPage() {
     setCreating(true);
     try {
       const p = (await invoice({
-        data: { plan_id: "discord-spam", pay_currency: currency },
+        data: {
+          plan_id: spamPlanId,
+          pay_currency: currency as "ltc" | "sol",
+        },
       })) as Payment;
       if (p.pay_currency === "admin" && p.status === "finished") {
         fetchKeys({ data: { plugin_id: "discord-spam" } }).then((d) => setKeys(d as KeyRow[]));
@@ -385,15 +388,44 @@ function DiscordSpamPage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSpamPlanId("discord-spam")}
+                className={`rounded-xl brutal-border p-4 text-left transition-colors ${
+                  spamPlanId === "discord-spam"
+                    ? "bg-primary/15 ring-1 ring-primary/40"
+                    : "bg-background/60 hover:bg-secondary/30"
+                }`}
+              >
+                <div className="font-display text-2xl font-semibold">$20</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Spam only · lifetime</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSpamPlanId("discord-bundle")}
+                className={`rounded-xl brutal-border p-4 text-left transition-colors ${
+                  spamPlanId === "discord-bundle"
+                    ? "bg-primary/15 ring-1 ring-primary/40"
+                    : "bg-background/60 hover:bg-secondary/30"
+                }`}
+              >
+                <div className="font-display text-2xl font-semibold">$30</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Spam + Auto-Reply</div>
+              </button>
+            </div>
+
             <div className="rounded-xl brutal-border bg-background/60 p-5 flex items-center justify-between gap-4">
               <div>
-                <div className="font-display text-4xl font-semibold">$10</div>
+                <div className="font-display text-4xl font-semibold">${spamPrice}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  One-time lifetime purchase
+                  {spamPlanId === "discord-bundle"
+                    ? "Lifetime — both Discord plugins"
+                    : "One-time lifetime purchase"}
                 </div>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-primary/15 text-primary px-3 py-1.5 text-xs font-semibold">
-                <Zap className="h-3.5 w-3.5" /> Pay with crypto
+                <Zap className="h-3.5 w-3.5" /> LTC / SOL only
               </div>
             </div>
 
@@ -439,7 +471,9 @@ function DiscordSpamPage() {
                   onClick={startCheckout}
                   className="w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 py-3 text-sm font-semibold disabled:opacity-50"
                 >
-                  {creating ? "Creating invoice..." : "Pay $10.00 with crypto"}
+                  {creating
+                    ? "Creating invoice..."
+                    : `Pay $${spamPrice.toFixed(2)} with crypto`}
                 </button>
                 {payError && <div className="text-xs text-destructive">{payError}</div>}
                 <button
@@ -454,7 +488,7 @@ function DiscordSpamPage() {
                 onClick={() => setCheckout(true)}
                 className="block w-full rounded-xl brutal-border bg-primary text-primary-foreground hover:bg-primary/90 text-center py-4 text-sm font-semibold"
               >
-                Unlock for $10.00
+                Unlock for ${spamPrice.toFixed(2)}
               </button>
             )}
 

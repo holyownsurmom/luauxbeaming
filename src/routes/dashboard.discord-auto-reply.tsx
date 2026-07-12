@@ -211,7 +211,9 @@ function DiscordAutoReplyPage() {
         tagline="Hands-off DM responder with humanized timing."
         cardTitle="Discord Auto-Reply"
         cardDescription="Hands-off DM auto-responder. Pick DM or Friend mode and let it reply for you — humanized timing, zero captcha solving."
-        price={10}
+        price={20}
+        priceNote="One-time lifetime purchase"
+        showBundleOffer
         icon={MessageSquare}
         features={[
           "DM mode & Friend mode",

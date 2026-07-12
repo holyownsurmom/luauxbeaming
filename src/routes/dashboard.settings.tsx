@@ -20,6 +20,8 @@ import {
   createAdminLicenseKey,
   grantAdminPlanAccess,
   getPlans,
+  listPendingPayments,
+  confirmManualPayment,
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { useSettings } from "@/lib/settings-context";
@@ -469,6 +471,7 @@ function SettingsPage() {
 
           {tab === "admin" && isAdmin && (
             <>
+              <AdminPendingPaymentsPanel />
               <AdminIssueAccessPanel />
               <BlacklistPanel />
             </>
@@ -486,6 +489,91 @@ function RedeemKeyPanel() {
       subtitle="Paste a license key from support, gift, or purchase DM."
     >
       <RedeemKeyForm />
+    </Panel>
+  );
+}
+
+function AdminPendingPaymentsPanel() {
+  const listPending = useServerFn(listPendingPayments);
+  const confirmPay = useServerFn(confirmManualPayment);
+  const [rows, setRows] = useState<
+    {
+      id: string;
+      discord_id: string;
+      plan_id: string;
+      pay_currency: string;
+      pay_amount: number;
+      price_amount: number;
+      created_at: string;
+    }[]
+  >([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const refresh = () => {
+    listPending()
+      .then((d) => setRows((d as typeof rows) || []))
+      .catch(() => setRows([]));
+  };
+
+  useEffect(() => {
+    refresh();
+  }, [listPending]);
+
+  return (
+    <Panel
+      title="Pending crypto payments"
+      subtitle="Confirm LTC/SOL payments after you see them on-chain. This unlocks keys/plans."
+    >
+      <div className="space-y-3">
+        {err && <div className="text-xs text-destructive">{err}</div>}
+        {rows.length === 0 ? (
+          <div className="text-xs text-muted-foreground">No waiting payments.</div>
+        ) : (
+          rows.map((r) => (
+            <div
+              key={r.id}
+              className="rounded-xl brutal-border bg-background/40 p-3 flex flex-wrap items-center justify-between gap-3"
+            >
+              <div className="min-w-0 text-xs space-y-0.5">
+                <div className="font-mono break-all">{r.discord_id}</div>
+                <div>
+                  <span className="font-semibold">{r.plan_id}</span> · ${Number(r.price_amount).toFixed(2)} ·{" "}
+                  {r.pay_amount} {String(r.pay_currency).toUpperCase()}
+                </div>
+                <div className="text-muted-foreground">
+                  {new Date(r.created_at).toLocaleString()}
+                </div>
+              </div>
+              <button
+                disabled={busyId === r.id}
+                onClick={async () => {
+                  setBusyId(r.id);
+                  setErr(null);
+                  try {
+                    await confirmPay({ data: { payment_id: r.id } });
+                    refresh();
+                  } catch (e) {
+                    setErr(e instanceof Error ? e.message : "Confirm failed");
+                  } finally {
+                    setBusyId(null);
+                  }
+                }}
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50"
+              >
+                {busyId === r.id ? "Confirming…" : "Mark paid"}
+              </button>
+            </div>
+          ))
+        )}
+        <button
+          type="button"
+          onClick={refresh}
+          className="text-xs text-muted-foreground hover:text-foreground underline"
+        >
+          Refresh
+        </button>
+      </div>
     </Panel>
   );
 }

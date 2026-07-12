@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -16,6 +16,7 @@ import {
   getVerificationBotInvite,
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
+import { PluginPage } from "@/components/plugin-page";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
   head: () => ({ meta: [{ title: "Verification Bot — LuauX" }] }),
@@ -276,42 +277,23 @@ function VerificationBotPage() {
       )}
 
       {!activeKey && !isAdmin && (
-        <div className="rounded-2xl brutal-border bg-card p-6">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            No active license
-          </div>
-          <p className="mt-2 text-sm text-foreground/80">
-            Purchase the Verification Bot plugin to get a fresh key valid for 30 days. The LuauX
-            Discord bot will DM the key to you the instant your payment gets 2 confirmations.
-          </p>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-display text-4xl font-semibold text-gradient">$10</span>
-            <span className="text-sm text-muted-foreground">/ month</span>
-          </div>
-          <ul className="mt-4 space-y-1.5 text-sm text-foreground/80">
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> Auto-generated license key
-            </li>
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> Delivered via Discord DM
-            </li>
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> 30 days of access, renew anytime
-            </li>
-          </ul>
-          <Link
-            to="/dashboard/purchase"
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 btn-premium"
-          >
-            Purchase — $10 in crypto
-          </Link>
-          <div className="mt-6 rounded-xl brutal-border bg-background/50 p-4">
-            <RedeemKeyForm
-              expectedPlugin="verification"
-              onSuccess={() => window.location.reload()}
-            />
-          </div>
-        </div>
+        <PluginPage
+          pluginId="verification"
+          title="Verification Bot"
+          tagline="Server verification with auto role assignment."
+          cardTitle="Verification Bot"
+          cardDescription="30-day license. No public lifetime — renew monthly. Lifetime keys only via admin/support."
+          price={10}
+          priceNote="30 days · renew anytime"
+          icon={ShieldCheck}
+          features={[
+            "Auto-generated license key",
+            "Delivered via Discord DM after confirm",
+            "30 days of access, renew anytime",
+            "Central LuauX bot (no user bot token)",
+            "LTC / SOL payments only",
+          ]}
+        />
       )}
 
       {/* Tabs — visible for admins and users with active keys */}
@@ -677,7 +659,7 @@ function VerificationBotPage() {
                   </li>
                   <li className="flex gap-2">
                     <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    The verification license costs <strong className="text-foreground">$10/month</strong> and auto-delivers via Discord DM
+                    The verification license costs <strong className="text-foreground">$10/month</strong> (LTC/SOL). Lifetime only via admin-issued keys
                   </li>
                 </ul>
               </div>

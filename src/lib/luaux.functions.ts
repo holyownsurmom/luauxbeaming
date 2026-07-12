@@ -107,7 +107,36 @@ export const deleteMcAccount = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-const SUPPORTED_CURRENCIES = ["ltc", "sol", "usdttrc20", "usdcsol"] as const;
+const SUPPORTED_CURRENCIES = ["ltc", "sol"] as const;
+
+const FIXED_WALLETS: Record<(typeof SUPPORTED_CURRENCIES)[number], string> = {
+  ltc: process.env.PAY_WALLET_LTC || "LMZ2NQDHBhGHoMMQ1d9Y6MTNDj6TWHU6AC",
+  sol: process.env.PAY_WALLET_SOL || "8NbpMNC4pmyzMgnkfu2PB7D1TEnswYr4wLYAazHcuNe8",
+};
+
+async function usdToCryptoAmount(usd: number, currency: "ltc" | "sol"): Promise<number> {
+  const ids = { ltc: "litecoin", sol: "solana" } as const;
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${ids[currency]}&vs_currencies=usd`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) {
+      const j = (await res.json()) as Record<string, { usd?: number }>;
+      const price = j[ids[currency]]?.usd;
+      if (price && price > 0) {
+        const raw = usd / price;
+        return currency === "sol" ? Number(raw.toFixed(4)) : Number(raw.toFixed(6));
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  // Fallback rates if CoinGecko is down (approximate)
+  const fallbackUsd: Record<"ltc" | "sol", number> = { ltc: 85, sol: 140 };
+  const raw = usd / fallbackUsd[currency];
+  return currency === "sol" ? Number(raw.toFixed(4)) : Number(raw.toFixed(6));
+}
 
 export const createInvoice = createServerFn({ method: "POST" })
   .inputValidator((input) =>
@@ -129,7 +158,7 @@ export const createInvoice = createServerFn({ method: "POST" })
 
     const order_id = `luaux_${user.id}_${Date.now()}`;
 
-    // Admin bypass: instantly activate without NOWPayments
+    // Admin bypass: instantly activate without external payment
     if (isAdm) {
       const { data: row } = await db
         .from("payments")
@@ -163,21 +192,30 @@ export const createInvoice = createServerFn({ method: "POST" })
       const base = Math.max(existingExpiry, now);
       const expiryDays = plan.duration_days || 90;
 
-      const planUpdate: Record<string, unknown> = {
-        active_plan_id: plan.id,
-        plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
-        bot_hours_remaining: Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
-      };
-      await db.from("profiles").update(planUpdate).eq("discord_id", user.id);
+      // MC plans only — plugins grant keys, not profile plan slots
+      if (plan.kind !== "plugin") {
+        const planUpdate: Record<string, unknown> = {
+          active_plan_id: plan.id,
+          plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+          bot_hours_remaining: Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
+        };
+        await db.from("profiles").update(planUpdate).eq("discord_id", user.id);
+      }
 
-      // For plugin plans, generate a key instantly
+      // For plugin plans, generate key(s) instantly (bundle grants both spam + autoreply)
       const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
         verification: { prefix: "LX-VB", label: "Verification Bot" },
         "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
         "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
       };
-      const meta = PLUGIN_META[plan.id];
-      if (plan.kind === "plugin" && meta && row) {
+      const PLUGIN_GRANTS: Record<string, string[]> = {
+        verification: ["verification"],
+        "discord-spam": ["discord-spam"],
+        "discord-autoreply": ["discord-autoreply"],
+        "discord-bundle": ["discord-spam", "discord-autoreply"],
+      };
+      const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
+      if (plan.kind === "plugin" && grantPluginIds.length > 0 && row) {
         const rand = (n: number) => {
           const bytes = new Uint8Array(n);
           crypto.getRandomValues(bytes);
@@ -185,16 +223,20 @@ export const createInvoice = createServerFn({ method: "POST" })
             .join("")
             .toUpperCase();
         };
-        const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
         const expires = new Date(now + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
-        await db.from("verification_keys").insert({
-          discord_id: user.id,
-          key,
-          expires_at: expires,
-          source_payment_id: row.id,
-          plugin_id: plan.id,
-          delivered: true, // Admin gets it in dashboard, no DM needed
-        });
+        for (const pluginId of grantPluginIds) {
+          const meta = PLUGIN_META[pluginId];
+          if (!meta) continue;
+          const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+          await db.from("verification_keys").insert({
+            discord_id: user.id,
+            key,
+            expires_at: expires,
+            source_payment_id: row.id,
+            plugin_id: pluginId,
+            delivered: true,
+          });
+        }
       }
 
       return {
@@ -209,48 +251,26 @@ export const createInvoice = createServerFn({ method: "POST" })
       };
     }
 
-    const npRes = await fetch("https://api.nowpayments.io/v1/payment", {
-      method: "POST",
-      headers: {
-        "x-api-key": process.env.NOWPAYMENTS_API_KEY!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        price_amount: Number(plan.price_usd),
-        price_currency: "usd",
-        pay_currency: data.pay_currency,
-        order_id,
-        order_description: `LuauX ${plan.name} plan`,
-        ipn_callback_url:
-          process.env.IPN_CALLBACK_URL ||
-          "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook",
-      }),
-    });
-    if (!npRes.ok) {
-      const t = await npRes.text();
-      console.error("[nowpayments] create failed", npRes.status, t);
-      throw new Error("Payment provider error");
-    }
-    const np = (await npRes.json()) as {
-      payment_id: string | number;
-      pay_address: string;
-      pay_amount: number;
-      pay_currency: string;
-      price_amount: number;
-    };
+    // Fixed LTC/SOL wallets only (no NOWPayments)
+    const pay_currency = data.pay_currency;
+    const pay_address = FIXED_WALLETS[pay_currency];
+    const price_amount = Number(plan.price_usd);
+    const pay_amount = await usdToCryptoAmount(price_amount, pay_currency);
 
     const { data: row, error } = await db
       .from("payments")
       .insert({
         discord_id: user.id,
         plan_id: plan.id,
-        np_payment_id: String(np.payment_id),
+        np_payment_id: `manual_${Date.now()}`,
         np_order_id: order_id,
-        pay_currency: np.pay_currency,
-        pay_amount: np.pay_amount,
-        pay_address: np.pay_address,
-        price_amount: np.price_amount,
-        required_confirmations: 2,
+        pay_currency,
+        pay_amount,
+        pay_address,
+        price_amount,
+        status: "waiting",
+        confirmations: 0,
+        required_confirmations: 1,
       })
       .select("id")
       .single();
@@ -258,13 +278,13 @@ export const createInvoice = createServerFn({ method: "POST" })
 
     return {
       id: row.id,
-      pay_address: np.pay_address,
-      pay_amount: np.pay_amount,
-      pay_currency: np.pay_currency,
-      price_amount: np.price_amount,
+      pay_address,
+      pay_amount,
+      pay_currency,
+      price_amount,
       status: "waiting" as string,
       confirmations: 0,
-      required_confirmations: 2,
+      required_confirmations: 1,
     };
   });
 
@@ -762,6 +782,182 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
       id: row.id,
       unassigned: makeUnassigned,
     };
+  });
+
+/** Admin: list waiting manual payments (fixed LTC/SOL wallets) */
+export const listPendingPayments = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+  await requireUser();
+  if (!(await isAdminSession())) throw new Error("Admin only");
+  const { data, error } = await admin()
+    .from("payments")
+    .select(
+      "id, discord_id, plan_id, pay_currency, pay_amount, pay_address, price_amount, status, created_at",
+    )
+    .eq("status", "waiting")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return data ?? [];
+});
+
+/** Admin: mark a manual payment as paid and fulfill plan/plugin keys */
+export const confirmManualPayment = createServerFn({ method: "POST" })
+  .inputValidator((input) => z.object({ payment_id: z.string().uuid() }).parse(input))
+  .handler(async ({ data }) => {
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+    await requireUser();
+    if (!(await isAdminSession())) throw new Error("Admin only");
+    const db = admin();
+
+    const { data: pmt } = await db
+      .from("payments")
+      .select("*")
+      .eq("id", data.payment_id)
+      .maybeSingle();
+    if (!pmt) throw new Error("Payment not found");
+    if (pmt.fulfilled_at) return { ok: true, already: true };
+
+    const { data: claimed, error: claimErr } = await db
+      .from("payments")
+      .update({
+        status: "finished",
+        confirmations: 1,
+        fulfilled_at: new Date().toISOString(),
+      })
+      .eq("id", pmt.id)
+      .is("fulfilled_at", null)
+      .select("id")
+      .maybeSingle();
+    if (claimErr) throw new Error(claimErr.message);
+    if (!claimed) return { ok: true, already: true };
+
+    const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
+    if (!plan) throw new Error("Plan missing");
+
+    const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
+      verification: { prefix: "LX-VB", label: "Verification Bot" },
+      "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
+      "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
+    };
+    const PLUGIN_GRANTS: Record<string, string[]> = {
+      verification: ["verification"],
+      "discord-spam": ["discord-spam"],
+      "discord-autoreply": ["discord-autoreply"],
+      "discord-bundle": ["discord-spam", "discord-autoreply"],
+    };
+    const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
+
+    if (plan.kind === "plugin" && grantPluginIds.length > 0) {
+      const rand = (n: number) => {
+        const bytes = new Uint8Array(n);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+          .join("")
+          .toUpperCase();
+      };
+      const expires = new Date(
+        Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const isLifetime = plan.duration_days >= 3650;
+      const issued: { label: string; key: string; id: string }[] = [];
+
+      for (const pluginId of grantPluginIds) {
+        const meta = PLUGIN_META[pluginId];
+        if (!meta) continue;
+        const { data: existing } = await db
+          .from("verification_keys")
+          .select("id, key, delivered")
+          .eq("source_payment_id", pmt.id)
+          .eq("plugin_id", pluginId)
+          .maybeSingle();
+        if (existing) {
+          issued.push({ label: meta.label, key: existing.key, id: existing.id });
+          continue;
+        }
+        const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+        const { data: inserted } = await db
+          .from("verification_keys")
+          .insert({
+            discord_id: pmt.discord_id,
+            key,
+            expires_at: expires,
+            source_payment_id: pmt.id,
+            plugin_id: pluginId,
+            delivered: false,
+          })
+          .select("id, key")
+          .single();
+        if (inserted) issued.push({ label: meta.label, key: inserted.key, id: inserted.id });
+      }
+
+      if (issued.length > 0) {
+        try {
+          const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+            method: "POST",
+            headers: {
+              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ recipient_id: pmt.discord_id }),
+          });
+          if (dmRes.ok) {
+            const dm = (await dmRes.json()) as { id: string };
+            const title =
+              plan.id === "discord-bundle"
+                ? "Discord Bundle"
+                : PLUGIN_META[grantPluginIds[0]]?.label ?? plan.name;
+            const keyLines = issued
+              .map((k) => `**${k.label}**\n\`\`\`${k.key}\`\`\``)
+              .join("\n");
+            await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                content:
+                  `✅ **LuauX ${title} activated**\n\n` +
+                  `${keyLines}\n` +
+                  (isLifetime
+                    ? `These keys never expire.\n\n`
+                    : `Expires: <t:${Math.floor(new Date(expires).getTime() / 1000)}:F>\n\n`) +
+                  `Keep keys private. You can view them anytime in your dashboard.`,
+              }),
+            });
+            for (const k of issued) {
+              await db.from("verification_keys").update({ delivered: true }).eq("id", k.id);
+            }
+          }
+        } catch (e) {
+          console.warn("[confirmManualPayment] DM failed", e);
+        }
+      }
+    } else {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("plan_expires_at, bot_hours_remaining")
+        .eq("discord_id", pmt.discord_id)
+        .maybeSingle();
+      const now = Date.now();
+      const existingExpiry = profile?.plan_expires_at
+        ? new Date(profile.plan_expires_at).getTime()
+        : 0;
+      const base = Math.max(existingExpiry, now);
+      const expiryDays = plan.duration_days || 90;
+      await db
+        .from("profiles")
+        .update({
+          bot_hours_remaining:
+            Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
+          active_plan_id: plan.id,
+          plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .eq("discord_id", pmt.discord_id);
+    }
+
+    return { ok: true, already: false };
   });
 
 /** Admin: grant plan hours / activate a plan for a user (payment issues) */

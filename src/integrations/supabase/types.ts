@@ -200,6 +200,7 @@ export type Database = {
           confirmations: number
           created_at: string
           discord_id: string
+          fulfilled_at: string | null
           id: string
           np_order_id: string
           np_payment_id: string | null
@@ -217,6 +218,7 @@ export type Database = {
           confirmations?: number
           created_at?: string
           discord_id: string
+          fulfilled_at?: string | null
           id?: string
           np_order_id: string
           np_payment_id?: string | null
@@ -234,6 +236,7 @@ export type Database = {
           confirmations?: number
           created_at?: string
           discord_id?: string
+          fulfilled_at?: string | null
           id?: string
           np_order_id?: string
           np_payment_id?: string | null
@@ -555,7 +558,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_bot_jobs: {
+        Args: { p_limit?: number; p_worker_id: string }
+        Returns: {
+          config: Json
+          created_at: string
+          discord_id: string
+          error: string | null
+          id: string
+          started_at: string | null
+          status: string
+          stopped_at: string | null
+          type: string
+          updated_at: string
+          worker_id: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "bot_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
     }
     Enums: {
       [_ in never]: never

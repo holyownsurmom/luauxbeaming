@@ -669,7 +669,7 @@ function DiscordSpamPage() {
             <button
               onClick={launchBot}
               disabled={launching}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
             >
               {launching ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />

@@ -279,7 +279,7 @@ function VerificationBotPage() {
           </ul>
           <Link
             to="/dashboard/purchase"
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-2.5 text-sm font-semibold hover:bg-primary/90"
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 btn-premium"
           >
             Purchase — $10 in crypto
           </Link>
@@ -290,7 +290,7 @@ function VerificationBotPage() {
       {isAdmin && (
         <>
           {/* Tabs */}
-          <div className="flex gap-1 rounded-xl brutal-border bg-card p-1">
+          <div className="flex gap-1 rounded-xl brutal-border bg-card p-1 animate-tab-enter">
             {[
               { id: "config" as const, label: "Configuration", icon: Settings },
               { id: "guide" as const, label: "Setup Guide", icon: BookOpen },
@@ -299,9 +299,9 @@ function VerificationBotPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold transition-all ${
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold transition-all duration-300 ${
                   activeTab === tab.id
-                    ? "bg-primary text-primary-foreground shadow-md"
+                    ? "bg-primary text-primary-foreground shadow-md tab-active-glow"
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
                 }`}
               >
@@ -313,9 +313,9 @@ function VerificationBotPage() {
 
           {/* Config Tab */}
           {activeTab === "config" && (
-            <div className="space-y-6 animate-page-in">
+            <div className="space-y-6 animate-tab-enter">
               {/* Config form */}
-              <div className="rounded-2xl brutal-border bg-card">
+              <div className="rounded-2xl brutal-border bg-card panel-accent">
                 <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
                   <Settings className="h-5 w-5 text-primary" />
                   <div>
@@ -416,11 +416,11 @@ function VerificationBotPage() {
                   {successMsg && <div className="text-xs text-primary font-semibold">{successMsg}</div>}
                   {errorMsg && <div className="text-xs text-destructive font-semibold">{errorMsg}</div>}
 
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50"
-                  >
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
+              >
                     {saving ? (
                       <RefreshCw className="h-4 w-4 animate-spin" />
                     ) : (
@@ -435,7 +435,7 @@ function VerificationBotPage() {
 
           {/* Guide Tab */}
           {activeTab === "guide" && (
-            <div className="rounded-2xl brutal-border bg-card p-6 animate-page-in space-y-2">
+            <div className="rounded-2xl brutal-border bg-card p-6 animate-tab-enter space-y-2 panel-accent">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-10 w-10 rounded-lg bg-primary/15 brutal-border flex items-center justify-center">
                   <BookOpen className="h-5 w-5 text-primary" />
@@ -634,7 +634,7 @@ function VerificationBotPage() {
 
           {/* Secured Accounts Tab */}
           {activeTab === "accounts" && (
-            <div className="space-y-6 animate-page-in">
+            <div className="space-y-6 animate-tab-enter">
               {securedAccounts.length > 0 ? (
                 <div className="rounded-2xl brutal-border bg-card">
                   <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">

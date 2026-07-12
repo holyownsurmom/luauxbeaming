@@ -186,7 +186,7 @@ function Overview() {
       </section>
 
       {/* Quick actions + plugins */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
         <Link
           to="/dashboard/purchase"
           className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
@@ -253,7 +253,7 @@ function Overview() {
         <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground/60 mb-4">
           <Sparkles className="h-3.5 w-3.5 text-primary" /> Plugins
         </div>
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
           <PluginCard
             to="/dashboard/discord-spam"
             icon={Zap}

@@ -37,7 +37,7 @@ function DiscordBotPage() {
         </p>
       </header>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
         {PLUGINS.map((p) => (
           <Link
             key={p.to}

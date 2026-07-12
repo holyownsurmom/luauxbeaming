@@ -866,3 +866,216 @@ html[data-theme="blue"] {
     background: color-mix(in oklch, var(--primary) 40%, transparent);
   }
 }
+
+/* ===================================================================
+   ADDITIONAL PREMIUM ANIMATIONS & CLEAN UI UTILITIES
+   =================================================================== */
+
+/* === Text shimmer (gradient text sweep) === */
+@keyframes text-shimmer {
+  0% { background-position: -250% 0; }
+  100% { background-position: 250% 0; }
+}
+@utility text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--foreground) 0%,
+    var(--primary) 25%,
+    var(--foreground) 50%,
+    var(--primary) 75%,
+    var(--foreground) 100%
+  );
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 6s linear infinite;
+}
+
+/* === Subtle float (lighter than animate-float) === */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@utility animate-gentle-float {
+  animation: gentle-float 5s ease-in-out infinite;
+}
+
+/* === Input glow focus === */
+@layer base {
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    border-color: color-mix(in oklch, var(--primary) 60%, transparent) !important;
+    box-shadow:
+      0 0 0 3px color-mix(in oklch, var(--primary) 10%, transparent),
+      0 0 20px color-mix(in oklch, var(--primary) 8%, transparent);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+}
+
+/* === Card hover glow (ambient) === */
+@utility card-glow {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@layer base {
+  .card-glow:hover {
+    box-shadow:
+      0 0 30px color-mix(in oklch, var(--primary) 10%, transparent),
+      0 8px 32px -8px oklch(0 0 0 / 0.2);
+    border-color: color-mix(in oklch, var(--primary) 20%, transparent);
+  }
+}
+
+/* === Hover lift (for buttons/links) === */
+@utility hover-lift {
+  transition: all 0.3s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+}
+@layer base {
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+  .hover-lift:active {
+    transform: translateY(0px) scale(0.98);
+  }
+}
+
+/* === Border pulse === */
+@keyframes border-pulse {
+  0%, 100% { border-color: color-mix(in oklch, var(--primary) 20%, transparent); }
+  50% { border-color: color-mix(in oklch, var(--primary) 50%, transparent); }
+}
+@utility animate-border-pulse {
+  animation: border-pulse 3s ease-in-out infinite;
+}
+
+/* === Fade in (simple) === */
+@keyframes simple-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@utility animate-fade-in {
+  animation: simple-fade-in 0.5s ease forwards;
+}
+
+/* === Scale bounce (for buttons on hover) === */
+@keyframes scale-bounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+@utility animate-scale-bounce {
+  animation: scale-bounce 0.3s ease;
+}
+
+/* === Staggered fade-in for tab content === */
+@keyframes tab-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@utility animate-tab-enter {
+  animation: tab-enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* === Premium button with ripple-like expand === */
+@layer base {
+  .btn-premium {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.35s cubic-bezier(0.03, 0.98, 0.52, 0.99);
+  }
+  .btn-premium::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: color-mix(in oklch, var(--primary) 15%, transparent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.5s ease, height 0.5s ease;
+    z-index: 0;
+  }
+  .btn-premium:hover::before {
+    width: 300%;
+    height: 300%;
+  }
+  .btn-premium:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 20px -4px color-mix(in oklch, var(--primary) 30%, transparent),
+      0 0 15px color-mix(in oklch, var(--primary) 10%, transparent);
+  }
+  .btn-premium:active {
+    transform: translateY(0) scale(0.98);
+  }
+  .btn-premium > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+/* === Panel with ambient corner accents === */
+@utility panel-accent {
+  position: relative;
+  overflow: hidden;
+}
+@layer base {
+  .panel-accent::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle at top left, color-mix(in oklch, var(--primary) 8%, transparent), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .panel-accent::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle at bottom right, color-mix(in oklch, var(--primary) 8%, transparent), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+/* === Section divider with glow === */
+@utility divider-glow {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--primary) 30%, transparent),
+    transparent
+  );
+}
+
+/* === Skeleton with pulse === */
+@utility skeleton-pulse {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--muted) 30%, transparent) 0%,
+    color-mix(in oklch, var(--muted) 60%, transparent) 50%,
+    color-mix(in oklch, var(--muted) 30%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-skeleton 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* === Active tab indicator glow === */
+@layer base {
+  .tab-active-glow {
+    box-shadow:
+      0 0 15px color-mix(in oklch, var(--primary) 20%, transparent),
+      inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 20%, transparent);
+  }
+}

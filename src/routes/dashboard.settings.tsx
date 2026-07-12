@@ -422,7 +422,7 @@ function SettingsPage() {
                       }
                     }}
                     disabled={adminLoading || !adminPw.trim()}
-                    className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
+                    className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50 btn-premium"
                   >
                     {adminLoading ? "Checking..." : "Unlock Admin"}
                   </button>

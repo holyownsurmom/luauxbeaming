@@ -197,7 +197,7 @@ function PurchasePage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-5">
+      <div className="grid md:grid-cols-3 gap-5 stagger-cascade">
         {plans
           .filter((p) => (p.kind ?? "plan") === "plan")
           .map((plan) => {
@@ -264,7 +264,7 @@ function PurchasePage() {
                 <button
                   disabled={creating}
                   onClick={() => start(plan.id)}
-                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold disabled:opacity-50 brutal-border ${
+                  className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold disabled:opacity-50 brutal-border btn-premium ${
                     isPro
                       ? "bg-primary text-primary-foreground hover:bg-primary/90"
                       : "bg-background hover:bg-secondary/40"

@@ -38,7 +38,7 @@ function SupportPage() {
           href={DISCORD_INVITE}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-3 text-sm font-semibold hover:bg-primary/90 magnetic-hover"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-3 text-sm font-semibold hover:bg-primary/90 magnetic-hover btn-premium"
         >
           Open Discord ticket
           <ExternalLink className="h-4 w-4" />

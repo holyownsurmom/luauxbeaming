@@ -388,17 +388,20 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       throw new Error("No active Verification Bot license");
     }
 
-    const { error } = await db.from("verification_settings").upsert({
-      discord_id: user.id,
-      guild_id: data.guild_id,
-      verified_role_id: data.verified_role_id,
-      channel_id: data.channel_id,
-      message_title: data.message_title,
-      message_description: data.message_description,
-      button_text: data.button_text,
-      bot_token: data.bot_token || null,
-      bot_public_key: data.bot_public_key || null,
-    });
+    const { error } = await db.from("verification_settings").upsert(
+      {
+        discord_id: user.id,
+        guild_id: data.guild_id,
+        verified_role_id: data.verified_role_id,
+        channel_id: data.channel_id,
+        message_title: data.message_title,
+        message_description: data.message_description,
+        button_text: data.button_text,
+        bot_token: data.bot_token || null,
+        bot_public_key: data.bot_public_key || null,
+      },
+      { onConflict: "discord_id" },
+    );
 
     if (error) throw new Error(error.message);
 

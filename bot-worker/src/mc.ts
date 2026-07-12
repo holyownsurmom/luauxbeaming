@@ -390,9 +390,18 @@ export async function runMcBot(
     }, initialDelay);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function shouldReconnect(kickReason: string): boolean {
-    const lower = kickReason.toLowerCase();
+  function formatKickReason(reason: unknown): string {
+    if (reason == null) return "unknown";
+    if (typeof reason === "string") return reason;
+    try {
+      return JSON.stringify(reason);
+    } catch {
+      return String(reason);
+    }
+  }
+
+  function shouldReconnect(kickReason: unknown): boolean {
+    const lower = formatKickReason(kickReason).toLowerCase();
     if (lower.includes("banned")) return false;
     if (lower.includes("authenticat")) return false;
     if (lower.includes("not authenticated")) return false;
@@ -564,18 +573,20 @@ export async function runMcBot(
       log("error", `Error: ${err.message}`).catch(() => {});
     });
 
-    bot.on("kicked", async (reason: string) => {
-      log("warn", `Kicked: ${reason}`).catch(() => {});
+    bot.on("kicked", async (reason: unknown) => {
+      const reasonText = formatKickReason(reason);
+      log("warn", `Kicked: ${reasonText}`).catch(() => {});
       cleanup();
       if (currentBot === bot) currentBot = null;
 
-      const doReconnect = shouldReconnect(reason);
+      const doReconnect = shouldReconnect(reasonText);
       if (!doReconnect) {
-        const msg = reason.toLowerCase().includes("authenticat") || reason.toLowerCase().includes("not logged into")
-          ? `Authentication failed: ${reason}. Your token may be expired — re-login and get a new token.`
-          : reason.toLowerCase().includes("banned")
-            ? `Banned: ${reason}`
-            : `Not reconnecting: ${reason}`;
+        const lower = reasonText.toLowerCase();
+        const msg = lower.includes("authenticat") || lower.includes("not logged into")
+          ? `Authentication failed: ${reasonText}. Your token may be expired — re-login and get a new token.`
+          : lower.includes("banned")
+            ? `Banned: ${reasonText}`
+            : `Not reconnecting: ${reasonText}`;
         log("error", msg).catch(() => {});
         await updateJob(jobId, "error", msg);
         authFailed = true;
@@ -598,14 +609,15 @@ export async function runMcBot(
       }
     });
 
-    bot.on("end", async (reason: string) => {
-      log("system", `Disconnected: ${reason || "connection closed"}`).catch(() => {});
+    bot.on("end", async (reason: unknown) => {
+      const reasonText = formatKickReason(reason) || "connection closed";
+      log("system", `Disconnected: ${reasonText}`).catch(() => {});
       cleanup();
       if (currentBot === bot) currentBot = null;
 
       if (stopped || abortSignal.aborted || authFailed) return;
 
-      if (shouldReconnect(reason) && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      if (shouldReconnect(reasonText) && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         const baseDelay = reconnectAttempts <= 3
           ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
@@ -613,9 +625,9 @@ export async function runMcBot(
         const delay = baseDelay + randomBetween(0, 5000);
         log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
         setTimeout(() => connect(), delay);
-      } else if (!shouldReconnect(reason)) {
-        log("error", `Connection lost: ${reason} — not reconnecting`).catch(() => {});
-        await updateJob(jobId, "error", reason);
+      } else if (!shouldReconnect(reasonText)) {
+        log("error", `Connection lost: ${reasonText} — not reconnecting`).catch(() => {});
+        await updateJob(jobId, "error", reasonText);
         stopped = true;
       } else {
         log("error", "Max reconnect attempts reached").catch(() => {});

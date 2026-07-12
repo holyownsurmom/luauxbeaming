@@ -478,7 +478,6 @@ function BotsPage() {
                   { host: "catpvp.com", label: "CatPVP" },
                   { host: "hugosmp.com", label: "HugoSMP" },
                   { host: "minemen.club", label: "Minemen EU" },
-                  { host: "mcpvp.net", label: "MCPVP" },
                   { host: "na.mcpvp.club", label: "MCPVP NA" },
                   { host: "eu.mcpvp.club", label: "MCPVP EU" },
                 ].map((s) => (

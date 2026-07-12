@@ -45,13 +45,15 @@ export function BotConsole({
   const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
-    if (!isPaused) {
-      endRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    if (isPaused) return;
+    const el = containerRef.current;
+    if (!el) return;
+    // Scroll only the console container — never the page
+    el.scrollTop = el.scrollHeight;
   }, [entries.length, isPaused]);
 
   return (
-    <div className="relative group/console rounded-xl overflow-hidden">
+    <div className="relative group/console rounded-xl overflow-hidden overscroll-contain">
       {/* CRT scanline overlay */}
       <div
         className="pointer-events-none absolute inset-0 z-10 rounded-xl"
@@ -62,7 +64,7 @@ export function BotConsole({
       />
 
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-black/80 border-b border-primary/20">
+      <div className="flex items-center justify-between px-4 py-2 bg-black/80 border-b border-primary/20 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
             <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
@@ -89,11 +91,12 @@ export function BotConsole({
         </div>
       </div>
 
-      {/* Console body */}
+      {/* Console body — fixed height, scroll isolated from page */}
       <div
         ref={containerRef}
-        className="font-mono text-xs overflow-y-auto p-4 space-y-0 bg-black/90 relative"
-        style={{ maxHeight }}
+        className="font-mono text-xs overflow-y-auto overflow-x-hidden p-4 space-y-0 bg-black/90 relative overscroll-contain"
+        style={{ height: maxHeight, maxHeight }}
+        onWheel={(e) => e.stopPropagation()}
       >
         {/* Vignette */}
         <div

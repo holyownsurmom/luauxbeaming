@@ -1,5 +1,10 @@
 import { createLogger, updateJob } from "./api.js";
 
+export type JobRunResult = {
+  status: "completed" | "error" | "stopped";
+  error?: string;
+};
+
 export type McJobConfig = {
   accountId: string;
   label: string;
@@ -124,18 +129,19 @@ export async function runMcBot(
   discordId: string,
   config: McJobConfig,
   abortSignal: AbortSignal,
-): Promise<void> {
+): Promise<JobRunResult> {
   const log = createLogger(jobId, discordId);
+  let terminal: JobRunResult = { status: "completed" };
 
   if (!config.serverHost) {
     await log("error", "Missing serverHost");
     await updateJob(jobId, "error", "Missing serverHost");
-    return;
+    return { status: "error", error: "Missing serverHost" };
   }
   if (!config.messages?.length) {
     await log("error", "No messages configured");
     await updateJob(jobId, "error", "No messages configured");
-    return;
+    return { status: "error", error: "No messages configured" };
   }
 
   if (config.interval < 5) config.interval = 5;
@@ -146,7 +152,7 @@ export async function runMcBot(
     if (!config.ssid) {
       await log("error", "SSID token is empty. Re-add your account with a valid SSID.");
       await updateJob(jobId, "error", "SSID token is empty");
-      return;
+      return { status: "error", error: "SSID token is empty" };
     }
 
     await log("info", "Resolving Minecraft profile from SSID token...");
@@ -154,7 +160,7 @@ export async function runMcBot(
     if (!ssidProfile) {
       await log("error", "Could not resolve Minecraft profile from SSID token. The token may be expired or invalid.");
       await updateJob(jobId, "error", "SSID token invalid — could not resolve profile");
-      return;
+      return { status: "error", error: "SSID token invalid — could not resolve profile" };
     }
     await log("info", `Resolved profile: ${ssidProfile.name} (${ssidProfile.id})`);
   }
@@ -464,6 +470,8 @@ export async function runMcBot(
           await log("error", "Microsoft auth failed: no token or profile returned");
           await updateJob(jobId, "error", "Microsoft auth failed");
           authFailed = true;
+          stopped = true;
+          terminal = { status: "error", error: "Microsoft auth failed" };
           return;
         }
 
@@ -502,6 +510,8 @@ export async function runMcBot(
         await log("error", `Microsoft auth failed: ${msg}`);
         await updateJob(jobId, "error", `Microsoft auth failed: ${msg}`);
         authFailed = true;
+        stopped = true;
+        terminal = { status: "error", error: `Microsoft auth failed: ${msg}` };
         return;
       }
     }
@@ -575,6 +585,7 @@ export async function runMcBot(
         await updateJob(jobId, "error", msg);
         authFailed = true;
         stopped = true;
+        terminal = { status: "error", error: msg };
         return;
       }
 
@@ -589,6 +600,7 @@ export async function runMcBot(
         await updateJob(jobId, "error", msg);
         authFailed = true;
         stopped = true;
+        terminal = { status: "error", error: msg };
         return;
       }
 
@@ -596,6 +608,7 @@ export async function runMcBot(
         log("error", "Max reconnect attempts reached").catch(() => {});
         await updateJob(jobId, "error", "Max reconnect attempts");
         stopped = true;
+        terminal = { status: "error", error: "Max reconnect attempts" };
         return;
       }
 
@@ -694,7 +707,10 @@ export async function runMcBot(
         cleanup();
         disconnectBot();
         if (cleanupTimer) clearInterval(cleanupTimer);
-        resolve();
+        if (abortSignal.aborted && terminal.status === "completed") {
+          terminal = { status: "stopped", error: "Stopped by user" };
+        }
+        resolve(terminal);
       }
     }, 1000);
   });

@@ -572,7 +572,8 @@ async function recover(
     const sendCodeJson = (await sendCodeRes.json()) as Record<string, string>;
     if (!sendCodeJson.apiCanary) return null;
 
-    const otpCode = await getEmailCode(newEmail, newPassword);
+    // Firstmail IMAP uses the mailbox API token as password, NOT the new MS password
+    const otpCode = await getEmailCode(newEmail, emailToken);
 
     const verifyRes = await fetchWithJar(jar, "https://account.live.com/API/Proofs/VerifyCode", {
       method: "POST",

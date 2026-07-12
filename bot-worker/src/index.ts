@@ -1,12 +1,20 @@
 import "dotenv/config";
-import { pollJobs, updateJob, flushAllLogs, checkJobStatuses, postVerificationResult } from "./api.js";
-import { runMcBot, type McJobConfig } from "./mc.js";
+import {
+  pollJobs,
+  updateJob,
+  flushAllLogs,
+  checkJobStatuses,
+  postVerificationResult,
+  WORKER_ID as API_WORKER_ID,
+} from "./api.js";
+import { runMcBot, type McJobConfig, type JobRunResult } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
-import { runSecureBot, type SecureJobConfig, type SecureResult } from "./secure.js";
+import { runSecureBot, type SecureJobConfig } from "./secure.js";
 
-const WORKER_ID = process.env.WORKER_ID || `worker-${Date.now()}`;
+const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
 const STATUS_CHECK_INTERVAL = Math.max(5000, POLL_INTERVAL * 2);
+const MAX_CONCURRENT_JOBS = Math.max(1, parseInt(process.env.MAX_CONCURRENT_JOBS || "8", 10) || 8);
 
 if (!process.env.SITE_URL) {
   console.error("[worker] ERROR: SITE_URL is not set!");
@@ -18,12 +26,26 @@ if (!process.env.WORKER_SECRET) {
   process.exit(1);
 }
 
-console.log(`[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms`);
+console.log(
+  `[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms (max ${MAX_CONCURRENT_JOBS} concurrent)`,
+);
 
 const runningJobs = new Map<string, AbortController>();
 
+async function applyTerminal(jobId: string, result: JobRunResult) {
+  if (result.status === "error") {
+    await updateJob(jobId, "error", result.error || "Job failed");
+  } else if (result.status === "stopped") {
+    await updateJob(jobId, "stopped", result.error || "Stopped by user");
+  } else {
+    await updateJob(jobId, "completed");
+  }
+  console.log(`[worker] job ${jobId} finished (${result.status})`);
+}
+
 async function claimJob(job: { id: string; discord_id: string; type: string; config: unknown }) {
   if (runningJobs.has(job.id)) return;
+  if (runningJobs.size >= MAX_CONCURRENT_JOBS) return;
 
   const controller = new AbortController();
   runningJobs.set(job.id, controller);
@@ -32,7 +54,18 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 
   try {
     if (job.type === "mc") {
-      await runMcBot(job.id, job.discord_id, job.config as McJobConfig, controller.signal);
+      const result = await runMcBot(
+        job.id,
+        job.discord_id,
+        job.config as McJobConfig,
+        controller.signal,
+      );
+      // Prefer abort if user stopped mid-run
+      if (controller.signal.aborted && result.status === "completed") {
+        await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
+      } else {
+        await applyTerminal(job.id, result);
+      }
     } else if (job.type === "discord") {
       await runDiscordBot(
         job.id,
@@ -40,6 +73,12 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         job.config as DiscordJobConfig,
         controller.signal,
       );
+      // discord.ts already writes error/completed terminal status — never overwrite with completed
+      if (controller.signal.aborted) {
+        await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
+      } else {
+        console.log(`[worker] job ${job.id} discord runner exited`);
+      }
     } else if (job.type === "secure") {
       const result = await runSecureBot(
         job.id,
@@ -47,17 +86,27 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         job.config as SecureJobConfig,
         controller.signal,
       );
-      if (result && !controller.signal.aborted) {
-        await postVerificationResult(job.config as SecureJobConfig, result);
+      if (controller.signal.aborted) {
+        await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
+      } else if (!result) {
+        await applyTerminal(job.id, {
+          status: "error",
+          error: "Secure flow failed (login/recovery)",
+        });
+      } else {
+        try {
+          await postVerificationResult(job.config as SecureJobConfig, result);
+          await applyTerminal(job.id, { status: "completed" });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await applyTerminal(job.id, {
+            status: "error",
+            error: `Verification complete failed: ${msg}`,
+          });
+        }
       }
-    }
-
-    if (!controller.signal.aborted) {
-      await updateJob(job.id, "completed");
-      console.log(`[worker] job ${job.id} finished (completed)`);
     } else {
-      await updateJob(job.id, "stopped", "Stopped by user");
-      console.log(`[worker] job ${job.id} stopped by user`);
+      await applyTerminal(job.id, { status: "error", error: `Unknown job type: ${job.type}` });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -70,9 +119,11 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 
 async function poll() {
   try {
+    if (runningJobs.size >= MAX_CONCURRENT_JOBS) return;
     const jobs = await pollJobs(WORKER_ID);
     for (const job of jobs) {
-      claimJob(job);
+      if (runningJobs.size >= MAX_CONCURRENT_JOBS) break;
+      void claimJob(job);
     }
   } catch (err) {
     console.error("[worker] poll error:", err);
@@ -86,7 +137,7 @@ async function checkRunningJobs() {
   const statuses = await checkJobStatuses(WORKER_ID, jobIds);
 
   for (const { id, status } of statuses) {
-    if (status === "stopping" || status === "stopped" || status === "error" || status === "completed") {
+    if (status === "stopping" || status === "stopped") {
       console.log(`[worker] job ${id} marked ${status} in DB, aborting`);
       const controller = runningJobs.get(id);
       if (controller) controller.abort();
@@ -116,17 +167,23 @@ async function shutdown() {
             resolve();
           }
         }, 500);
+        setTimeout(() => {
+          clearInterval(check);
+          resolve();
+        }, 9000);
       }),
     );
   }
 
-  const drainTimeout = new Promise<void>((resolve) => {
-    setTimeout(resolve, 10000);
-  });
+  await Promise.race([
+    Promise.all(abortPromises),
+    new Promise<void>((resolve) => setTimeout(resolve, 10000)),
+  ]);
 
-  await Promise.race([Promise.all(abortPromises), drainTimeout]);
+  for (const id of runningJobs.keys()) {
+    await updateJob(id, "stopped", "Worker shutdown").catch(() => {});
+  }
 
-  console.log(`[worker] ${runningJobs.size} jobs still running after timeout, forcing exit`);
   runningJobs.clear();
   await flushAllLogs();
   process.exit(0);

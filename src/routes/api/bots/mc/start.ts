@@ -86,7 +86,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           .select("id, config, status")
           .eq("discord_id", user.id)
           .eq("type", "mc")
-          .in("status", ["pending", "running", "claimed"]);
+          .in("status", ["pending", "running"]);
 
         const toStop = (existingJobs || []).filter((j) => {
           const cfg = (j.config || {}) as { accountId?: string };

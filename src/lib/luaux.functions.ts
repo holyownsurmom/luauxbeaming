@@ -531,7 +531,10 @@ export const revokeKey = createServerFn({ method: "POST" })
     return { key_id: String(o.key_id) };
   })
   .handler(async ({ data }) => {
-    const { admin } = await import("./luaux-server.server");
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+    await requireUser();
+    const isAdm = await isAdminSession();
+    if (!isAdm) throw new Error("Admin only");
     const db = admin();
 
     const { error } = await db

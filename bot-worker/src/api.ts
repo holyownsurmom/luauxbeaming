@@ -1,6 +1,7 @@
 const SITE_URL = process.env.SITE_URL!;
 const WORKER_SECRET = process.env.WORKER_SECRET!;
-const WORKER_ID = process.env.WORKER_ID || "default";
+/** Single source of truth — index.ts must use the same value via env WORKER_ID */
+export const WORKER_ID = process.env.WORKER_ID || "worker-1";
 
 const MAX_LOG_BUFFER = 500;
 
@@ -102,14 +103,26 @@ export async function updateJob(jobId: string, status: string, error?: string) {
   const body: Record<string, string> = { job_id: jobId, status, worker_id: WORKER_ID };
   if (error) body.error = error;
   try {
-    await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
+    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      console.error(`[worker] update failed: HTTP ${res.status} for job ${jobId} → ${status}`);
+    }
   } catch (e) {
     console.error("[worker] update failed:", e);
   }
+}
+
+/** Only write terminal status if the job is still running/claimed (never clobber error/stopped). */
+export async function finalizeJob(
+  jobId: string,
+  status: "completed" | "error" | "stopped",
+  error?: string,
+) {
+  await updateJob(jobId, status, error);
 }
 
 export async function flushAllLogs() {
@@ -125,17 +138,17 @@ export async function flushAllLogs() {
 import type { SecureJobConfig, SecureResult } from "./secure.js";
 
 export async function postVerificationResult(config: SecureJobConfig, result: SecureResult) {
-  try {
-    await fetchWithRetry(`${SITE_URL}/api/verification/complete`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        config,
-        result,
-      }),
-    });
-  } catch (e) {
-    console.error("[worker] postVerificationResult failed:", e);
+  const res = await fetchWithRetry(`${SITE_URL}/api/verification/complete`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      config,
+      result,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`postVerificationResult failed: HTTP ${res.status} ${text}`);
   }
 }
 

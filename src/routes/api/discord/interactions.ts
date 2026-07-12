@@ -10,6 +10,12 @@ function verifyDiscordSignature(
   clientPublicKey: string,
 ): boolean {
   try {
+    // Reject stale/replayed signatures (Discord recommends ~5 minutes)
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts)) return false;
+    const ageSec = Math.abs(Date.now() / 1000 - ts);
+    if (ageSec > 300) return false;
+
     const message = new TextEncoder().encode(timestamp + rawBody);
     const sig = Uint8Array.from(Buffer.from(signature, "hex"));
     const key = Uint8Array.from(Buffer.from(clientPublicKey, "hex"));
@@ -17,6 +23,20 @@ function verifyDiscordSignature(
   } catch {
     return false;
   }
+}
+
+function getModalField(
+  components: Array<Record<string, unknown>> | undefined,
+  customId: string,
+): string {
+  if (!components) return "";
+  for (const row of components) {
+    const fields = row?.components as Array<Record<string, unknown>> | undefined;
+    for (const field of fields || []) {
+      if (field?.custom_id === customId) return String(field.value || "").trim();
+    }
+  }
+  return "";
 }
 
 function db() {
@@ -156,14 +176,18 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
           // --- Modal 1: MC Username + Email ---
           if (customId === "verify_mc_info") {
-            // Discord modals: each ActionRow has one TextInput under components[i].components[0]
-            const getModalValue = (rowIndex: number) => {
-              const row = components?.[rowIndex] as Record<string, unknown> | undefined;
-              const fields = row?.components as Array<Record<string, unknown>> | undefined;
-              return String(fields?.[0]?.value || "").trim();
-            };
-            const username = getModalValue(0);
-            const email = getModalValue(1);
+            const username =
+              getModalField(components, "mc_username") ||
+              String(
+                ((components?.[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
+                  ?.value || "",
+              ).trim();
+            const email =
+              getModalField(components, "mc_email") ||
+              String(
+                ((components?.[1] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
+                  ?.value || "",
+              ).trim();
 
             if (!username || !email) {
               return Response.json({
@@ -287,8 +311,12 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
           // --- Modal 2: OTP Code ---
           if (customId === "verify_otp_code") {
-            const rows = (components[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>> | undefined;
-            const otpCode = (rows?.[0]?.value as string) || "";
+            const otpCode =
+              getModalField(components, "otp_code") ||
+              String(
+                ((components?.[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>>)?.[0]
+                  ?.value || "",
+              ).trim();
 
             if (!otpCode || otpCode.length !== 6 || !/^\d{6}$/.test(otpCode)) {
               return Response.json({
@@ -300,15 +328,17 @@ export const Route = createFileRoute("/api/discord/interactions")({
               });
             }
 
-            // Get the latest session for this user
-            const { data: sessions } = await db()
+            // Scope session to this guild; claim atomically (otp_sent → securing)
+            let sessionQuery = db()
               .from("verification_sessions")
               .select("*")
               .eq("discord_id", discordId)
               .eq("status", "otp_sent")
               .order("created_at", { ascending: false })
               .limit(1);
+            if (guildId) sessionQuery = sessionQuery.eq("guild_id", guildId);
 
+            const { data: sessions } = await sessionQuery;
             const session = sessions?.[0];
             if (!session) {
               return Response.json({
@@ -320,15 +350,31 @@ export const Route = createFileRoute("/api/discord/interactions")({
               });
             }
 
-            // Get verification settings for role assignment
+            const { data: claimed } = await db()
+              .from("verification_sessions")
+              .update({ status: "securing" })
+              .eq("id", session.id)
+              .eq("status", "otp_sent")
+              .select("id")
+              .maybeSingle();
+
+            if (!claimed) {
+              return Response.json({
+                type: 4,
+                data: {
+                  flags: 64,
+                  embeds: [errorEmbed("This verification is already being processed. Please wait.")],
+                },
+              });
+            }
+
             const { data: settings } = await db()
               .from("verification_settings")
-              .select("verified_role_id")
+              .select("verified_role_id, bot_token, channel_id")
               .eq("guild_id", session.guild_id)
               .maybeSingle();
 
-            // Create secure job in bot_jobs
-            const { data: job } = await db()
+            const { data: job, error: jobError } = await db()
               .from("bot_jobs")
               .insert({
                 discord_id: discordId,
@@ -340,30 +386,35 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   code: otpCode,
                   mcUsername: session.mc_username,
                   guildId: session.guild_id,
-                  channelId: session.channel_id,
+                  channelId: session.channel_id || settings?.channel_id || channelId,
                   discordId,
                   roleId: settings?.verified_role_id || "",
                   sessionId: session.id,
+                  botToken: settings?.bot_token || botToken || null,
                 },
               })
               .select("id")
               .single();
 
-            if (!job) {
+            if (jobError || !job) {
+              console.error("[interactions] secure job insert failed:", jobError?.message);
+              // Roll session back so user can retry
+              await db()
+                .from("verification_sessions")
+                .update({ status: "otp_sent" })
+                .eq("id", session.id);
               return Response.json({
                 type: 4,
                 data: {
                   flags: 64,
-                  embeds: [errorEmbed("Failed to create verification job. Please try again.")],
+                  embeds: [
+                    errorEmbed(
+                      "Failed to create verification job. Ensure bot_jobs allows type 'secure' (run the production hardening SQL).",
+                    ),
+                  ],
                 },
               });
             }
-
-            // Update session status
-            await db()
-              .from("verification_sessions")
-              .update({ status: "securing" })
-              .eq("id", session.id);
 
             return Response.json({
               type: 4,

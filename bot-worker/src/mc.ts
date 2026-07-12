@@ -14,7 +14,7 @@ export type McJobConfig = {
 };
 
 const CONNECTION_TIMEOUT_MS = 30_000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 25;
 const RECONNECT_BASE_DELAY = 5000;
 
 let mineflayerModule: typeof import("mineflayer") | null = null;
@@ -57,7 +57,16 @@ function variateMessage(msg: string): string {
   return msg;
 }
 
-function calculateMessageDelay(baseInterval: number, sentCount: number): number {
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function calculateMessageDelay(baseInterval: number, sentCount: number, runtimeMinutes: number): number {
   let min = baseInterval * 0.7;
   let max = baseInterval * 1.5;
 
@@ -66,17 +75,31 @@ function calculateMessageDelay(baseInterval: number, sentCount: number): number 
     max = Math.max(max, 18);
   }
 
+  const slowdownFactor = 1 + Math.min(runtimeMinutes / 120, 2);
+  min *= slowdownFactor;
+  max *= slowdownFactor;
+
   const delay = randomBetween(min * 1000, max * 1000);
-  const jitter = randomBetween(-2000, 3000);
-  return Math.max(3000, delay + jitter);
+  const jitter = randomBetween(-2000, 5000);
+  return Math.max(5000, delay + jitter);
 }
 
-function shouldTakeBreak(sentCount: number): number {
-  if (sentCount > 0 && sentCount % randomBetween(12, 25) === 0) {
+function shouldTakeBreak(sentCount: number, runtimeMinutes: number): number {
+  if (sentCount > 0 && sentCount % randomBetween(10, 20) === 0) {
+    return randomBetween(90, 300) * 1000;
+  }
+  if (Math.random() < 0.05) {
     return randomBetween(60, 180) * 1000;
   }
-  if (Math.random() < 0.06) {
-    return randomBetween(30, 90) * 1000;
+  return 0;
+}
+
+function shouldTakeLongBreak(runtimeMinutes: number, lastLongBreakMin: number): number {
+  const sinceLastLongBreak = runtimeMinutes - lastLongBreakMin;
+  if (sinceLastLongBreak >= randomBetween(60, 120)) {
+    if (Math.random() < 0.3) {
+      return randomBetween(600, 1800) * 1000;
+    }
   }
   return 0;
 }
@@ -137,11 +160,12 @@ export async function runMcBot(
 
   await log(
     "system",
-    `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode)...`,
+    `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode v2)...`,
   );
 
   const mineflayer = await loadMineflayer();
 
+  const startedAt = Date.now();
   let sentCount = 0;
   let msgIndex = 0;
   let reconnectAttempts = 0;
@@ -150,8 +174,13 @@ export async function runMcBot(
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let authFailed = false;
+  let lastLongBreakMin = 0;
+  let messageOrder = shuffleArray(config.messages.map((_, i) => i));
+  let shufflePosition = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentBot: any = null;
+
+  const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
 
   const cleanup = () => {
     if (currentTimer) {
@@ -186,18 +215,22 @@ export async function runMcBot(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function startAntiAfk(bot: any) {
     if (antiAfkTimer) clearInterval(antiAfkTimer);
+
+    let lookOnlyPhase = true;
+
     antiAfkTimer = setInterval(() => {
       if (stopped || abortSignal.aborted) return;
       try {
         if (!bot.entity) return;
+
         const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.4;
         const pitch = (Math.random() - 0.5) * 0.3;
         bot.look(yaw, pitch, false);
 
-        if (Math.random() < 0.3) {
+        if (!lookOnlyPhase && Math.random() < 0.25) {
           const direction = pickRandom(["forward", "back", "left", "right"]);
           bot.setControlState(direction, true);
-          const dur = randomBetween(200, 600);
+          const dur = randomBetween(200, 800);
           setTimeout(() => {
             try {
               if (currentBot === bot) bot.setControlState(direction, false);
@@ -207,7 +240,7 @@ export async function runMcBot(
           }, dur);
         }
 
-        if (Math.random() < 0.1) {
+        if (!lookOnlyPhase && Math.random() < 0.08) {
           bot.setControlState("jump", true);
           setTimeout(() => {
             try {
@@ -217,10 +250,76 @@ export async function runMcBot(
             }
           }, 100);
         }
+
+        if (!lookOnlyPhase && Math.random() < 0.05) {
+          try {
+            bot.setControlState("sneak", true);
+            setTimeout(() => {
+              try {
+                if (currentBot === bot) bot.setControlState("sneak", false);
+              } catch {
+                /* ignore */
+              }
+            }, randomBetween(500, 1500));
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (!lookOnlyPhase && Math.random() < 0.04) {
+          try {
+            const hotbar = bot.inventory?.slots?.slice(36, 45);
+            const heldItem = bot.heldItem;
+            if (hotbar && hotbar.length > 1) {
+              const emptySlot = hotbar.findIndex((s: { type: string } | null) => !s);
+              const filledSlot = hotbar.findIndex((s: { type: string } | null) => s && s !== heldItem);
+              if (filledSlot >= 0) {
+                bot.equip(filledSlot + 36, "hand");
+                setTimeout(() => {
+                  try {
+                    if (emptySlot >= 0) bot.equip(emptySlot + 36, "hand");
+                  } catch {
+                    /* ignore */
+                  }
+                }, randomBetween(2000, 5000));
+              }
+            }
+          } catch {
+            /* ignore inventory errors */
+          }
+        }
+
+        if (!lookOnlyPhase && Math.random() < 0.03) {
+          try {
+            const nearestEntity = bot.nearestEntity(
+              (e: { type: string; username?: string }) => e.type === "player" && e.username !== bot.username,
+            );
+            if (nearestEntity) {
+              bot.lookAt(nearestEntity.position.offset(0, 1.6, 0));
+              setTimeout(() => {
+                try {
+                  if (currentBot === bot) {
+                    bot.look(
+                      bot.entity.yaw + (Math.random() - 0.5) * 2,
+                      (Math.random() - 0.5) * 0.3,
+                      false,
+                    );
+                  }
+                } catch {
+                  /* ignore */
+                }
+              }, randomBetween(1000, 3000));
+            }
+          } catch {
+            /* ignore entity errors */
+          }
+        }
+
+        lookOnlyPhase = false;
       } catch {
         /* ignore movement errors */
       }
-    }, randomBetween(4000, 9000));
+    }, randomBetween(4000, 10000));
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -228,9 +327,24 @@ export async function runMcBot(
     const scheduleNext = () => {
       if (stopped || abortSignal.aborted) return;
 
-      const breakDuration = shouldTakeBreak(sentCount);
+      const rt = runtimeMinutes();
+
+      const longBreak = shouldTakeLongBreak(rt, lastLongBreakMin);
+      if (longBreak > 0) {
+        lastLongBreakMin = rt;
+        const breakMin = (longBreak / 60000).toFixed(0);
+        log("info", `Long AFK break: ${breakMin}min (simulating offline) (runtime: ${rt.toFixed(0)}min)`).catch(() => {});
+        currentTimer = setTimeout(() => {
+          if (stopped || abortSignal.aborted) return;
+          log("info", "Resuming from long break").catch(() => {});
+          scheduleNext();
+        }, longBreak);
+        return;
+      }
+
+      const breakDuration = shouldTakeBreak(sentCount, rt);
       if (breakDuration > 0) {
-        log("info", `Taking a break: ${(breakDuration / 1000).toFixed(0)}s (sent ${sentCount} msgs)`).catch(() => {});
+        log("info", `Taking a break: ${(breakDuration / 1000).toFixed(0)}s (sent ${sentCount} msgs, runtime ${rt.toFixed(0)}min)`).catch(() => {});
         currentTimer = setTimeout(() => {
           if (stopped || abortSignal.aborted) return;
           sendOneMessage(bot);
@@ -238,7 +352,8 @@ export async function runMcBot(
         return;
       }
 
-      const delay = calculateMessageDelay(config.interval, sentCount);
+      const delay = calculateMessageDelay(config.interval, sentCount, rt);
+      log("info", `Next message in ${(delay / 1000).toFixed(0)}s (sent ${sentCount}, runtime ${rt.toFixed(0)}min)`).catch(() => {});
       currentTimer = setTimeout(() => {
         if (stopped || abortSignal.aborted) return;
         sendOneMessage(bot);
@@ -249,11 +364,15 @@ export async function runMcBot(
       if (stopped || abortSignal.aborted) return;
 
       try {
-        const baseMsg = config.messages[msgIndex % config.messages.length];
+        if (shufflePosition >= messageOrder.length) {
+          messageOrder = shuffleArray(config.messages.map((_, i) => i));
+          shufflePosition = 0;
+        }
+        const baseMsg = config.messages[messageOrder[shufflePosition] % config.messages.length];
+        shufflePosition++;
         const msg = variateMessage(baseMsg);
         botArg.chat(msg);
         sentCount++;
-        msgIndex++;
         await log("bot", `> ${msg}`);
       } catch (e) {
         await log("error", `Chat error: ${e instanceof Error ? e.message : String(e)}`);
@@ -262,7 +381,7 @@ export async function runMcBot(
       scheduleNext();
     };
 
-    const initialDelay = randomBetween(3000, 10000);
+    const initialDelay = randomBetween(8000, 25000);
     log("info", `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message...`).catch(() => {});
     currentTimer = setTimeout(() => {
       if (stopped || abortSignal.aborted) return;
@@ -376,7 +495,10 @@ export async function runMcBot(
 
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && !stopped && !abortSignal.aborted) {
         reconnectAttempts++;
-        const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1) + randomBetween(0, 3000);
+        const baseDelay = reconnectAttempts <= 3
+          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
+          : randomBetween(30, 120) * 1000;
+        const delay = baseDelay + randomBetween(0, 5000);
         log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
         setTimeout(() => connect(), delay);
       } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -395,7 +517,10 @@ export async function runMcBot(
 
       if (shouldReconnect(reason) && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
-        const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1) + randomBetween(0, 3000);
+        const baseDelay = reconnectAttempts <= 3
+          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
+          : randomBetween(30, 120) * 1000;
+        const delay = baseDelay + randomBetween(0, 5000);
         log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
         setTimeout(() => connect(), delay);
       } else if (!shouldReconnect(reason)) {

@@ -25,6 +25,15 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function shuffleArray<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 const SUFFIXES = ["", " ", "  ", ".", "..", "...", "!", "!!", "?", " ~", " :)", " :D"];
 
 function variateMessage(msg: string): string {
@@ -123,11 +132,11 @@ export async function runDiscordBot(
   if (config.humanize && config.minDelay >= config.maxDelay) {
     config.maxDelay = config.minDelay + 1;
   }
-  if (config.minDelay < 8) config.minDelay = 8;
-  if (config.maxDelay < config.minDelay + 2) config.maxDelay = config.minDelay + 2;
+  if (config.minDelay < 12) config.minDelay = 12;
+  if (config.maxDelay < config.minDelay + 3) config.maxDelay = config.minDelay + 3;
 
   const startedAt = Date.now();
-  await log("system", "Initializing Discord user-token client (anti-ban mode)...");
+  await log("system", "Initializing Discord user-token client (anti-ban mode v2)...");
   await updateJob(jobId, "running");
 
   let stopped = false;
@@ -181,14 +190,15 @@ export async function runDiscordBot(
   const msgCount = config.messages.length;
   await log(
     "system",
-    `Spamming ${msgCount} message(s) | humanize=${config.humanize} | cooldowns active`,
+    `Spamming ${msgCount} message(s) | humanize=${config.humanize} | anti-ban v2 active`,
   );
 
-  let msgIndex = 0;
   let sentCount = 0;
   let failCount = 0;
   let consecutiveRateLimits = 0;
   let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+  let messageOrder = shuffleArray(config.messages.map((_, i) => i));
+  let shufflePosition = 0;
 
   abortSignal.addEventListener(
     "abort",
@@ -228,53 +238,79 @@ export async function runDiscordBot(
     }
   };
 
-  const calculateCooldown = (totalSent: number): number => {
+  const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
+
+  const calculateCooldown = (totalSent: number, rt: number): number => {
     if (totalSent > 0 && totalSent % randomBetween(8, 15) === 0) {
-      return randomBetween(120, 300) * 1000;
+      return randomBetween(180, 600) * 1000;
     }
-    if (Math.random() < 0.1) {
-      return randomBetween(45, 120) * 1000;
+    if (Math.random() < 0.08) {
+      return randomBetween(60, 180) * 1000;
+    }
+    if (rt > 120 && Math.random() < 0.15) {
+      return randomBetween(300, 900) * 1000;
+    }
+    if (sentCount > 0 && sentCount % randomBetween(30, 60) === 0) {
+      return randomBetween(900, 1800) * 1000;
     }
     return 0;
   };
 
-  const calculateDelay = (baseMin: number, baseMax: number, sendCount: number): number => {
+  const calculateDelay = (baseMin: number, baseMax: number, sendCount: number, rt: number): number => {
     let min = baseMin;
     let max = baseMax;
     if (sendCount < 3) {
-      min = Math.max(min, 15);
-      max = Math.max(max, 30);
+      min = Math.max(min, 18);
+      max = Math.max(max, 40);
     } else if (sendCount < 8) {
-      min = Math.max(min, 10);
-      max = Math.max(max, 22);
+      min = Math.max(min, 14);
+      max = Math.max(max, 30);
     }
+    const slowdown = 1 + Math.min(rt / 180, 2.5);
+    min *= slowdown;
+    max *= slowdown;
     const delay = randomBetween(min * 1000, max * 1000);
-    const jitter = randomBetween(-2000, 3000);
+    const jitter = randomBetween(-2000, 4000);
     return Math.max(min * 1000, delay + jitter);
   };
 
   const sendNext = async () => {
     if (stopped) return;
 
-    const cooldown = calculateCooldown(sentCount);
+    const rt = runtimeMinutes();
+
+    const cooldown = calculateCooldown(sentCount, rt);
     if (cooldown > 0) {
       await log(
         "system",
-        `Cooldown pause: ${(cooldown / 1000).toFixed(0)}s (sent ${sentCount} msgs)`,
+        `Cooldown pause: ${(cooldown / 1000).toFixed(0)}s (sent ${sentCount} msgs, runtime ${rt.toFixed(0)}min)`,
       );
       await sleep(cooldown);
       if (stopped) return;
-      if (Math.random() < 0.4) {
+      if (Math.random() < 0.5) {
         await updatePresence("idle", config.token);
-        await sleep(randomBetween(8000, 25000));
+        await sleep(randomBetween(15000, 60000));
         await updatePresence("online", config.token);
         if (stopped) return;
       }
     }
 
-    const baseMsg = config.messages[msgIndex % config.messages.length];
+    if (sentCount > 0 && sentCount % randomBetween(80, 150) === 0) {
+      const longPause = randomBetween(600, 1800) * 1000;
+      await log("system", `Long AFK pause: ${(longPause / 1000).toFixed(0)}s (simulating offline)`);
+      await updatePresence("dnd", config.token);
+      await sleep(longPause);
+      if (stopped) return;
+      await updatePresence("online", config.token);
+    }
+
+    if (shufflePosition >= messageOrder.length) {
+      messageOrder = shuffleArray(config.messages.map((_, i) => i));
+      shufflePosition = 0;
+    }
+    const baseMsg = config.messages[messageOrder[shufflePosition] % config.messages.length];
+    shufflePosition++;
     const msg = config.humanize ? variateMessage(baseMsg) : baseMsg;
-    msgIndex++;
 
     const typingTime = config.humanize ? typingDuration(msg) : randomBetween(2000, 4000);
     await sendTyping(config.channelId, config.token);
@@ -320,12 +356,12 @@ export async function runDiscordBot(
                   log("error", `Delete failed: ${e.message}`).catch(() => {});
                 });
               },
-              randomBetween(3000, 8000),
+              randomBetween(5000, 15000),
             );
           }
         }
 
-        if (Math.random() < 0.12 && sentCount > 2) {
+        if (Math.random() < 0.10 && sentCount > 2) {
           try {
             await sleep(randomBetween(1000, 3000));
             const recentRes = await fetch(
@@ -366,11 +402,11 @@ export async function runDiscordBot(
           consecutiveRateLimits++;
           failCount = Math.max(0, failCount - 3);
 
-          let retryAfter = (20 + consecutiveRateLimits * 15 + randomBetween(0, 20)) * 1000;
+          let retryAfter = (30 + consecutiveRateLimits * 20 + randomBetween(0, 30)) * 1000;
           try {
             const parsed = JSON.parse(body);
             if (parsed.retry_after) {
-              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(5000, 15000);
+              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(10000, 20000);
             }
           } catch {
             /* parse failure, use computed value */
@@ -382,13 +418,15 @@ export async function runDiscordBot(
           );
           await sleep(retryAfter);
 
-          if (consecutiveRateLimits >= 3) {
-            const longPause = randomBetween(600, 900) * 1000;
+          if (consecutiveRateLimits >= 2) {
+            const longPause = randomBetween(900, 1800) * 1000;
             await log(
               "warn",
               `Multiple rate limits. Long pause: ${(longPause / 1000).toFixed(0)}s`,
             );
+            await updatePresence("idle", config.token);
             await sleep(longPause);
+            await updatePresence("online", config.token);
             consecutiveRateLimits = 0;
           }
         }
@@ -415,10 +453,10 @@ export async function runDiscordBot(
     if (stopped) return;
 
     const runtime = config.humanize
-      ? calculateDelay(config.minDelay, config.maxDelay, sentCount)
-      : config.interval * 1000 + randomBetween(0, 3000);
+      ? calculateDelay(config.minDelay, config.maxDelay, sentCount, rt)
+      : config.interval * 1000 + randomBetween(0, 5000);
 
-    await log("info", `Next message in ${(runtime / 1000).toFixed(1)}s`);
+    await log("info", `Next message in ${(runtime / 1000).toFixed(1)}s | runtime ${rt.toFixed(0)}min | sent ${sentCount}`);
 
     pendingTimer = setTimeout(() => {
       pendingTimer = null;

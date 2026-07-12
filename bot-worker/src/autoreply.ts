@@ -37,7 +37,7 @@ function typingDuration(msg: string): number {
   const cpm = pickRandom(TYPING_SPEEDS);
   const chars = msg.replace(/\s+/g, " ").length;
   const base = (chars / cpm) * 60 * 1000;
-  return Math.max(1500, Math.min(base + randomBetween(-500, 1500), 10000));
+  return Math.max(2000, Math.min(base + randomBetween(-500, 2000), 12000));
 }
 
 export async function runDiscordAutoReplyBot(
@@ -59,9 +59,9 @@ export async function runDiscordAutoReplyBot(
     return;
   }
 
-  if (config.minDelay < 8) config.minDelay = 8;
+  if (config.minDelay < 10) config.minDelay = 10;
 
-  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode)...");
+  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v2)...");
   await updateJob(jobId, "running");
 
   let ws: WebSocket | null = null;
@@ -74,7 +74,9 @@ export async function runDiscordAutoReplyBot(
   let replyCount = 0;
   let recentReplyTimes: number[] = [];
   let reconnectAttempts = 0;
-  const MAX_RECONNECT = 10;
+  let missedReplies = 0;
+  let longAwayUntil = 0;
+  const MAX_RECONNECT = 15;
 
   const cleanup = () => {
     if (heartbeatTimer) {
@@ -103,6 +105,7 @@ export async function runDiscordAutoReplyBot(
   const startHeartbeat = (intervalMs: number) => {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     heartbeatAcked = true;
+    const jitter = randomBetween(-2000, 2000);
     heartbeatTimer = setInterval(() => {
       if (stopped) return;
       if (!heartbeatAcked) {
@@ -113,7 +116,7 @@ export async function runDiscordAutoReplyBot(
       }
       heartbeatAcked = false;
       sendPayload(1, lastSequence);
-    }, intervalMs);
+    }, Math.max(10000, intervalMs + jitter));
   };
 
   const scheduleReconnect = () => {
@@ -126,8 +129,8 @@ export async function runDiscordAutoReplyBot(
     }
     reconnectAttempts++;
     const delay = Math.min(
-      randomBetween(5000, 15000) * Math.pow(1.5, reconnectAttempts - 1),
-      120000,
+      randomBetween(8000, 20000) * Math.pow(1.5, reconnectAttempts - 1),
+      180000,
     );
     log("info", `Gateway reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT})`).catch(() => {});
     setTimeout(() => connectGateway(), delay);
@@ -136,7 +139,24 @@ export async function runDiscordAutoReplyBot(
   const shouldThrottle = (): boolean => {
     const now = Date.now();
     recentReplyTimes = recentReplyTimes.filter((t) => now - t < 60000);
-    return recentReplyTimes.length >= 5;
+    return recentReplyTimes.length >= 3;
+  };
+
+  const shouldMissReply = (): boolean => {
+    if (replyCount < 5) return false;
+    if (Math.random() < 0.08) return true;
+    return false;
+  };
+
+  const shouldGoAway = (): boolean => {
+    const now = Date.now();
+    if (now < longAwayUntil) return true;
+    if (replyCount > 0 && replyCount % randomBetween(40, 80) === 0) {
+      longAwayUntil = now + randomBetween(120000, 600000);
+      log("info", `Going AFK for ${(longAwayUntil - now) / 60000 | 0}min (simulating offline)`).catch(() => {});
+      return true;
+    }
+    return false;
   };
 
   const connectGateway = () => {
@@ -228,8 +248,19 @@ export async function runDiscordAutoReplyBot(
               const authorTag = `@${d.author.username}`;
               await log("chat", `DM from ${authorTag}: "${d.content}"`);
 
+              if (shouldGoAway()) {
+                await log("info", "AFK — skipping reply");
+                return;
+              }
+
+              if (shouldMissReply()) {
+                missedReplies++;
+                await log("info", `Missed reply to ${authorTag} (simulating not seeing message)`);
+                return;
+              }
+
               if (shouldThrottle()) {
-                await log("info", "Throttled (5+ replies in 60s), skipping this message");
+                await log("info", "Throttled (3+ replies in 60s), skipping this message");
                 return;
               }
 
@@ -239,9 +270,9 @@ export async function runDiscordAutoReplyBot(
 
               let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
               if (replyCount < 3) {
-                delay = randomBetween(10000, 25000);
+                delay = randomBetween(12000, 30000);
               } else if (Math.random() < 0.12) {
-                delay = randomBetween(45000, 120000);
+                delay = randomBetween(60000, 180000);
                 await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
               }
 
@@ -285,10 +316,10 @@ export async function runDiscordAutoReplyBot(
                   await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
                 } else if (res.status === 429) {
                   const body = await res.text();
-                  let retryAfter = 30000;
+                  let retryAfter = 60000;
                   try {
                     const parsed = JSON.parse(body);
-                    if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 5000;
+                    if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 10000;
                   } catch {
                     /* use default */
                   }
@@ -317,7 +348,7 @@ export async function runDiscordAutoReplyBot(
               const targetUser = `@${d.user.username}`;
               await log("info", `Received incoming friend request from ${targetUser}`);
 
-              await sleep(randomBetween(3000, 10000));
+              await sleep(randomBetween(5000, 15000));
 
               try {
                 const res = await fetch(

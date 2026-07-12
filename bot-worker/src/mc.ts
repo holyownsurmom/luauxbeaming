@@ -410,6 +410,27 @@ export async function runMcBot(
       port: config.serverPort,
       username: config.authType === "offline" ? config.username || config.label : undefined,
       auth: config.authType === "microsoft" ? "microsoft" : undefined,
+      authOptions: config.authType === "microsoft" ? {
+        deviceCodeCallback: (info: { verification_uri: string; user_code: string; expires_in: number }) => {
+          console.log("");
+          console.log("╔══════════════════════════════════════════════════╗");
+          console.log("║        🔐  MICROSOFT AUTHORIZATION REQUIRED     ║");
+          console.log("╠══════════════════════════════════════════════════╣");
+          console.log("║                                                  ║");
+          console.log(`║  Step 1: Open this link:                         ║`);
+          console.log(`║  ${info.verification_uri.padEnd(46)}║`);
+          console.log("║                                                  ║");
+          console.log(`║  Step 2: Enter this code:                        ║`);
+          console.log(`║  ${info.user_code.padEnd(46)}║`);
+          console.log("║                                                  ║");
+          console.log("║  Step 3: Sign in with your Microsoft account    ║");
+          console.log('║  Step 4: Click "Authorize" when prompted         ║');
+          console.log("║                                                  ║");
+          console.log(`║  ⏳ Expires in ${(info.expires_in / 60).toFixed(0)} minutes. Waiting...     ║`);
+          console.log("╚══════════════════════════════════════════════════╝");
+          console.log("");
+        },
+      } : undefined,
       hideErrors: true,
       checkTimeoutInterval: 60000,
       respawn: false,

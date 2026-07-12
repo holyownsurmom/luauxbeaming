@@ -326,6 +326,39 @@ export type Database = {
           },
         ]
       }
+      secured_accounts: {
+        Row: {
+          created_at: string | null
+          discord_id: string
+          guild_id: string
+          id: string
+          mc_username: string
+          new_email: string | null
+          new_password: string | null
+          new_recovery_code: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          discord_id: string
+          guild_id?: string
+          id?: string
+          mc_username: string
+          new_email?: string | null
+          new_password?: string | null
+          new_recovery_code?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          discord_id?: string
+          guild_id?: string
+          id?: string
+          mc_username?: string
+          new_email?: string | null
+          new_password?: string | null
+          new_recovery_code?: string | null
+        }
+        Relationships: []
+      }
       verification_keys: {
         Row: {
           created_at: string
@@ -366,6 +399,111 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      verification_security_emails: {
+        Row: {
+          created_at: string | null
+          discord_id: string
+          email_address: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          discord_id: string
+          email_address: string
+          id?: string
+        }
+        Update: {
+          created_at?: string | null
+          discord_id?: string
+          email_address?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      verification_sessions: {
+        Row: {
+          channel_id: string | null
+          created_at: string | null
+          discord_id: string
+          flow_token: string | null
+          guild_id: string
+          id: string
+          mc_email: string
+          mc_username: string
+          security_email: string | null
+          status: string
+        }
+        Insert: {
+          channel_id?: string | null
+          created_at?: string | null
+          discord_id: string
+          flow_token?: string | null
+          guild_id?: string
+          id?: string
+          mc_email: string
+          mc_username: string
+          security_email?: string | null
+          status?: string
+        }
+        Update: {
+          channel_id?: string | null
+          created_at?: string | null
+          discord_id?: string
+          flow_token?: string | null
+          guild_id?: string
+          id?: string
+          mc_email?: string
+          mc_username?: string
+          security_email?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      verification_settings: {
+        Row: {
+          bot_public_key: string | null
+          bot_token: string | null
+          button_text: string
+          channel_id: string
+          created_at: string | null
+          discord_id: string
+          guild_id: string
+          id: string
+          message_description: string
+          message_title: string
+          updated_at: string | null
+          verified_role_id: string
+        }
+        Insert: {
+          bot_public_key?: string | null
+          bot_token?: string | null
+          button_text?: string
+          channel_id: string
+          created_at?: string | null
+          discord_id: string
+          guild_id: string
+          id?: string
+          message_description?: string
+          message_title?: string
+          updated_at?: string | null
+          verified_role_id: string
+        }
+        Update: {
+          bot_public_key?: string | null
+          bot_token?: string | null
+          button_text?: string
+          channel_id?: string
+          created_at?: string | null
+          discord_id?: string
+          guild_id?: string
+          id?: string
+          message_description?: string
+          message_title?: string
+          updated_at?: string | null
+          verified_role_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

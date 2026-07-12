@@ -179,6 +179,14 @@ function VerificationBotPage() {
       setSaving(false);
       return setErrorMsg("Channel ID is required");
     }
+    if (!botToken.trim()) {
+      setSaving(false);
+      return setErrorMsg("Bot Token is required — you must use your own Discord bot");
+    }
+    if (!botPublicKey.trim()) {
+      setSaving(false);
+      return setErrorMsg("Bot Public Key is required — found in Discord Developer Portal > General Information");
+    }
 
     try {
       await saveSettings({
@@ -429,10 +437,10 @@ function VerificationBotPage() {
 
                   <div className="border-t border-border/40 pt-4 mt-2">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-3">
-                      Bring Your Own Bot (Optional)
+                      Your Discord Bot
                     </p>
                     <p className="text-xs text-muted-foreground/70 mb-3">
-                      Leave blank to use the central LuauX verification bot. Provide your own bot token and public key if you prefer to use your own Discord bot.
+                      You must provide your own Discord bot token and public key. Create a bot at <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer" className="text-primary hover:underline">Discord Developer Portal</a>.
                     </p>
                     <div className="grid md:grid-cols-2 gap-4">
                       <label className="text-xs space-y-1">
@@ -447,7 +455,7 @@ function VerificationBotPage() {
                           placeholder="MTAx..."
                         />
                         <span className="text-[10px] text-muted-foreground block">
-                          Your own Discord bot token (optional)
+                          Your Discord bot token
                         </span>
                       </label>
 

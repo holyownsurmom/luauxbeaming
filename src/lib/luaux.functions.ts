@@ -360,8 +360,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: z.string().min(1).max(100),
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
-        bot_token: z.string().nullable().optional().default(null),
-        bot_public_key: z.string().nullable().optional().default(null),
+        bot_token: z.string().min(1, "Bot Token is required"),
+        bot_public_key: z.string().min(1, "Bot Public Key is required"),
       })
       .parse(input),
   )
@@ -402,7 +402,7 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    const botTokenToUse = data.bot_token || process.env.DISCORD_BOT_TOKEN;
+    const botTokenToUse = data.bot_token;
 
     try {
       const channelRes = await fetch(

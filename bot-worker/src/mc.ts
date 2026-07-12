@@ -48,6 +48,21 @@ async function fetchUuidFromUsername(username: string): Promise<string | null> {
   }
 }
 
+async function fetchMinecraftProfile(accessToken: string): Promise<{ name: string; id: string } | null> {
+  try {
+    const res = await fetch("https://api.minecraftservices.com/minecraft/profile", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.name && data?.id) return { name: data.name, id: data.id };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 const MC_SUFFIXES = ["", " ", ".", "...", "!", "?", " ~", " :)"];
 
 function variateMessage(msg: string): string {
@@ -394,8 +409,8 @@ export async function runMcBot(
     const lower = kickReason.toLowerCase();
     if (lower.includes("banned")) return false;
     if (lower.includes("authenticat")) return false;
-    if (lower.includes("failed to verify")) return false;
     if (lower.includes("not authenticated")) return false;
+    if (lower.includes("not logged into")) return false;
     if (lower.includes("invalid session")) return false;
     if (lower.includes("whitelist")) return false;
     if (lower.includes("full")) return false;
@@ -457,10 +472,11 @@ export async function runMcBot(
 
         await log("info", `Authenticated as ${mcToken.profile.name}`);
 
-        botOptions.auth = "offline";
+        botOptions.auth = "microsoft";
         botOptions.username = mcToken.profile.name;
         botOptions.session = {
           accessToken: mcToken.token,
+          clientToken: null,
           selectedProfile: {
             name: mcToken.profile.name,
             id: mcToken.profile.id,
@@ -476,35 +492,25 @@ export async function runMcBot(
     }
 
     if (config.authType === "ssid" && config.ssid) {
-      const cleanUuid = (config.uuid || "").replace(/-/g, "");
-      const profileName = config.username || config.label;
-
-      let resolvedUuid = cleanUuid;
-
-      if (!resolvedUuid || resolvedUuid.length !== 32) {
-        await log("info", "UUID not provided, fetching from Mojang...");
-        const fetchedUuid = await fetchUuidFromUsername(profileName);
-        if (fetchedUuid) {
-          resolvedUuid = fetchedUuid;
-          await log("info", `Resolved UUID: ${fetchedUuid}`);
-        } else {
-          await log(
-            "error",
-            `Could not resolve UUID for "${profileName}". Make sure the username is correct.`,
-          );
-          await updateJob(jobId, "error", `UUID not found for "${profileName}"`);
-          authFailed = true;
-          return;
-        }
+      await log("info", "Resolving Minecraft profile from SSID token...");
+      const profile = await fetchMinecraftProfile(config.ssid);
+      if (!profile) {
+        await log("error", "Could not resolve Minecraft profile from SSID token. The token may be expired or invalid.");
+        await updateJob(jobId, "error", "SSID token invalid — could not resolve profile");
+        authFailed = true;
+        return;
       }
 
-      botOptions.auth = "offline";
-      botOptions.username = profileName;
+      await log("info", `Resolved profile: ${profile.name} (${profile.id})`);
+
+      botOptions.auth = "microsoft";
+      botOptions.username = profile.name;
       botOptions.session = {
         accessToken: config.ssid,
+        clientToken: null,
         selectedProfile: {
-          name: profileName,
-          id: resolvedUuid,
+          name: profile.name,
+          id: profile.id,
         },
       };
     }
@@ -550,8 +556,8 @@ export async function runMcBot(
 
       const doReconnect = shouldReconnect(reason);
       if (!doReconnect) {
-        const msg = reason.toLowerCase().includes("authenticat")
-          ? `Authentication failed: ${reason}. Your SSID token may be expired — re-login to Minecraft and get a new token.`
+        const msg = reason.toLowerCase().includes("authenticat") || reason.toLowerCase().includes("not logged into")
+          ? `Authentication failed: ${reason}. Your token may be expired — re-login and get a new token.`
           : reason.toLowerCase().includes("banned")
             ? `Banned: ${reason}`
             : `Not reconnecting: ${reason}`;

@@ -37,14 +37,17 @@ function collectSetCookies(res: Response): string[] {
   return single ? [single] : [];
 }
 
+const DEFAULT_FETCH_TIMEOUT_MS = 25_000;
+
 export async function fetchWithJar(
   jar: CookieJar,
   url: string,
   init: RequestInit = {},
-  opts: { followRedirects?: boolean; maxRedirects?: number } = {},
+  opts: { followRedirects?: boolean; maxRedirects?: number; timeoutMs?: number } = {},
 ): Promise<Response> {
   const followRedirects = opts.followRedirects !== false;
   const maxRedirects = opts.maxRedirects ?? 10;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
 
   const headers = new Headers(init.headers);
   const existing = headers.get("cookie");
@@ -58,7 +61,29 @@ export async function fetchWithJar(
   let redirects = 0;
 
   while (true) {
-    const res = await fetch(currentUrl, currentInit);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Merge with caller signal if present
+    const parentSignal = init.signal;
+    const onParentAbort = () => controller.abort();
+    if (parentSignal) {
+      if (parentSignal.aborted) controller.abort();
+      else parentSignal.addEventListener("abort", onParentAbort, { once: true });
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(currentUrl, { ...currentInit, signal: controller.signal });
+    } catch (e) {
+      if (controller.signal.aborted && !parentSignal?.aborted) {
+        throw new Error(`Request timed out after ${timeoutMs}ms: ${currentUrl.slice(0, 80)}`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onParentAbort);
+    }
+
     jar.setFromResponse(currentUrl, collectSetCookies(res));
 
     if (

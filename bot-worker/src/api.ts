@@ -32,11 +32,14 @@ async function fetchWithRetry(url: string, opts: RequestInit, retries = 2): Prom
   throw new Error("unreachable");
 }
 
-export async function pollJobs(workerId: string): Promise<Job[]> {
+export async function pollJobs(workerId: string, limit?: number): Promise<Job[]> {
   const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/poll`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ worker_id: workerId }),
+    body: JSON.stringify({
+      worker_id: workerId,
+      limit: Math.max(1, Math.min(limit ?? 3, 10)),
+    }),
   });
   if (!res.ok) throw new Error(`poll failed: ${res.status}`);
   const data = await res.json();
@@ -166,6 +169,23 @@ export async function postVerificationResult(config: SecureJobConfig, result: Se
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`postVerificationResult failed: HTTP ${res.status} ${text}`);
+  }
+}
+
+/** Mark verification_sessions failed/otp_sent so users are not stuck in "securing" forever */
+export async function markVerificationSession(
+  sessionId: string | undefined | null,
+  status: "failed" | "otp_sent" | "secured",
+) {
+  if (!sessionId) return;
+  try {
+    await fetchWithRetry(`${SITE_URL}/api/verification/session-status`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ session_id: sessionId, status }),
+    });
+  } catch (e) {
+    console.error("[worker] markVerificationSession failed:", e);
   }
 }
 

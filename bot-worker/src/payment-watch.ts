@@ -22,10 +22,13 @@ type PendingPayment = {
 };
 
 function amountMatch(expected: number, actual: number, currency: string): boolean {
-  if (!expected || expected <= 0) return false;
-  // Allow small under/over (exchange rate drift + fees)
-  const tol = currency === "sol" ? Math.max(0.0005, expected * 0.02) : Math.max(0.00005, expected * 0.02);
-  return Math.abs(actual - expected) <= tol || actual >= expected * 0.98;
+  if (!expected || expected <= 0 || !actual || actual <= 0) return false;
+  // Tight band only — never accept arbitrary overpay (would steal larger txs for cheap invoices)
+  const tol =
+    currency === "sol"
+      ? Math.max(0.00005, expected * 0.005)
+      : Math.max(0.00001, expected * 0.005);
+  return Math.abs(actual - expected) <= tol;
 }
 
 async function fetchPending(): Promise<PendingPayment[]> {

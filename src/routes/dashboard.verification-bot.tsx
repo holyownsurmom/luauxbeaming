@@ -723,12 +723,7 @@ function VerificationBotPage() {
                             <code className="block text-foreground">{acc.mc_method}</code>
                           </div>
                         </div>
-                        {acc.mc_ssid && (
-                          <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">SSID Token</span>
-                            <code className="block text-foreground break-all text-[10px]">{acc.mc_ssid as string}</code>
-                          </div>
-                        )}
+
                       </div>
                     ))}
                   </div>

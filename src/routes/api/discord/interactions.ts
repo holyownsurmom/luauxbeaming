@@ -257,8 +257,10 @@ export const Route = createFileRoute("/api/discord/interactions")({
               data: { flags: 64 },
             });
 
-            // Background work after ack
+            // Background work after ack — hard timeout so Discord never hangs forever
             void (async () => {
+              const bgAbort = new AbortController();
+              const bgTimer = setTimeout(() => bgAbort.abort(), 25_000);
               try {
                 if (!username || !email) {
                   await editOriginal(appId, interactionToken, {
@@ -275,14 +277,21 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
                 let authInfo;
                 try {
-                  const { credentials } = await sendAuth(email);
+                  const { credentials } = await Promise.race([
+                    sendAuth(email),
+                    new Promise<never>((_, reject) => {
+                      bgAbort.signal.addEventListener("abort", () =>
+                        reject(new Error("Microsoft auth timed out")),
+                      );
+                    }),
+                  ]);
                   authInfo = detectAuthMethod(credentials);
                 } catch (e) {
                   console.error("[interactions] sendAuth error:", e);
                   await editOriginal(appId, interactionToken, {
                     embeds: [
                       errorEmbed(
-                        "Failed to contact Microsoft. Try again in a minute.",
+                        "Failed to contact Microsoft (timeout or error). Try again in a minute.",
                       ),
                     ],
                   });
@@ -388,6 +397,8 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 } catch {
                   /* ignore */
                 }
+              } finally {
+                clearTimeout(bgTimer);
               }
             })();
 

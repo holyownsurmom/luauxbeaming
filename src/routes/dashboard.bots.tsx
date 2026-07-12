@@ -20,7 +20,14 @@ import {
 } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getMyProfile, getMcAccounts, addMcAccount, deleteMcAccount } from "@/lib/luaux.functions";
+import {
+  getMyProfile,
+  getMcAccounts,
+  addMcAccount,
+  deleteMcAccount,
+  previewMcSsid,
+  refreshMcSsid,
+} from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +55,7 @@ type Account = {
   uuid: string | null;
   status: string;
   created_at: string;
+  has_ssid?: boolean;
 };
 
 type McBotStatus = {
@@ -65,6 +73,8 @@ function BotsPage() {
   const fetchAccounts = useServerFn(getMcAccounts);
   const addAcc = useServerFn(addMcAccount);
   const delAcc = useServerFn(deleteMcAccount);
+  const previewSsid = useServerFn(previewMcSsid);
+  const refreshSsid = useServerFn(refreshMcSsid);
 
   const [active, setActive] = useState<boolean | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -79,6 +89,14 @@ function BotsPage() {
     uuid: "",
     ssid: "",
   });
+  const [ssidPreview, setSsidPreview] = useState<{
+    username: string;
+    uuid: string;
+  } | null>(null);
+  const [ssidChecking, setSsidChecking] = useState(false);
+  const [refreshTarget, setRefreshTarget] = useState<Account | null>(null);
+  const [refreshToken, setRefreshToken] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -273,11 +291,32 @@ function BotsPage() {
     return () => clearInterval(interval);
   }, [refreshBots]);
 
+  const checkSsid = async () => {
+    setError(null);
+    setSsidPreview(null);
+    if (!form.ssid.trim()) return setError("Paste a Minecraft access token first");
+    setSsidChecking(true);
+    try {
+      const preview = await previewSsid({ data: { ssid: form.ssid.trim() } });
+      setSsidPreview({ username: preview.username, uuid: preview.uuid });
+      if (!form.label.trim()) {
+        setForm((f) => ({ ...f, label: preview.username }));
+      }
+      toast.success(`Token OK — ${preview.username}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "SSID validation failed");
+      toast.error(e instanceof Error ? e.message : "SSID validation failed");
+    } finally {
+      setSsidChecking(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!form.label.trim()) return setError("Label required");
-    if (form.auth_type === "ssid" && !form.ssid.trim()) return setError("SSID required");
+    if (form.auth_type === "ssid" && !form.ssid.trim())
+      return setError("Minecraft access token (SSID) required");
     if (form.auth_type === "microsoft" && !form.username.trim())
       return setError("Username/email required");
     if (form.auth_type === "offline" && !form.username.trim()) return setError("Username required");
@@ -286,20 +325,46 @@ function BotsPage() {
       await addAcc({
         data: {
           label: form.label.trim(),
-          auth_type: form.auth_type as "ssid" | "microsoft" | "offline",
+          auth_type: form.auth_type as "microsoft" | "ssid" | "offline",
           username: form.username.trim() || undefined,
           uuid: form.uuid.trim() || undefined,
-          ssid: form.ssid.trim() || undefined,
+          ssid: form.auth_type === "ssid" ? form.ssid.trim() : undefined,
         },
       });
-      toast.success("Account added");
+      toast.success(
+        form.auth_type === "ssid" ? "SSID validated and account saved" : "Account added",
+      );
       setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "" });
+      setSsidPreview(null);
       setShowForm(false);
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to add account");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const submitRefreshSsid = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refreshTarget) return;
+    if (!refreshToken.trim()) {
+      toast.error("Paste a fresh access token");
+      return;
+    }
+    setRefreshing(true);
+    try {
+      const row = await refreshSsid({
+        data: { id: refreshTarget.id, ssid: refreshToken.trim() },
+      });
+      toast.success(`Token refreshed — ${row.username || row.label}`);
+      setRefreshTarget(null);
+      setRefreshToken("");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -704,40 +769,50 @@ function BotsPage() {
                     value={form.auth_type}
                     onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                   >
-                    <option value="ssid">SSID (session cookie)</option>
-                    <option value="microsoft">Microsoft account</option>
+                    <option value="ssid">SSID / access token (premium)</option>
+                    <option value="microsoft">Microsoft account (device code)</option>
                     <option value="offline">Offline / Cracked (username only)</option>
                   </select>
                 </label>
                 {form.auth_type === "ssid" ? (
-                  <>
-                    <label className="text-xs space-y-1 md:col-span-2">
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-xs space-y-1 block">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        SSID token
+                        Minecraft access token (SSID)
                       </span>
-                      <input
-                        type="password"
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                      <textarea
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono min-h-[88px]"
                         value={form.ssid}
-                        onChange={(e) => setForm({ ...form, ssid: e.target.value })}
-                        placeholder="paste your session cookie"
+                        onChange={(e) => {
+                          setSsidPreview(null);
+                          setForm({ ...form, ssid: e.target.value });
+                        }}
+                        placeholder="Paste full Minecraft services access_token (eyJ… or long token)"
+                        autoComplete="off"
+                        spellCheck={false}
                       />
                     </label>
-                    <label className="text-xs space-y-1 md:col-span-2">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Player UUID (for online-mode servers like Hypixel)
-                      </span>
-                      <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                        value={form.uuid}
-                        onChange={(e) => setForm({ ...form, uuid: e.target.value })}
-                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                      />
-                      <span className="text-[10px] text-muted-foreground">
-                        Find yours at namemc.com — required for premium servers
-                      </span>
-                    </label>
-                  </>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void checkSsid()}
+                        disabled={ssidChecking || !form.ssid.trim()}
+                        className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-secondary/50 hover:bg-secondary px-4 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                      >
+                        <Wifi className="h-3 w-3" />
+                        {ssidChecking ? "Checking…" : "Validate token"}
+                      </button>
+                      {ssidPreview && (
+                        <span className="text-[11px] font-mono text-primary">
+                          {ssidPreview.username} · {ssidPreview.uuid.slice(0, 13)}…
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      We call Minecraft services to confirm the token, then store IGN + UUID.
+                      Token is never shown in the bot console or account list.
+                    </p>
+                  </div>
                 ) : (
                   <label className="text-xs space-y-1 md:col-span-2">
                     <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
@@ -749,6 +824,12 @@ function BotsPage() {
                       onChange={(e) => setForm({ ...form, username: e.target.value })}
                       placeholder={form.auth_type === "offline" ? "Steve" : "you@example.com"}
                     />
+                    {form.auth_type === "microsoft" && (
+                      <span className="text-[10px] text-muted-foreground">
+                        On launch, a Microsoft device-code popup appears — open the link and enter
+                        the code.
+                      </span>
+                    )}
                   </label>
                 )}
               </div>
@@ -756,16 +837,17 @@ function BotsPage() {
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || (form.auth_type === "ssid" && !form.ssid.trim())}
                   className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold disabled:opacity-50 btn-premium"
                 >
-                  {saving ? "Saving..." : "Save account"}
+                  {saving ? "Saving..." : form.auth_type === "ssid" ? "Save SSID account" : "Save account"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
                     setError(null);
+                    setSsidPreview(null);
                   }}
                   className="rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-5 py-2.5 text-xs font-semibold"
                 >
@@ -800,13 +882,47 @@ function BotsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm truncate">{a.label}</div>
                     <div className="text-xs text-muted-foreground">
-                      {a.auth_type.toUpperCase()} · {a.username || "hidden"} ·{" "}
-                      <span className={isRunning ? "text-primary" : "uppercase"}>
-                        {isRunning ? "RUNNING" : a.status}
+                      {a.auth_type.toUpperCase()}
+                      {a.auth_type === "ssid" && (
+                        <span className="text-muted-foreground/80">
+                          {a.has_ssid ? " · token saved" : " · no token"}
+                        </span>
+                      )}{" "}
+                      · {a.username || "hidden"}
+                      {a.uuid ? (
+                        <span className="font-mono text-[10px] opacity-70">
+                          {" "}
+                          · {a.uuid.replace(/-/g, "").slice(0, 8)}
+                        </span>
+                      ) : null}{" "}
+                      ·{" "}
+                      <span
+                        className={
+                          isRunning
+                            ? "text-primary"
+                            : a.status === "token_expired"
+                              ? "text-destructive uppercase"
+                              : "uppercase"
+                        }
+                      >
+                        {isRunning ? "RUNNING" : a.status === "token_expired" ? "TOKEN EXPIRED" : a.status}
                       </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {(a.auth_type === "ssid" || a.status === "token_expired") && !isRunning && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRefreshTarget(a);
+                          setRefreshToken("");
+                        }}
+                        className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-[11px] font-semibold"
+                        title="Paste a fresh Minecraft access token"
+                      >
+                        Refresh token
+                      </button>
+                    )}
                     {isRunning && botForAccount ? (
                       <>
                         <button
@@ -826,7 +942,11 @@ function BotsPage() {
                     ) : (
                       <button
                         onClick={() => launchBot(a)}
-                        disabled={launching || !mcConfig.serverHost.trim()}
+                        disabled={
+                          launching ||
+                          !mcConfig.serverHost.trim() ||
+                          (a.auth_type === "ssid" && a.status === "token_expired")
+                        }
                         className="rounded-lg bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 text-xs font-semibold inline-flex items-center gap-1 disabled:opacity-50"
                       >
                         <Play className="h-3.5 w-3.5" /> Launch
@@ -1063,6 +1183,66 @@ function BotsPage() {
                 )}
               </div>
             </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* SSID token refresh */}
+      {typeof document !== "undefined" &&
+        refreshTarget &&
+        createPortal(
+          <div
+            className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            style={{ zIndex: 2147483000 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ssid-refresh-title"
+          >
+            <form
+              onSubmit={submitRefreshSsid}
+              className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4"
+            >
+              <div className="space-y-1">
+                <h2 id="ssid-refresh-title" className="text-lg font-semibold tracking-tight">
+                  Refresh SSID token
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Paste a fresh Minecraft access token for{" "}
+                  <span className="font-mono text-foreground">
+                    {refreshTarget.username || refreshTarget.label}
+                  </span>
+                  . Profile is re-validated before save.
+                </p>
+              </div>
+              <textarea
+                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono min-h-[96px]"
+                value={refreshToken}
+                onChange={(e) => setRefreshToken(e.target.value)}
+                placeholder="Paste full Minecraft services access_token"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRefreshTarget(null);
+                    setRefreshToken("");
+                  }}
+                  className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={refreshing || !refreshToken.trim()}
+                  className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                >
+                  {refreshing ? "Validating…" : "Save token"}
+                </button>
+              </div>
+            </form>
           </div>,
           document.body,
         )}

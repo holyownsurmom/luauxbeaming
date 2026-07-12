@@ -28,6 +28,12 @@ export const Route = createFileRoute("/api/admin/login")({
         }
 
         const password = process.env.ADMIN_PASSWORD || "";
+        if (!password || password.length < 8) {
+          return Response.json(
+            { error: "Admin login is not configured" },
+            { status: 503 },
+          );
+        }
         if (!body.password || !timingSafeEqualStrings(String(body.password), password)) {
           return Response.json({ error: "Wrong password" }, { status: 403 });
         }
@@ -35,17 +41,17 @@ export const Route = createFileRoute("/api/admin/login")({
         const db = adminDb();
         const discordId = session.data.user.id;
 
-        // Ensure this Discord user is registered as admin (prevents accidental free access)
+        // Never auto-promote: password only unlocks pre-seeded admins
         const { data: existing } = await db
           .from("admins")
           .select("discord_id")
           .eq("discord_id", discordId)
           .maybeSingle();
         if (!existing) {
-          await db.from("admins").insert({
-            discord_id: discordId,
-            note: "password unlock",
-          });
+          return Response.json(
+            { error: "This Discord account is not an authorized admin" },
+            { status: 403 },
+          );
         }
 
         await session.update({ ...session.data, isAdmin: true });

@@ -43,24 +43,32 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
   const user = await requireUser();
   const { data } = await admin()
     .from("mc_accounts")
-    .select("id,label,auth_type,username,uuid,status,created_at")
+    .select("id,label,auth_type,username,uuid,status,created_at,ssid")
     .eq("discord_id", user.id)
     .order("created_at", { ascending: false });
-  return data ?? [];
+  // Never send raw ssid to the browser — only a boolean flag
+  return (data ?? []).map((row) => {
+    const { ssid, ...rest } = row as typeof row & { ssid?: string | null };
+    return {
+      ...rest,
+      has_ssid: !!(ssid && String(ssid).trim().length > 0),
+    };
+  });
 });
 
-export const getMcAccountSsid = createServerFn({ method: "POST" })
-  .inputValidator((input) => z.object({ accountId: z.string().uuid() }).parse(input))
+/** Preview SSID without saving — returns IGN + UUID for UI confirmation */
+export const previewMcSsid = createServerFn({ method: "POST" })
+  .inputValidator((input) => z.object({ ssid: z.string().min(1).max(4000) }).parse(input))
   .handler(async ({ data }) => {
-    const { requireUser, admin } = await import("./luaux-server.server");
-    const user = await requireUser();
-    const { data: row } = await admin()
-      .from("mc_accounts")
-      .select("ssid,username,uuid")
-      .eq("id", data.accountId)
-      .eq("discord_id", user.id)
-      .maybeSingle();
-    return row;
+    await (await import("./luaux-server.server")).requireUser();
+    const { validateMinecraftSsid } = await import("./mc-ssid.server");
+    const result = await validateMinecraftSsid(data.ssid);
+    if (!result.ok) throw new Error(result.error);
+    return {
+      username: result.profile.name,
+      uuid: result.uuidDashed,
+      rawUuid: result.profile.id,
+    };
   });
 
 export const addMcAccount = createServerFn({ method: "POST" })
@@ -71,26 +79,90 @@ export const addMcAccount = createServerFn({ method: "POST" })
         auth_type: z.enum(["microsoft", "ssid", "offline"]),
         username: z.string().max(60).optional().nullable(),
         uuid: z.string().max(60).optional().nullable(),
-        ssid: z.string().max(2000).optional().nullable(),
+        ssid: z.string().max(4000).optional().nullable(),
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
+
+    let username = data.username?.trim() || null;
+    let uuid = data.uuid?.trim() || null;
+    let ssid: string | null = null;
+
+    if (data.auth_type === "ssid") {
+      const { validateMinecraftSsid } = await import("./mc-ssid.server");
+      const result = await validateMinecraftSsid(data.ssid || "");
+      if (!result.ok) throw new Error(result.error);
+      ssid = result.token;
+      username = result.profile.name;
+      uuid = result.uuidDashed;
+    }
+
+    if (data.auth_type === "microsoft" && !username) {
+      throw new Error("Username/email required for Microsoft accounts");
+    }
+    if (data.auth_type === "offline" && !username) {
+      throw new Error("Username required for offline accounts");
+    }
+
+    // Prefer label from IGN for SSID if user left generic label
+    const label =
+      data.auth_type === "ssid" && (!data.label || data.label === "alt-1")
+        ? username || data.label
+        : data.label;
+
     const { data: row, error } = await admin()
       .from("mc_accounts")
       .insert({
         discord_id: user.id,
-        label: data.label,
+        label,
         auth_type: data.auth_type,
-        username: data.username ?? null,
-        uuid: data.uuid ?? null,
-        ssid: data.ssid ?? null,
+        username,
+        uuid,
+        ssid,
+        status: "idle",
       })
-      .select("id")
+      .select("id,label,auth_type,username,uuid,status,created_at")
       .single();
     if (error) throw new Error(error.message);
+    return row;
+  });
+
+/** Replace SSID on an existing account (token refresh without re-create) */
+export const refreshMcSsid = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        ssid: z.string().min(1).max(4000),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const { validateMinecraftSsid } = await import("./mc-ssid.server");
+    const result = await validateMinecraftSsid(data.ssid);
+    if (!result.ok) throw new Error(result.error);
+
+    const { data: row, error } = await admin()
+      .from("mc_accounts")
+      .update({
+        auth_type: "ssid",
+        ssid: result.token,
+        username: result.profile.name,
+        uuid: result.uuidDashed,
+        status: "idle",
+      })
+      .eq("id", data.id)
+      .eq("discord_id", user.id)
+      .select("id,label,auth_type,username,uuid,status")
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    if (!row) throw new Error("Account not found");
     return row;
   });
 
@@ -117,26 +189,52 @@ const FIXED_WALLETS: Record<(typeof SUPPORTED_CURRENCIES)[number], string> = {
 
 async function usdToCryptoAmount(usd: number, currency: "ltc" | "sol"): Promise<number> {
   const ids = { ltc: "litecoin", sol: "solana" } as const;
-  try {
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${ids[currency]}&vs_currencies=usd`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (res.ok) {
-      const j = (await res.json()) as Record<string, { usd?: number }>;
-      const price = j[ids[currency]]?.usd;
-      if (price && price > 0) {
-        const raw = usd / price;
-        return currency === "sol" ? Number(raw.toFixed(4)) : Number(raw.toFixed(6));
-      }
-    }
-  } catch {
-    /* fall through */
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids[currency]}&vs_currencies=usd`,
+    { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10_000) },
+  );
+  if (!res.ok) {
+    throw new Error("Could not fetch live crypto rates — try again in a moment");
   }
-  // Fallback rates if CoinGecko is down (approximate)
-  const fallbackUsd: Record<"ltc" | "sol", number> = { ltc: 85, sol: 140 };
-  const raw = usd / fallbackUsd[currency];
-  return currency === "sol" ? Number(raw.toFixed(4)) : Number(raw.toFixed(6));
+  const j = (await res.json()) as Record<string, { usd?: number }>;
+  const price = j[ids[currency]]?.usd;
+  if (!price || price <= 0) {
+    throw new Error("Invalid crypto rate from price API");
+  }
+  const raw = usd / price;
+  // Base precision before unique offset
+  return currency === "sol" ? Number(raw.toFixed(5)) : Number(raw.toFixed(7));
+}
+
+/** Make each invoice amount unique on shared wallets so chain matcher cannot mis-attribute */
+async function uniquePayAmount(
+  db: { from: (t: string) => any },
+  currency: "ltc" | "sol",
+  base: number,
+): Promise<number> {
+  const step = currency === "sol" ? 0.00001 : 0.000001;
+  const maxAttempts = 40;
+  for (let i = 0; i < maxAttempts; i++) {
+    const offset = (Math.floor(Math.random() * 900) + 100) * step; // 100–999 units of step
+    const candidate =
+      currency === "sol"
+        ? Number((base + offset).toFixed(5))
+        : Number((base + offset).toFixed(7));
+    const { data: clash } = await db
+      .from("payments")
+      .select("id")
+      .eq("status", "waiting")
+      .eq("pay_currency", currency)
+      .eq("pay_amount", candidate)
+      .limit(1)
+      .maybeSingle();
+    if (!clash) return candidate;
+  }
+  // Last resort: timestamp dust
+  const dust = (Date.now() % 1000) * step;
+  return currency === "sol"
+    ? Number((base + dust).toFixed(5))
+    : Number((base + dust).toFixed(7));
 }
 
 export const createInvoice = createServerFn({ method: "POST" })
@@ -255,15 +353,26 @@ export const createInvoice = createServerFn({ method: "POST" })
     // Fixed LTC/SOL wallets only (no NOWPayments)
     const pay_currency = data.pay_currency;
     const pay_address = FIXED_WALLETS[pay_currency];
+    if (!pay_address) throw new Error(`Wallet not configured for ${pay_currency}`);
     const price_amount = Number(plan.price_usd);
-    const pay_amount = await usdToCryptoAmount(price_amount, pay_currency);
+    const baseAmount = await usdToCryptoAmount(price_amount, pay_currency);
+    const pay_amount = await uniquePayAmount(db, pay_currency, baseAmount);
+    const invoiceId = crypto.randomUUID();
+
+    // Expire abandoned invoices older than 45 minutes so they stop matching chain noise
+    const expireBefore = new Date(Date.now() - 45 * 60_000).toISOString();
+    await db
+      .from("payments")
+      .update({ status: "expired" })
+      .eq("status", "waiting")
+      .lt("created_at", expireBefore);
 
     const { data: row, error } = await db
       .from("payments")
       .insert({
         discord_id: user.id,
         plan_id: plan.id,
-        np_payment_id: `manual_${Date.now()}`,
+        np_payment_id: `manual_${invoiceId}`,
         np_order_id: order_id,
         pay_currency,
         pay_amount,

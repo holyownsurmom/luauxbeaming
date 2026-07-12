@@ -42,13 +42,13 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Do I need a Minecraft account to use MC Auto-Message?",
-    a: "Yes. You need a premium Minecraft account with a valid SSID token. Add your account in MC Auto-Message > Add Account, enter your username and SSID token. We auto-fetch your UUID.",
+    a: "Yes. You need a premium Minecraft account. Add it in MC Auto-Message > Add Account with Microsoft device-code login (or offline username for cracked servers). On launch, complete the Microsoft link/code popup.",
     category: "Getting Started",
     icon: Bot,
   },
   {
-    q: "How do I get my SSID token?",
-    a: "Log into minecraft.net, open browser DevTools (F12), go to Application > Cookies, and find the `accessToken` or `sessionId` value. Paste it into the SSID field when adding your account.",
+    q: "How does Microsoft login work for MC bots?",
+    a: "Add a Microsoft account with your email/username as the label. When you launch the bot, a device-code popup appears — open microsoft.com/link, enter the code, and approve. The worker caches the session for reconnects.",
     category: "Getting Started",
     icon: Key,
   },
@@ -68,7 +68,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Can I run multiple MC bots at the same time?",
-    a: "Yes, if your plan allows it. Each concurrent bot needs its own Minecraft account (SSID/Microsoft) and an active paid plan with enough max bots and bot hours. Hours are shared across all running bots. Free / no plan = no multi-bot. Upgrade on Purchase to unlock higher concurrent limits.",
+    a: "Yes, if your plan allows it. Each concurrent bot needs its own Minecraft account (Microsoft device-code) and an active paid plan with enough max bots and bot hours. Hours are shared across all running bots. Free / no plan = no multi-bot. Upgrade on Purchase to unlock higher concurrent limits.",
     category: "MC Auto-Message",
     icon: Bot,
   },
@@ -80,7 +80,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "My bot disconnected / says 'Authentication failed'. What do I do?",
-    a: "Your SSID token probably expired. Log into minecraft.net again, get a fresh token, delete the old account in dashboard, and re-add it with the new SSID.",
+    a: "Microsoft session expired/revoked, or SSID token expired. Stop the bot. For Microsoft: launch again and complete the device-code popup. For SSID: click Refresh token on the account, paste a fresh Minecraft access_token (Validate first if adding new), then launch again. Launch also re-checks SSID and marks TOKEN EXPIRED if dead.",
     category: "MC Auto-Message",
     icon: Wifi,
   },
@@ -214,7 +214,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "How do I add another Minecraft account?",
-    a: "Go to MC Auto-Message > Add Account. Enter your MC username, email, and SSID token. You can add multiple accounts and create separate bots for each.",
+    a: "Go to MC Auto-Message > Add Account. Choose Microsoft (device code) or offline, enter a label and username/email. You can add multiple accounts and create separate bots for each.",
     category: "Account & Billing",
     icon: Bot,
   },

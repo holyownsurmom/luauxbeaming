@@ -60,14 +60,37 @@ export const Route = createFileRoute("/api/bots/worker/update")({
           return Response.json({ error: "job_id and status required" }, { status: 400 });
         }
 
+        const allowed = new Set([
+          "pending",
+          "running",
+          "paused",
+          "stopping",
+          "stopped",
+          "error",
+          "completed",
+        ]);
+        if (!allowed.has(body.status)) {
+          return Response.json({ error: "invalid status" }, { status: 400 });
+        }
+
         const update: Record<string, unknown> = { status: body.status };
         if (body.error) update.error = body.error;
         if (body.status === "stopped" || body.status === "error" || body.status === "completed") {
           update.stopped_at = new Date().toISOString();
         }
+        // Re-queue: clear worker binding so another poll can claim
+        if (body.status === "pending") {
+          update.worker_id = null;
+          update.started_at = null;
+          update.stopped_at = null;
+          update.error = body.error || null;
+        }
 
-        const query = db().from("bot_jobs").update(update).eq("id", body.job_id);
-        if (body.worker_id) query.eq("worker_id", body.worker_id);
+        let query = db().from("bot_jobs").update(update).eq("id", body.job_id);
+        // Prefer binding updates to the claiming worker when provided
+        if (body.worker_id && body.status !== "pending") {
+          query = query.eq("worker_id", body.worker_id);
+        }
 
         const { error } = await query;
 

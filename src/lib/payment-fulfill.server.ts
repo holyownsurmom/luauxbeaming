@@ -115,18 +115,26 @@ export async function fulfillPayment(
     };
   }
 
+  // Load plan BEFORE claiming so we never mark paid without a grant target
+  const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
+  if (!plan) throw new Error("Plan missing");
+
   const { data: claimed, error: claimErr } = await db
     .from("payments")
     .update(update)
     .eq("id", pmt.id)
     .is("fulfilled_at", null)
+    .in("status", ["waiting", "confirming", "confirmed", "sending", "partially_paid"])
     .select("id")
     .maybeSingle();
-  if (claimErr) throw new Error(claimErr.message);
+  if (claimErr) {
+    // Unique violation on txid / np_payment_id
+    if (String(claimErr.message || "").toLowerCase().includes("unique") || claimErr.code === "23505") {
+      throw new Error("TXID already used");
+    }
+    throw new Error(claimErr.message);
+  }
   if (!claimed) return { ok: true, already: true };
-
-  const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
-  if (!plan) throw new Error("Plan missing");
 
   const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
   const productLabels: string[] = [];
@@ -223,7 +231,7 @@ export async function fulfillPayment(
       : 0;
     const base = Math.max(existingExpiry, now);
     const expiryDays = plan.duration_days || 90;
-    await db
+    const { error: profileErr } = await db
       .from("profiles")
       .update({
         bot_hours_remaining: Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
@@ -231,6 +239,11 @@ export async function fulfillPayment(
         plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
       })
       .eq("discord_id", pmt.discord_id);
+    if (profileErr) {
+      console.error("[fulfillPayment] profile grant failed", profileErr.message);
+      // Keep payment finished (money received) but surface for ops
+      throw new Error(`Profile grant failed: ${profileErr.message}`);
+    }
   }
 
   await sendPurchaseWebhook({

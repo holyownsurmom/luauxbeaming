@@ -28,6 +28,15 @@ export const Route = createFileRoute("/api/bots/worker/payments-pending")({
       GET: async ({ request }) => {
         if (!authWorker(request)) return Response.json({ error: "Unauthorized" }, { status: 401 });
         const client = db();
+        // Only invoices created in the last 45 minutes are matchable
+        const since = new Date(Date.now() - 45 * 60_000).toISOString();
+        // Best-effort expire older waiting rows
+        await client
+          .from("payments")
+          .update({ status: "expired" })
+          .eq("status", "waiting")
+          .lt("created_at", since);
+
         const { data, error } = await client
           .from("payments")
           .select(
@@ -35,6 +44,7 @@ export const Route = createFileRoute("/api/bots/worker/payments-pending")({
           )
           .eq("status", "waiting")
           .in("pay_currency", ["ltc", "sol"])
+          .gte("created_at", since)
           .order("created_at", { ascending: true })
           .limit(40);
         if (error) return Response.json({ error: error.message }, { status: 500 });

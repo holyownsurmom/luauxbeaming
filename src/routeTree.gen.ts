@@ -26,6 +26,7 @@ import { Route as DashboardDiscordAutoReplyRouteImport } from './routes/dashboar
 import { Route as DashboardBotsRouteImport } from './routes/dashboard.bots'
 import { Route as DashboardBillingRouteImport } from './routes/dashboard.billing'
 import { Route as ApiMeRouteImport } from './routes/api/me'
+import { Route as ApiVerificationSessionStatusRouteImport } from './routes/api/verification/session-status'
 import { Route as ApiVerificationCompleteRouteImport } from './routes/api/verification/complete'
 import { Route as ApiKeysRevokeRouteImport } from './routes/api/keys/revoke'
 import { Route as ApiKeysResendRouteImport } from './routes/api/keys/resend'
@@ -148,6 +149,12 @@ const ApiMeRoute = ApiMeRouteImport.update({
   path: '/api/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVerificationSessionStatusRoute =
+  ApiVerificationSessionStatusRouteImport.update({
+    id: '/api/verification/session-status',
+    path: '/api/verification/session-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiVerificationCompleteRoute = ApiVerificationCompleteRouteImport.update({
   id: '/api/verification/complete',
   path: '/api/verification/complete',
@@ -358,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
+  '/api/verification/session-status': typeof ApiVerificationSessionStatusRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
   '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
@@ -410,6 +418,7 @@ export interface FileRoutesByTo {
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
+  '/api/verification/session-status': typeof ApiVerificationSessionStatusRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
   '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
@@ -464,6 +473,7 @@ export interface FileRoutesById {
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
+  '/api/verification/session-status': typeof ApiVerificationSessionStatusRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
   '/api/bots/discord-autoreply/stop': typeof ApiBotsDiscordAutoreplyStopRoute
@@ -519,6 +529,7 @@ export interface FileRouteTypes {
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
+    | '/api/verification/session-status'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
     | '/api/bots/discord-autoreply/stop'
@@ -571,6 +582,7 @@ export interface FileRouteTypes {
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
+    | '/api/verification/session-status'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
     | '/api/bots/discord-autoreply/stop'
@@ -624,6 +636,7 @@ export interface FileRouteTypes {
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
+    | '/api/verification/session-status'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
     | '/api/bots/discord-autoreply/stop'
@@ -667,6 +680,7 @@ export interface RootRouteChildren {
   ApiKeysResendRoute: typeof ApiKeysResendRoute
   ApiKeysRevokeRoute: typeof ApiKeysRevokeRoute
   ApiVerificationCompleteRoute: typeof ApiVerificationCompleteRoute
+  ApiVerificationSessionStatusRoute: typeof ApiVerificationSessionStatusRoute
   ApiBotsDiscordAutoreplyStartRoute: typeof ApiBotsDiscordAutoreplyStartRoute
   ApiBotsDiscordAutoreplyStatusRoute: typeof ApiBotsDiscordAutoreplyStatusRoute
   ApiBotsDiscordAutoreplyStopRoute: typeof ApiBotsDiscordAutoreplyStopRoute
@@ -808,6 +822,13 @@ declare module '@tanstack/react-router' {
       path: '/api/me'
       fullPath: '/api/me'
       preLoaderRoute: typeof ApiMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/verification/session-status': {
+      id: '/api/verification/session-status'
+      path: '/api/verification/session-status'
+      fullPath: '/api/verification/session-status'
+      preLoaderRoute: typeof ApiVerificationSessionStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/verification/complete': {
@@ -1104,6 +1125,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiKeysResendRoute: ApiKeysResendRoute,
   ApiKeysRevokeRoute: ApiKeysRevokeRoute,
   ApiVerificationCompleteRoute: ApiVerificationCompleteRoute,
+  ApiVerificationSessionStatusRoute: ApiVerificationSessionStatusRoute,
   ApiBotsDiscordAutoreplyStartRoute: ApiBotsDiscordAutoreplyStartRoute,
   ApiBotsDiscordAutoreplyStatusRoute: ApiBotsDiscordAutoreplyStatusRoute,
   ApiBotsDiscordAutoreplyStopRoute: ApiBotsDiscordAutoreplyStopRoute,

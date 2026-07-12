@@ -44,19 +44,14 @@ export async function isAdminSession(): Promise<boolean> {
   if (data.isAdmin !== true) return false;
   const user = data.user;
   if (!user?.id) return false;
-  // Must re-validate against admins table — never trust cookie alone after re-login bugs
+  // Must re-validate against admins table — never trust cookie alone
   try {
     const { data: row } = await admin()
       .from("admins")
       .select("discord_id")
       .eq("discord_id", user.id)
       .maybeSingle();
-    if (row) return true;
-    // Break-glass: only if admins table has zero rows AND session flag set via password
-    const { count } = await admin()
-      .from("admins")
-      .select("discord_id", { count: "exact", head: true });
-    return (count ?? 0) === 0;
+    return !!row;
   } catch {
     return false;
   }

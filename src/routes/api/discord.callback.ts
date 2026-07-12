@@ -11,7 +11,12 @@ type StoredUser = {
   avatar: string | null;
 };
 
-type SessionData = { oauth_state?: string; user?: StoredUser; vpnBlocked?: boolean };
+type SessionData = {
+  oauth_state?: string;
+  user?: StoredUser;
+  vpnBlocked?: boolean;
+  isAdmin?: boolean;
+};
 
 export const Route = createFileRoute("/api/discord/callback")({
   server: {

@@ -6,6 +6,7 @@ import {
   checkJobStatuses,
   postVerificationResult,
   fetchPresenceTokens,
+  markVerificationSession,
   WORKER_ID as API_WORKER_ID,
 } from "./api.js";
 import { runMcBot, type McJobConfig, type JobRunResult } from "./mc.js";
@@ -47,9 +48,22 @@ async function applyTerminal(jobId: string, result: JobRunResult) {
   console.log(`[worker] job ${jobId} finished (${result.status})`);
 }
 
+async function releaseUnstartedJob(jobId: string, reason: string) {
+  console.warn(`[worker] releasing job ${jobId} back to pending: ${reason}`);
+  try {
+    await updateJob(jobId, "pending", reason);
+  } catch (e) {
+    console.error(`[worker] failed to release job ${jobId}:`, e);
+  }
+}
+
 async function claimJob(job: { id: string; discord_id: string; type: string; config: unknown }) {
   if (runningJobs.has(job.id)) return;
-  if (runningJobs.size >= MAX_CONCURRENT_JOBS) return;
+  if (runningJobs.size >= MAX_CONCURRENT_JOBS) {
+    // Poll already marked this job running — free it so another worker/slot can take it
+    await releaseUnstartedJob(job.id, "Worker at capacity — requeued");
+    return;
+  }
 
   const controller = new AbortController();
   runningJobs.set(job.id, controller);
@@ -84,30 +98,40 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         console.log(`[worker] job ${job.id} discord runner exited`);
       }
     } else if (job.type === "secure") {
-      const result = await runSecureBot(
-        job.id,
-        job.discord_id,
-        job.config as SecureJobConfig,
-        controller.signal,
-      );
-      if (controller.signal.aborted) {
-        await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
-      } else if (!result) {
-        await applyTerminal(job.id, {
-          status: "error",
-          error: "Secure flow failed (login/recovery)",
-        });
-      } else {
-        try {
-          await postVerificationResult(job.config as SecureJobConfig, result);
-          await applyTerminal(job.id, { status: "completed" });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
+      const secureCfg = job.config as SecureJobConfig & { sessionId?: string };
+      try {
+        const result = await runSecureBot(
+          job.id,
+          job.discord_id,
+          secureCfg,
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          await markVerificationSession(secureCfg.sessionId, "failed");
+          await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
+        } else if (!result) {
+          await markVerificationSession(secureCfg.sessionId, "failed");
           await applyTerminal(job.id, {
             status: "error",
-            error: `Verification complete failed: ${msg}`,
+            error: "Secure flow failed (login/recovery/timeout)",
           });
+        } else {
+          try {
+            await postVerificationResult(secureCfg, result);
+            await applyTerminal(job.id, { status: "completed" });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await markVerificationSession(secureCfg.sessionId, "failed");
+            await applyTerminal(job.id, {
+              status: "error",
+              error: `Verification complete failed: ${msg}`,
+            });
+          }
         }
+      } catch (secureErr) {
+        const msg = secureErr instanceof Error ? secureErr.message : String(secureErr);
+        await markVerificationSession(secureCfg.sessionId, "failed");
+        await applyTerminal(job.id, { status: "error", error: msg });
       }
     } else {
       await applyTerminal(job.id, { status: "error", error: `Unknown job type: ${job.type}` });
@@ -124,10 +148,14 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 
 async function poll() {
   try {
-    if (runningJobs.size >= MAX_CONCURRENT_JOBS) return;
-    const jobs = await pollJobs(WORKER_ID);
+    const free = MAX_CONCURRENT_JOBS - runningJobs.size;
+    if (free <= 0) return;
+    const jobs = await pollJobs(WORKER_ID, free);
     for (const job of jobs) {
-      if (runningJobs.size >= MAX_CONCURRENT_JOBS) break;
+      if (runningJobs.size >= MAX_CONCURRENT_JOBS) {
+        await releaseUnstartedJob(job.id, "Worker at capacity — requeued");
+        continue;
+      }
       void claimJob(job);
     }
   } catch (err) {

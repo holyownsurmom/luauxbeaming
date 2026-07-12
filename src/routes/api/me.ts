@@ -1,29 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useSession } from "@tanstack/react-start/server";
-
-const cfg = () => ({
-  password: process.env.SESSION_SECRET!,
-  name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 30,
-});
-
-type StoredUser = {
-  id: string;
-  username: string;
-  global_name: string | null;
-  avatar: string | null;
-};
-
-type SessionData = { user?: StoredUser; isAdmin?: boolean };
+import { getSessionUser, isAdminSession } from "@/lib/luaux-server.server";
 
 export const Route = createFileRoute("/api/me")({
   server: {
     handlers: {
       GET: async () => {
-        const session = await useSession<SessionData>(cfg());
+        const user = await getSessionUser();
+        const isAdmin = user ? await isAdminSession() : false;
         return Response.json({
-          user: session.data.user ?? null,
-          isAdmin: session.data.isAdmin === true,
+          user: user ?? null,
+          isAdmin,
         });
       },
     },

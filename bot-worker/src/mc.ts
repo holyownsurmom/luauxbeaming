@@ -417,33 +417,36 @@ export async function runMcBot(
 
     if (config.authType === "microsoft") {
       try {
-        const { Authflow, Titles } = await import("prismarine-auth");
+        const prismarineAuth = await import("prismarine-auth");
+        const Authflow =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (prismarineAuth as any).Authflow ||
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (prismarineAuth as any).default?.Authflow;
+        // Minecraft Java client id (Titles.MinecraftJava) — ESM import may not export Titles
+        const MINECRAFT_JAVA_TITLE = "00000000402b5328";
         const cacheDir = `./prismarine-cache/${config.label || "default"}`;
 
         await log("info", "Starting Microsoft device code authentication...");
 
         const authflow = new Authflow(
-          undefined,
+          config.username || config.label || "mc-user",
           cacheDir,
-          { authTitle: Titles.MinecraftJava, flow: "msal" },
-          (info) => {
-            console.log("");
-            console.log("╔══════════════════════════════════════════════════╗");
-            console.log("║        MICROSOFT AUTHORIZATION REQUIRED         ║");
-            console.log("╠══════════════════════════════════════════════════╣");
-            console.log("║                                                  ║");
-            console.log("║  Step 1: Open this link:                         ║");
-            console.log(`║  ${info.verification_uri.padEnd(46)}║`);
-            console.log("║                                                  ║");
-            console.log("║  Step 2: Enter this code:                        ║");
-            console.log(`║  ${info.user_code.padEnd(46)}║`);
-            console.log("║                                                  ║");
-            console.log("║  Step 3: Sign in with your Microsoft account    ║");
-            console.log('║  Step 4: Click "Authorize" when prompted         ║');
-            console.log("║                                                  ║");
-            console.log(`║  Expires in ${(info.expires_in / 60).toFixed(0)} minutes. Waiting...       ║`);
-            console.log("╚══════════════════════════════════════════════════╝");
-            console.log("");
+          { authTitle: MINECRAFT_JAVA_TITLE, flow: "msal" },
+          (info: { verification_uri: string; user_code: string; expires_in: number }) => {
+            const uri = info.verification_uri || "https://www.microsoft.com/link";
+            const code = info.user_code;
+            const mins = Math.max(1, Math.round((info.expires_in || 900) / 60));
+            // Structured log for dashboard popup (do not change format)
+            log(
+              "system",
+              `MS_AUTH_REQUIRED|${uri}|${code}|${mins}`,
+            ).catch(() => {});
+            log(
+              "info",
+              `Microsoft login required — open ${uri} and enter code ${code} (expires in ${mins} min)`,
+            ).catch(() => {});
+            console.log(`[ms-auth] Open ${uri} and enter code: ${code}`);
           },
         );
 

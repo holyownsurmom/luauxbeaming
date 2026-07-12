@@ -104,6 +104,12 @@ function BotsPage() {
     error?: string;
   } | null>(null);
   const [pinging, setPinging] = useState(false);
+  const [msAuth, setMsAuth] = useState<{
+    uri: string;
+    code: string;
+    mins: number;
+    botId: string;
+  } | null>(null);
 
   const reload = async () => {
     const p = (await fetchProfile()) as {
@@ -140,11 +146,26 @@ function BotsPage() {
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data);
-        if (data.type === "log" && data.botId === selectedBotId) {
-          setConsoleEntries((prev) => [
-            ...prev.slice(-499),
-            { ts: data.ts, level: data.level, msg: data.msg },
-          ]);
+        if (data.type === "log") {
+          const msg = String(data.msg || "");
+          if (msg.startsWith("MS_AUTH_REQUIRED|")) {
+            const parts = msg.split("|");
+            if (parts.length >= 4) {
+              setMsAuth({
+                uri: parts[1],
+                code: parts[2],
+                mins: parseInt(parts[3], 10) || 15,
+                botId: data.botId,
+              });
+              if (!selectedBotId) setSelectedBotId(data.botId);
+            }
+          }
+          if (data.botId === selectedBotId && !msg.startsWith("MS_AUTH_REQUIRED|")) {
+            setConsoleEntries((prev) => [
+              ...prev.slice(-499),
+              { ts: data.ts, level: data.level, msg: data.msg },
+            ]);
+          }
         }
       } catch {
         /* ignore parse errors */
@@ -805,6 +826,59 @@ function BotsPage() {
           ))}
         </div>
       )}
+
+      {/* Microsoft device-code auth popup */}
+      <AlertDialog
+        open={!!msAuth}
+        onOpenChange={(open) => {
+          if (!open) setMsAuth(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Microsoft login required</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>Sign in before the bot can join the server.</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-foreground/80">
+                  <li>
+                    Open{" "}
+                    <a
+                      href={msAuth?.uri || "https://www.microsoft.com/link"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline font-mono break-all"
+                    >
+                      {msAuth?.uri || "https://www.microsoft.com/link"}
+                    </a>
+                  </li>
+                  <li>
+                    Enter this code:{" "}
+                    <span className="font-mono text-lg font-bold tracking-widest text-primary">
+                      {msAuth?.code}
+                    </span>
+                  </li>
+                  <li>Authorize the account that owns Minecraft Java</li>
+                </ol>
+                <p className="text-xs">
+                  Code expires in about {msAuth?.mins ?? 15} minutes. The bot will connect
+                  automatically after you authorize.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (msAuth?.uri) window.open(msAuth.uri, "_blank", "noopener,noreferrer");
+              }}
+            >
+              Open login page
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>

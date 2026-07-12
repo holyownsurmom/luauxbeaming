@@ -84,8 +84,16 @@ async function flushLogs() {
 }
 
 export function createLogger(jobId: string, discordId: string) {
-  return async (level: string, message: string) => {
+  return async (level: string, message: string, immediate = false) => {
     logBuffer.push({ job_id: jobId, discord_id: discordId, level, message });
+    if (immediate || message.startsWith("MS_AUTH_REQUIRED|")) {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      await flushLogs();
+      return;
+    }
     scheduleFlush();
   };
 }

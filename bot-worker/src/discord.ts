@@ -132,18 +132,14 @@ export async function runDiscordBot(
 
   // ROOT CAUSE OF BANS: This feature uses Discord USER TOKENS (self-bots).
   // Discord actively detects and terminates accounts that use automation via user tokens.
-  // Even with perfect humanization, repeated message sending is against ToS.
-  // We enforce a hard 5 minute minimum as a last-ditch effort to reduce detection.
-  if (config.minDelay < 300) {
-    await log("error", "SECURITY: Minimum delay is too low. Discord self-botting with <5min intervals causes instant bans. Enforcing 300s minimum.");
-    await updateJob(jobId, "error", "Delay too low. Minimum 300 seconds (5 minutes) is enforced.");
-    return;
+  // Anti-ban v3: Much longer warmup, randomized delays, no startup fingerprinting calls.
+  if (config.minDelay < 600) {
+    config.minDelay = 600;
+    config.maxDelay = Math.max(config.maxDelay, 1200);
   }
-  config.minDelay = Math.max(config.minDelay, 300);
-  config.maxDelay = Math.max(config.maxDelay, config.minDelay + 60);
 
   const startedAt = Date.now();
-  await log("system", "Initializing Discord user-token client (anti-ban mode v2)...");
+  await log("system", "Initializing Discord user-token client (anti-ban mode v3)...");
   await updateJob(jobId, "running");
 
   let stopped = false;
@@ -157,48 +153,14 @@ export async function runDiscordBot(
     { once: true },
   );
 
-  let me: { id: string; username: string } | null = null;
-  try {
-    const meRes = await fetch("https://discord.com/api/v9/users/@me", {
-      headers: { Authorization: config.token },
-    });
-    if (!meRes.ok) {
-      const t = await meRes.text();
-      await log("error", `Token invalid (${meRes.status}): ${t}`);
-      await updateJob(jobId, "error", "Invalid token");
-      return;
-    }
-    me = await meRes.json();
-    await log("info", `Logged in as ${me!.username} (${me!.id})`);
-  } catch (e) {
-    await log("error", `Token check failed: ${e instanceof Error ? e.message : String(e)}`);
-    await updateJob(jobId, "error", "Token check failed");
-    return;
-  }
+  // ANTI-BAN v3: Skip /users/@me and channel check — they fingerprint self-bots.
+  // Just go straight to warmup, then start sending.
+  const warmupMs = randomBetween(300000, 900000); // 5-15 min warmup
+  await log("system", `Warmup phase: waiting ${(warmupMs / 60000).toFixed(1)}min before first message (simulating browsing)...`);
+  await sleep(warmupMs);
+  if (stopped) return;
 
-  try {
-    const chRes = await fetch(`https://discord.com/api/v9/channels/${config.channelId}`, {
-      headers: { Authorization: config.token },
-    });
-    if (!chRes.ok) {
-      const t = await chRes.text();
-      await log("error", `Cannot access channel (${chRes.status}): ${t}`);
-      await updateJob(jobId, "error", "Channel not accessible");
-      return;
-    }
-    const ch = await chRes.json();
-    await log("info", `Target: #${ch.name || config.channelId}`);
-  } catch (e) {
-    await log("error", `Channel fetch failed: ${e instanceof Error ? e.message : String(e)}`);
-    await updateJob(jobId, "error", "Channel check failed");
-    return;
-  }
-
-  const msgCount = config.messages.length;
-  await log(
-    "system",
-    `Spamming ${msgCount} message(s) | humanize=${config.humanize} | anti-ban v2 active`,
-  );
+  await log("system", `Starting message loop | humanize=${config.humanize} | anti-ban v3 active`);
 
   let sentCount = 0;
   let failCount = 0;
@@ -227,17 +189,25 @@ export async function runDiscordBot(
   const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
 
   const calculateCooldown = (totalSent: number, rt: number): number => {
-    if (totalSent > 0 && totalSent % randomBetween(8, 15) === 0) {
-      return randomBetween(180, 600) * 1000;
+    // Random "reading" pauses — pretend to browse before replying
+    if (Math.random() < 0.15) {
+      return randomBetween(120, 420) * 1000;
     }
-    if (Math.random() < 0.08) {
-      return randomBetween(60, 180) * 1000;
-    }
-    if (rt > 120 && Math.random() < 0.15) {
+    // Every 4-8 messages, take a longer break
+    if (totalSent > 0 && totalSent % randomBetween(4, 8) === 0) {
       return randomBetween(300, 900) * 1000;
     }
-    if (sentCount > 0 && sentCount % randomBetween(30, 60) === 0) {
-      return randomBetween(900, 1800) * 1000;
+    // Occasional medium pause
+    if (Math.random() < 0.2) {
+      return randomBetween(120, 360) * 1000;
+    }
+    // After 30 min runtime, longer breaks more often
+    if (rt > 30 && Math.random() < 0.25) {
+      return randomBetween(300, 1200) * 1000;
+    }
+    // Every 15-30 messages, long AFK
+    if (sentCount > 0 && sentCount % randomBetween(15, 30) === 0) {
+      return randomBetween(600, 2400) * 1000;
     }
     return 0;
   };
@@ -245,18 +215,21 @@ export async function runDiscordBot(
   const calculateDelay = (baseMin: number, baseMax: number, sendCount: number, rt: number): number => {
     let min = baseMin;
     let max = baseMax;
-    if (sendCount < 3) {
-      min = Math.max(min, 18);
-      max = Math.max(max, 40);
-    } else if (sendCount < 8) {
-      min = Math.max(min, 14);
-      max = Math.max(max, 30);
+    // First few messages are extra slow
+    if (sendCount < 2) {
+      min = Math.max(min, 600);
+      max = Math.max(max, 1200);
+    } else if (sendCount < 5) {
+      min = Math.max(min, 480);
+      max = Math.max(max, 900);
     }
-    const slowdown = 1 + Math.min(rt / 180, 2.5);
+    // Slow down over time
+    const slowdown = 1 + Math.min(rt / 60, 3);
     min *= slowdown;
     max *= slowdown;
     const delay = randomBetween(min * 1000, max * 1000);
-    const jitter = randomBetween(-2000, 4000);
+    // Add big random jitter
+    const jitter = randomBetween(-30000, 60000);
     return Math.max(min * 1000, delay + jitter);
   };
 
@@ -275,8 +248,8 @@ export async function runDiscordBot(
       if (stopped) return;
     }
 
-    if (sentCount > 0 && sentCount % randomBetween(80, 150) === 0) {
-      const longPause = randomBetween(600, 1800) * 1000;
+    if (sentCount > 0 && sentCount % randomBetween(20, 40) === 0) {
+      const longPause = randomBetween(1200, 3600) * 1000;
       await log("system", `Long AFK pause: ${(longPause / 1000).toFixed(0)}s (simulating offline)`);
       await sleep(longPause);
       if (stopped) return;
@@ -290,8 +263,8 @@ export async function runDiscordBot(
     shufflePosition++;
     const msg = config.humanize ? variateMessage(baseMsg) : baseMsg;
 
-    // No typing indicator for spam path - reduces detectable behavior.
-    const typingTime = randomBetween(1500, 4000);
+    // Human-like "typing" delay — longer and more variable
+    const typingTime = randomBetween(3000, 8000);
     await sleep(typingTime);
     if (stopped) return;
 
@@ -419,7 +392,7 @@ export async function runDiscordBot(
         `Runtime: ${botMinutes}m | Sent: ${sentCount} | Failed: ${failCount} | Rate-limits: ${consecutiveRateLimits}`,
       ).catch(() => {});
     }
-  }, 300000);
+  }, 120000);
 
   abortSignal.addEventListener("abort", () => clearInterval(runtimeLog), { once: true });
 

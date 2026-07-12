@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Bot,
   Plus,
@@ -931,81 +932,90 @@ function BotsPage() {
         </div>
       )}
 
-      {/* Microsoft auth — fixed overlay (always on top, not AlertDialog which can fail silently) */}
-      {(msAuth || msAuthWaiting) && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4">
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold tracking-tight">
-                {msAuth ? "Microsoft login required" : "Waiting for Microsoft code…"}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {msAuth
-                  ? "Sign in before the bot can join the server."
-                  : "Device code is being generated. Keep this page open."}
-              </p>
-            </div>
-
-            {msAuth ? (
-              <div className="space-y-3 text-sm">
-                <ol className="list-decimal list-inside space-y-2 text-foreground/90">
-                  <li>
-                    Open{" "}
-                    <a
-                      href={msAuth.uri}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary underline font-mono break-all"
-                    >
-                      {msAuth.uri}
-                    </a>
-                  </li>
-                  <li>
-                    Enter this code:
-                    <div className="mt-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.25em] text-primary select-all">
-                      {msAuth.code}
-                    </div>
-                  </li>
-                  <li>Authorize the Microsoft account that owns Minecraft Java</li>
-                </ol>
-                <p className="text-xs text-muted-foreground">
-                  Expires in about {msAuth.mins} minutes. Bot connects automatically after you authorize.
+      {/* Portal to body so parent overflow/transform cannot bury the modal */}
+      {typeof document !== "undefined" &&
+        (msAuth || msAuthWaiting) &&
+        createPortal(
+          <div
+            className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            style={{ zIndex: 2147483000 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ms-auth-title"
+          >
+            <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="space-y-1">
+                <h2 id="ms-auth-title" className="text-lg font-semibold tracking-tight">
+                  {msAuth ? "Microsoft login required" : "Waiting for Microsoft code…"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {msAuth
+                    ? "Sign in before the bot can join the server."
+                    : "Device code is being generated. Keep this page open."}
                 </p>
               </div>
-            ) : (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              </div>
-            )}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setMsAuth(null);
-                  setMsAuthWaiting(false);
-                }}
-                className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-              >
-                Close
-              </button>
-              {msAuth && (
+              {msAuth ? (
+                <div className="space-y-3 text-sm">
+                  <ol className="list-decimal list-inside space-y-2 text-foreground/90">
+                    <li>
+                      Open{" "}
+                      <a
+                        href={msAuth.uri}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline font-mono break-all"
+                      >
+                        {msAuth.uri}
+                      </a>
+                    </li>
+                    <li>
+                      Enter this code:
+                      <div className="mt-2 rounded-xl bg-primary/10 border border-primary/30 px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.25em] text-primary select-all">
+                        {msAuth.code}
+                      </div>
+                    </li>
+                    <li>Authorize the Microsoft account that owns Minecraft Java</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground">
+                    Expires in about {msAuth.mins} minutes. Bot connects automatically after you authorize.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => {
-                    window.open(msAuth.uri, "_blank", "noopener,noreferrer");
-                    navigator.clipboard?.writeText(msAuth.code).catch(() => {});
-                    toast.success("Code copied — paste on Microsoft page");
+                    setMsAuth(null);
+                    setMsAuthWaiting(false);
                   }}
-                  className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold hover:opacity-90"
+                  className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                 >
-                  Open login & copy code
+                  Close
                 </button>
-              )}
+                {msAuth && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.open(msAuth.uri, "_blank", "noopener,noreferrer");
+                      navigator.clipboard?.writeText(msAuth.code).catch(() => {});
+                      toast.success("Code copied — paste on Microsoft page");
+                    }}
+                    className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold hover:opacity-90"
+                  >
+                    Open login & copy code
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>

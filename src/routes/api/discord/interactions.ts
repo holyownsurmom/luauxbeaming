@@ -29,12 +29,14 @@ async function editInteraction(
   applicationId: string,
   interactionToken: string,
   body: Record<string, unknown>,
+  botToken?: string | null,
 ) {
+  const token = botToken || process.env.DISCORD_BOT_TOKEN;
   await fetch(
     `https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bot ${token}` },
       body: JSON.stringify(body),
     },
   );
@@ -56,15 +58,11 @@ export const Route = createFileRoute("/api/discord/interactions")({
         const timestamp = request.headers.get("x-signature-timestamp") || "";
         const rawBody = await request.text();
 
-        const publicKey =
+        const centralPublicKey =
           process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "";
 
-        if (!publicKey) {
+        if (!centralPublicKey) {
           return new Response("Server configuration error", { status: 500 });
-        }
-
-        if (!verifyDiscordSignature(rawBody, signature, timestamp, publicKey)) {
-          return new Response("Invalid signature", { status: 401 });
         }
 
         let body: Record<string, unknown>;
@@ -72,6 +70,32 @@ export const Route = createFileRoute("/api/discord/interactions")({
           body = JSON.parse(rawBody);
         } catch {
           return new Response("Invalid JSON", { status: 400 });
+        }
+
+        const guildId = body.guild_id as string | undefined;
+
+        let matchedPublicKey = centralPublicKey;
+        let botToken: string | null = null;
+
+        if (guildId) {
+          const { data: settings } = await db()
+            .from("verification_settings")
+            .select("bot_public_key, bot_token")
+            .eq("guild_id", guildId)
+            .maybeSingle();
+
+          if (settings?.bot_public_key) {
+            if (verifyDiscordSignature(rawBody, signature, timestamp, settings.bot_public_key)) {
+              matchedPublicKey = settings.bot_public_key;
+            }
+          }
+          if (settings?.bot_token) {
+            botToken = settings.bot_token;
+          }
+        }
+
+        if (matchedPublicKey === centralPublicKey && !verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)) {
+          return new Response("Invalid signature", { status: 401 });
         }
 
         const appId = body.application_id as string;

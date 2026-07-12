@@ -346,13 +346,14 @@ export async function runDiscordAutoReplyBot(
           if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
             if (d.type === 3) {
               const targetUser = `@${d.user.username}`;
+              const userId = d.id as string;
               await log("info", `Received incoming friend request from ${targetUser}`);
 
               await sleep(randomBetween(5000, 15000));
 
               try {
-                const res = await fetch(
-                  `https://discord.com/api/v9/users/@me/relationships/${d.id}`,
+                const acceptRes = await fetch(
+                  `https://discord.com/api/v9/users/@me/relationships/${userId}`,
                   {
                     method: "PUT",
                     headers: {
@@ -362,10 +363,72 @@ export async function runDiscordAutoReplyBot(
                     body: JSON.stringify({}),
                   },
                 );
-                if (res.ok) {
+                if (acceptRes.ok) {
                   await log("info", `Auto-accepted friend request from ${targetUser}`);
+
+                  // Send initial configured reply after accepting
+                  if (config.messages && config.messages.length > 0) {
+                    try {
+                      // Create DM channel
+                      const dmChannelRes = await fetch("https://discord.com/api/v9/users/@me/channels", {
+                        method: "POST",
+                        headers: {
+                          Authorization: config.token,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ recipient_id: userId }),
+                      });
+
+                      if (dmChannelRes.ok) {
+                        const dmChannel = await dmChannelRes.json();
+                        const channelId = dmChannel.id;
+
+                        // Small delay before first message
+                        await sleep(randomBetween(3000, 8000));
+
+                        const reply = variateMessage(
+                          config.messages[Math.floor(Math.random() * config.messages.length)],
+                        );
+
+                        // Optional typing
+                        if (config.typing) {
+                          try {
+                            await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
+                              method: "POST",
+                              headers: { Authorization: config.token },
+                            });
+                            const typeTime = typingDuration(reply);
+                            await sleep(typeTime);
+                          } catch { /* ignore typing */ }
+                        }
+
+                        const sendRes = await fetch(
+                          `https://discord.com/api/v9/channels/${channelId}/messages`,
+                          {
+                            method: "POST",
+                            headers: {
+                              Authorization: config.token,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ content: reply }),
+                          },
+                        );
+
+                        if (sendRes.ok) {
+                          await log("bot", `Sent initial auto-reply to new friend ${targetUser}: "${reply}"`);
+                        } else {
+                          const txt = await sendRes.text();
+                          await log("error", `Failed to send initial reply to ${targetUser}: ${txt}`);
+                        }
+                      } else {
+                        await log("error", `Failed to open DM channel for ${targetUser}`);
+                      }
+                    } catch (sendErr) {
+                      await log("error", `Error sending initial reply after friend accept: ${sendErr}`);
+                    }
+                  }
                 } else {
-                  const text = await res.text();
+                  const text = await acceptRes.text();
                   await log("error", `Failed to accept friend request: ${text}`);
                 }
               } catch (e) {

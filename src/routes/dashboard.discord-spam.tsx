@@ -85,11 +85,13 @@ function DiscordSpamPage() {
   const [token, setToken] = useState("");
   const [channelId, setChannelId] = useState("");
   const [messages, setMessages] = useState("");
-  const [interval, setInterval_] = useState("5");
+  // SAFETY: Discord user-token automation is against ToS.
+  // We default to 5 minutes (300s) minimum. Do not lower this.
+  const [interval, setInterval_] = useState("300");
   const [deleteAfter, setDeleteAfter] = useState(false);
   const [humanize, setHumanize] = useState(true);
-  const [minDelay, setMinDelay] = useState("3");
-  const [maxDelay, setMaxDelay] = useState("8");
+  const [minDelay, setMinDelay] = useState("300");
+  const [maxDelay, setMaxDelay] = useState("420");
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

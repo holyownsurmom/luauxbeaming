@@ -49,7 +49,26 @@ export const Route = createFileRoute("/api/admin/blacklist")({
         );
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
-        return Response.json({ ok: true });
+
+        // Auto-collect all known IPs for this user and blacklist them
+        const { data: knownIps } = await db
+          .from("user_login_ips")
+          .select("ip")
+          .eq("discord_id", discordId);
+
+        if (knownIps && knownIps.length > 0) {
+          const ipEntries = knownIps.map((row) => ({
+            ip: row.ip,
+            source_discord_id: discordId,
+            reason: body.reason?.trim() || "",
+          }));
+          await db.from("blacklisted_ips").upsert(ipEntries, {
+            onConflict: "ip,source_discord_id",
+            ignoreDuplicates: true,
+          });
+        }
+
+        return Response.json({ ok: true, ips_collected: knownIps?.length ?? 0 });
       },
 
       DELETE: async ({ request }) => {
@@ -72,6 +91,9 @@ export const Route = createFileRoute("/api/admin/blacklist")({
 
         const db = admin();
         const { error } = await db.from("blacklisted_users").delete().eq("discord_id", discordId);
+
+        // Also remove their IPs from the blacklisted_ips table
+        await db.from("blacklisted_ips").delete().eq("source_discord_id", discordId);
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
         return Response.json({ ok: true });

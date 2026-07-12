@@ -360,6 +360,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: z.string().min(1).max(100),
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
+        bot_token: z.string().nullable().optional().default(null),
+        bot_public_key: z.string().nullable().optional().default(null),
       })
       .parse(input),
   )
@@ -394,9 +396,13 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       message_title: data.message_title,
       message_description: data.message_description,
       button_text: data.button_text,
+      bot_token: data.bot_token || null,
+      bot_public_key: data.bot_public_key || null,
     });
 
     if (error) throw new Error(error.message);
+
+    const botTokenToUse = data.bot_token || process.env.DISCORD_BOT_TOKEN;
 
     try {
       const channelRes = await fetch(
@@ -404,7 +410,7 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         {
           method: "POST",
           headers: {
-            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            Authorization: `Bot ${botTokenToUse}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

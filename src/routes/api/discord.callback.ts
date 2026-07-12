@@ -79,6 +79,26 @@ export const Route = createFileRoute("/api/discord/callback")({
         }
 
         const clientIp = await getClientIp(request);
+
+        // IP-based alt detection: check if this IP was used by a blacklisted user
+        if (clientIp) {
+          const { data: ipBan } = await db
+            .from("blacklisted_ips")
+            .select("ip, source_discord_id, reason")
+            .eq("ip", clientIp)
+            .maybeSingle();
+
+          if (ipBan) {
+            console.warn(
+              `[alt-detect] blocked IP ${clientIp} (linked to blacklisted user ${ipBan.source_discord_id}, reason: ${ipBan.reason || "none"})`,
+            );
+            await session.update({ ...session.data, oauth_state: undefined });
+            return new Response(null, {
+              status: 302,
+              headers: { Location: "/account-banned" },
+            });
+          }
+        }
         let vpnBlocked = false;
         if (clientIp) {
           const vpnResult = await checkVpn(clientIp);
@@ -129,6 +149,18 @@ export const Route = createFileRoute("/api/discord/callback")({
           );
         } catch (e) {
           console.warn("[discord] profile upsert failed", e);
+        }
+
+        // Store login IP for future alt detection
+        if (clientIp) {
+          try {
+            await db.from("user_login_ips").insert({
+              discord_id: user.id,
+              ip: clientIp,
+            });
+          } catch (e) {
+            console.warn("[discord] failed to store login IP", e);
+          }
         }
 
         if (vpnBlocked) {

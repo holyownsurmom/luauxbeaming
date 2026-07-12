@@ -129,11 +129,18 @@ export async function runDiscordBot(
     await updateJob(jobId, "error", "No messages configured");
     return;
   }
-  if (config.humanize && config.minDelay >= config.maxDelay) {
-    config.maxDelay = config.minDelay + 1;
+
+  // ROOT CAUSE OF BANS: This feature uses Discord USER TOKENS (self-bots).
+  // Discord actively detects and terminates accounts that use automation via user tokens.
+  // Even with perfect humanization, repeated message sending is against ToS.
+  // We enforce a hard 5 minute minimum as a last-ditch effort to reduce detection.
+  if (config.minDelay < 300) {
+    await log("error", "SECURITY: Minimum delay is too low. Discord self-botting with <5min intervals causes instant bans. Enforcing 300s minimum.");
+    await updateJob(jobId, "error", "Delay too low. Minimum 300 seconds (5 minutes) is enforced.");
+    return;
   }
-  if (config.minDelay < 12) config.minDelay = 12;
-  if (config.maxDelay < config.minDelay + 3) config.maxDelay = config.minDelay + 3;
+  config.minDelay = Math.max(config.minDelay, 300);
+  config.maxDelay = Math.max(config.maxDelay, config.minDelay + 60);
 
   const startedAt = Date.now();
   await log("system", "Initializing Discord user-token client (anti-ban mode v2)...");
@@ -209,33 +216,12 @@ export async function runDiscordBot(
     { once: true },
   );
 
-  const sendTyping = async (channelId: string, token: string): Promise<void> => {
-    try {
-      await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
-        method: "POST",
-        headers: { Authorization: token },
-      });
-    } catch {
-      /* typing failures are non-critical */
-    }
-  };
-
-  const updatePresence = async (status: string, token: string): Promise<void> => {
-    try {
-      await fetch("https://discord.com/api/v9/users/@me/status", {
-        method: "PATCH",
-        headers: {
-          Authorization: token,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status,
-          custom_status: { text: "" },
-        }),
-      });
-    } catch {
-      /* presence failures are non-critical */
-    }
+  // WARNING: Using user tokens (self-bots) to send messages violates Discord ToS.
+  // To minimize detection, we send the absolute minimum API calls.
+  // NO typing indicators, NO presence updates, NO edits, NO extra requests for spam.
+  const sendTyping = async (_channelId: string, _token: string): Promise<void> => {
+    // Disabled for spam to reduce ban risk. Do not enable.
+    return;
   };
 
   const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
@@ -287,21 +273,13 @@ export async function runDiscordBot(
       );
       await sleep(cooldown);
       if (stopped) return;
-      if (Math.random() < 0.5) {
-        await updatePresence("idle", config.token);
-        await sleep(randomBetween(15000, 60000));
-        await updatePresence("online", config.token);
-        if (stopped) return;
-      }
     }
 
     if (sentCount > 0 && sentCount % randomBetween(80, 150) === 0) {
       const longPause = randomBetween(600, 1800) * 1000;
       await log("system", `Long AFK pause: ${(longPause / 1000).toFixed(0)}s (simulating offline)`);
-      await updatePresence("dnd", config.token);
       await sleep(longPause);
       if (stopped) return;
-      await updatePresence("online", config.token);
     }
 
     if (shufflePosition >= messageOrder.length) {
@@ -312,9 +290,8 @@ export async function runDiscordBot(
     shufflePosition++;
     const msg = config.humanize ? variateMessage(baseMsg) : baseMsg;
 
-    const typingTime = config.humanize ? typingDuration(msg) : randomBetween(2000, 4000);
-    await sendTyping(config.channelId, config.token);
-    await log("info", `Typing... (${(typingTime / 1000).toFixed(1)}s)`);
+    // No typing indicator for spam path - reduces detectable behavior.
+    const typingTime = randomBetween(1500, 4000);
     await sleep(typingTime);
     if (stopped) return;
 
@@ -361,38 +338,8 @@ export async function runDiscordBot(
           }
         }
 
-        if (Math.random() < 0.10 && sentCount > 2) {
-          try {
-            await sleep(randomBetween(1000, 3000));
-            const recentRes = await fetch(
-              `https://discord.com/api/v9/channels/${config.channelId}/messages?limit=1`,
-              { headers: { Authorization: config.token } },
-            );
-            if (recentRes.ok) {
-              const msgs = await recentRes.json();
-              const lastMsg = msgs?.[0];
-              if (lastMsg?.author?.id === me?.id && lastMsg?.content) {
-                const editedContent = variateMessage(baseMsg);
-                if (editedContent !== lastMsg.content) {
-                  await fetch(
-                    `https://discord.com/api/v9/channels/${config.channelId}/messages/${lastMsg.id}`,
-                    {
-                      method: "PATCH",
-                      headers: {
-                        Authorization: config.token,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({ content: editedContent }),
-                    },
-                  ).catch(() => {});
-                  await log("info", `Edited last message`);
-                }
-              }
-            }
-          } catch {
-            /* edit failures are non-critical */
-          }
-        }
+        // Editing messages is intentionally disabled.
+        // Editing + sending is a very strong self-bot fingerprint and gets accounts terminated quickly.
       } else {
         failCount++;
         const body = await res.text();
@@ -424,9 +371,7 @@ export async function runDiscordBot(
               "warn",
               `Multiple rate limits. Long pause: ${(longPause / 1000).toFixed(0)}s`,
             );
-            await updatePresence("idle", config.token);
             await sleep(longPause);
-            await updatePresence("online", config.token);
             consecutiveRateLimits = 0;
           }
         }

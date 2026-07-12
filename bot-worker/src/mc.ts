@@ -140,37 +140,23 @@ export async function runMcBot(
 
   if (config.interval < 5) config.interval = 5;
 
+  let ssidProfile: { name: string; id: string } | null = null;
+
   if (config.authType === "ssid") {
     if (!config.ssid) {
       await log("error", "SSID token is empty. Re-add your account with a valid SSID.");
       await updateJob(jobId, "error", "SSID token is empty");
       return;
     }
-    if (!config.username) {
-      await log("error", "Username is required for SSID auth.");
-      await updateJob(jobId, "error", "Missing username for SSID auth");
+
+    await log("info", "Resolving Minecraft profile from SSID token...");
+    ssidProfile = await fetchMinecraftProfile(config.ssid);
+    if (!ssidProfile) {
+      await log("error", "Could not resolve Minecraft profile from SSID token. The token may be expired or invalid.");
+      await updateJob(jobId, "error", "SSID token invalid — could not resolve profile");
       return;
     }
-
-    if (!config.uuid || config.uuid.replace(/-/g, "").length !== 32) {
-      await log("info", "UUID not provided or invalid, fetching from Mojang...");
-      const fetchedUuid = await fetchUuidFromUsername(config.username);
-      if (fetchedUuid) {
-        config.uuid = fetchedUuid;
-        await log("info", `Resolved UUID: ${fetchedUuid}`);
-      } else {
-        await log(
-          "error",
-          `Could not resolve UUID for "${config.username}". Make sure the username is correct and spelled exactly (case-sensitive).`,
-        );
-        await updateJob(
-          jobId,
-          "error",
-          `UUID not found for "${config.username}". Check username spelling.`,
-        );
-        return;
-      }
-    }
+    await log("info", `Resolved profile: ${ssidProfile.name} (${ssidProfile.id})`);
   }
 
   await log(
@@ -423,8 +409,8 @@ export async function runMcBot(
     const botOptions: Record<string, unknown> = {
       host: config.serverHost,
       port: config.serverPort,
-      username: config.authType === "offline" ? config.username || config.label : undefined,
-      hideErrors: true,
+      username: config.username || config.label || "Player",
+      hideErrors: false,
       checkTimeoutInterval: 60000,
       respawn: false,
     };
@@ -472,15 +458,33 @@ export async function runMcBot(
 
         await log("info", `Authenticated as ${mcToken.profile.name}`);
 
-        botOptions.auth = "microsoft";
         botOptions.username = mcToken.profile.name;
-        botOptions.session = {
-          accessToken: mcToken.token,
-          clientToken: null,
-          selectedProfile: {
-            name: mcToken.profile.name,
-            id: mcToken.profile.id,
-          },
+        botOptions.auth = (client: {
+          session: unknown;
+          username: string;
+          uuid?: string;
+          emit: (event: string, data: unknown) => void;
+        }, options: {
+          accessToken?: string;
+          haveCredentials?: boolean;
+          connect: (client: unknown) => void;
+        }) => {
+          const session = {
+            accessToken: mcToken.token,
+            clientToken: null,
+            selectedProfile: {
+              name: mcToken.profile.name,
+              id: mcToken.profile.id,
+            },
+            availableProfiles: [mcToken.profile],
+          };
+          client.session = session;
+          client.username = mcToken.profile.name;
+          client.uuid = mcToken.profile.id;
+          options.accessToken = mcToken.token;
+          options.haveCredentials = true;
+          client.emit("session", session);
+          options.connect(client);
         };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -491,27 +495,35 @@ export async function runMcBot(
       }
     }
 
-    if (config.authType === "ssid" && config.ssid) {
-      await log("info", "Resolving Minecraft profile from SSID token...");
-      const profile = await fetchMinecraftProfile(config.ssid);
-      if (!profile) {
-        await log("error", "Could not resolve Minecraft profile from SSID token. The token may be expired or invalid.");
-        await updateJob(jobId, "error", "SSID token invalid — could not resolve profile");
-        authFailed = true;
-        return;
-      }
-
-      await log("info", `Resolved profile: ${profile.name} (${profile.id})`);
-
-      botOptions.auth = "microsoft";
-      botOptions.username = profile.name;
-      botOptions.session = {
-        accessToken: config.ssid,
-        clientToken: null,
-        selectedProfile: {
-          name: profile.name,
-          id: profile.id,
-        },
+    if (config.authType === "ssid" && config.ssid && ssidProfile) {
+      // Custom auth: inject SSID token directly. auth:"microsoft" ignores session and re-auths.
+      botOptions.username = ssidProfile.name;
+      botOptions.auth = (client: {
+        session: unknown;
+        username: string;
+        uuid?: string;
+        emit: (event: string, data: unknown) => void;
+      }, options: {
+        accessToken?: string;
+        haveCredentials?: boolean;
+        connect: (client: unknown) => void;
+      }) => {
+        const session = {
+          accessToken: config.ssid,
+          clientToken: null,
+          selectedProfile: {
+            name: ssidProfile!.name,
+            id: ssidProfile!.id,
+          },
+          availableProfiles: [{ name: ssidProfile!.name, id: ssidProfile!.id }],
+        };
+        client.session = session;
+        client.username = ssidProfile!.name;
+        client.uuid = ssidProfile!.id;
+        options.accessToken = config.ssid;
+        options.haveCredentials = true;
+        client.emit("session", session);
+        options.connect(client);
       };
     }
 

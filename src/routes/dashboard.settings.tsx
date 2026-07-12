@@ -14,7 +14,13 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { getMyProfile, resetMyAccess } from "@/lib/luaux.functions";
+import {
+  getMyProfile,
+  resetMyAccess,
+  createAdminLicenseKey,
+  grantAdminPlanAccess,
+  getPlans,
+} from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -457,10 +463,206 @@ function SettingsPage() {
             </Panel>
           )}
 
-          {tab === "admin" && isAdmin && <BlacklistPanel />}
+          {tab === "admin" && isAdmin && (
+            <>
+              <AdminIssueAccessPanel />
+              <BlacklistPanel />
+            </>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function AdminIssueAccessPanel() {
+  const issueKey = useServerFn(createAdminLicenseKey);
+  const grantPlan = useServerFn(grantAdminPlanAccess);
+  const fetchPlans = useServerFn(getPlans);
+
+  const [discordId, setDiscordId] = useState("");
+  const [pluginId, setPluginId] = useState<"verification" | "discord-spam" | "discord-autoreply">(
+    "verification",
+  );
+  const [days, setDays] = useState(30);
+  const [planId, setPlanId] = useState("");
+  const [extraHours, setExtraHours] = useState(0);
+  const [plans, setPlans] = useState<{ id: string; name: string; kind?: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [lastKey, setLastKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchPlans()
+      .then((p) => {
+        const list = (p as { id: string; name: string; kind?: string }[]) || [];
+        setPlans(list.filter((x) => x.kind !== "plugin"));
+        if (list[0]?.id) setPlanId(list.find((x) => x.kind !== "plugin")?.id || list[0].id);
+      })
+      .catch(() => {});
+  }, [fetchPlans]);
+
+  return (
+    <Panel
+      title="Issue access (support)"
+      subtitle="Create plugin keys or grant plan hours when payment fails."
+    >
+      <div className="space-y-6">
+        <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
+          <div className="text-xs font-semibold">Plugin license key</div>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+              User Discord ID
+            </span>
+            <input
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+              value={discordId}
+              onChange={(e) => setDiscordId(e.target.value)}
+              placeholder="123456789012345678"
+            />
+          </label>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+              Tool
+            </span>
+            <select
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+              value={pluginId}
+              onChange={(e) =>
+                setPluginId(e.target.value as "verification" | "discord-spam" | "discord-autoreply")
+              }
+            >
+              <option value="verification">Verification Bot</option>
+              <option value="discord-spam">Discord Spam</option>
+              <option value="discord-autoreply">Discord Auto-Reply</option>
+            </select>
+          </label>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+              Duration (days) — use 3650 for lifetime
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={36500}
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+              value={days}
+              onChange={(e) => setDays(parseInt(e.target.value, 10) || 30)}
+            />
+          </label>
+          <button
+            disabled={busy || !discordId.trim()}
+            onClick={async () => {
+              setBusy(true);
+              setErr(null);
+              setMsg(null);
+              setLastKey(null);
+              try {
+                const r = (await issueKey({
+                  data: {
+                    discord_id: discordId.trim(),
+                    plugin_id: pluginId,
+                    duration_days: days,
+                    dm_user: true,
+                  },
+                })) as { key: string };
+                setLastKey(r.key);
+                setMsg("Key created and DM attempted.");
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            {busy ? "Working…" : "Create & DM key"}
+          </button>
+          {lastKey && (
+            <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 font-mono text-xs break-all">
+              {lastKey}
+              <button
+                type="button"
+                className="ml-2 text-primary underline"
+                onClick={() => navigator.clipboard.writeText(lastKey)}
+              >
+                Copy
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
+          <div className="text-xs font-semibold">Grant MC plan / hours</div>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+              User Discord ID
+            </span>
+            <input
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+              value={discordId}
+              onChange={(e) => setDiscordId(e.target.value)}
+              placeholder="123456789012345678"
+            />
+          </label>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">Plan</span>
+            <select
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+              value={planId}
+              onChange={(e) => setPlanId(e.target.value)}
+            >
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs space-y-1 block">
+            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+              Extra hours (optional)
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+              value={extraHours}
+              onChange={(e) => setExtraHours(parseInt(e.target.value, 10) || 0)}
+            />
+          </label>
+          <button
+            disabled={busy || !discordId.trim() || !planId}
+            onClick={async () => {
+              setBusy(true);
+              setErr(null);
+              setMsg(null);
+              try {
+                const r = (await grantPlan({
+                  data: {
+                    discord_id: discordId.trim(),
+                    plan_id: planId,
+                    extra_hours: extraHours,
+                  },
+                })) as { bot_hours_remaining: number };
+                setMsg(`Plan granted. Hours now: ${r.bot_hours_remaining}`);
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Failed");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            {busy ? "Working…" : "Grant plan access"}
+          </button>
+        </div>
+
+        {msg && <div className="text-xs text-primary">{msg}</div>}
+        {err && <div className="text-xs text-destructive">{err}</div>}
+      </div>
+    </Panel>
   );
 }
 

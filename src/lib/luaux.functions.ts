@@ -568,6 +568,145 @@ export const revokeKey = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Admin: issue a plugin license key (verification / discord-spam / discord-autoreply) */
+export const createAdminLicenseKey = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        discord_id: z.string().min(5),
+        plugin_id: z.enum(["verification", "discord-spam", "discord-autoreply"]),
+        duration_days: z.number().int().min(1).max(36500).default(30),
+        dm_user: z.boolean().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+    await requireUser();
+    if (!(await isAdminSession())) throw new Error("Admin only");
+    const db = admin();
+
+    const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
+      verification: { prefix: "LX-VB", label: "Verification Bot" },
+      "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
+      "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
+    };
+    const meta = PLUGIN_META[data.plugin_id];
+    const rand = (n: number) => {
+      const bytes = new Uint8Array(n);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+        .join("")
+        .toUpperCase();
+    };
+    const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+    const expires_at = new Date(
+      Date.now() + data.duration_days * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const { data: row, error } = await db
+      .from("verification_keys")
+      .insert({
+        discord_id: data.discord_id.trim(),
+        key,
+        expires_at,
+        plugin_id: data.plugin_id,
+        delivered: false,
+      })
+      .select("id, key, expires_at")
+      .single();
+
+    if (error || !row) throw new Error(error?.message || "Failed to create key");
+
+    if (data.dm_user !== false) {
+      try {
+        const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+          method: "POST",
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ recipient_id: data.discord_id.trim() }),
+        });
+        if (dmRes.ok) {
+          const dm = (await dmRes.json()) as { id: string };
+          const isLifetime = data.duration_days >= 3650;
+          await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              content:
+                `🔑 **LuauX ${meta.label} — License Key (admin issued)**\n\n` +
+                `\`\`\`${key}\`\`\`\n` +
+                (isLifetime
+                  ? `This key never expires.\n`
+                  : `Expires: <t:${Math.floor(new Date(expires_at).getTime() / 1000)}:F>\n`) +
+                `Keep this key private.`,
+            }),
+          });
+          await db.from("verification_keys").update({ delivered: true }).eq("id", row.id);
+        }
+      } catch {
+        /* DM optional */
+      }
+    }
+
+    return { ok: true, key: row.key, expires_at: row.expires_at, id: row.id };
+  });
+
+/** Admin: grant plan hours / activate a plan for a user (payment issues) */
+export const grantAdminPlanAccess = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        discord_id: z.string().min(5),
+        plan_id: z.string().min(1),
+        extra_hours: z.number().int().min(0).max(100000).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+    await requireUser();
+    if (!(await isAdminSession())) throw new Error("Admin only");
+    const db = admin();
+
+    const { data: plan } = await db.from("plans").select("*").eq("id", data.plan_id).maybeSingle();
+    if (!plan) throw new Error("Plan not found");
+
+    const { data: profile } = await db
+      .from("profiles")
+      .select("plan_expires_at, bot_hours_remaining")
+      .eq("discord_id", data.discord_id.trim())
+      .maybeSingle();
+
+    const now = Date.now();
+    const existingExpiry = profile?.plan_expires_at
+      ? new Date(profile.plan_expires_at).getTime()
+      : 0;
+    const base = Math.max(existingExpiry, now);
+    const expiryDays = plan.duration_days || 90;
+    const hours =
+      Number(profile?.bot_hours_remaining ?? 0) +
+      Number(plan.bot_hours ?? 0) +
+      Number(data.extra_hours ?? 0);
+
+    const { error } = await db
+      .from("profiles")
+      .update({
+        active_plan_id: plan.id,
+        plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+        bot_hours_remaining: hours,
+      })
+      .eq("discord_id", data.discord_id.trim());
+
+    if (error) throw new Error(error.message);
+    return { ok: true, bot_hours_remaining: hours, plan_id: plan.id };
+  });
+
 export const resetMyAccess = createServerFn({ method: "POST" }).handler(async () => {
   const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
   const user = await requireUser();

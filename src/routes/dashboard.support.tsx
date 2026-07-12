@@ -68,7 +68,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Can I run multiple MC bots at the same time?",
-    a: "Yes. Each bot uses a separate Minecraft account. Bot hours are shared across all bots. You can create as many bots as you have accounts and hours for.",
+    a: "Yes, if your plan allows it. Each concurrent bot needs its own Minecraft account (SSID/Microsoft) and an active paid plan with enough max bots and bot hours. Hours are shared across all running bots. Free / no plan = no multi-bot. Upgrade on Purchase to unlock higher concurrent limits.",
     category: "MC Auto-Message",
     icon: Bot,
   },

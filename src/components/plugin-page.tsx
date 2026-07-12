@@ -83,11 +83,19 @@ export function PluginPage({
     return () => clearInterval(t);
   }, [payment, getPay, fetchKeys, pluginId]);
 
+  const [adminActivated, setAdminActivated] = useState(false);
+
   const startCheckout = async () => {
     setError(null);
     setCreating(true);
     try {
       const p = (await invoice({ data: { plan_id: pluginId, pay_currency: currency } })) as Payment;
+      // Admin bypass: skip payment view
+      if (p.pay_currency === "admin" && p.status === "finished") {
+        setAdminActivated(true);
+        refreshKeys();
+        return;
+      }
       setPayment(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create invoice");
@@ -192,6 +200,20 @@ export function PluginPage({
         <h1 className="font-display text-5xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-2 text-muted-foreground">{tagline}</p>
       </header>
+
+      {adminActivated && (
+        <div className="rounded-2xl bg-primary/10 brutal-border p-6 animate-fade-in-scale flex items-start gap-4 max-w-xl mx-auto">
+          <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+            <Check className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm text-primary">License activated instantly</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Admin mode — payment bypassed. Your key is active and ready to use.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-center">
         <div className="w-full max-w-xl rounded-2xl brutal-border bg-card p-7 space-y-6">

@@ -74,6 +74,8 @@ function PurchasePage() {
     return () => clearInterval(t);
   }, [payment, getPay]);
 
+  const [adminActivated, setAdminActivated] = useState(false);
+
   const start = async (planId: string) => {
     setSelectedPlan(planId);
     setError(null);
@@ -82,6 +84,15 @@ function PurchasePage() {
       const p = (await invoice({
         data: { plan_id: planId, pay_currency: selectedCurrency },
       })) as typeof payment;
+      // Admin bypass: skip payment view, show success inline
+      if (p.pay_currency === "admin" && p.status === "finished") {
+        setAdminActivated(true);
+        fetchProfile().then((d) => {
+          const prof = (d as { profile?: { bot_hours_remaining?: number } })?.profile;
+          setBotHours(Number(prof?.bot_hours_remaining ?? 0));
+        });
+        return;
+      }
       setPayment(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create invoice");
@@ -102,6 +113,27 @@ function PurchasePage() {
         <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("choose_plan")}</h1>
         <p className="mt-2 text-muted-foreground">{s.t("choose_plan_sub")}</p>
       </header>
+
+      {adminActivated && (
+        <div className="rounded-2xl bg-primary/10 brutal-border p-6 animate-fade-in-scale flex items-start gap-4">
+          <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+            <Check className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="font-semibold text-sm text-primary">Plan activated instantly</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Admin mode — payment bypassed. Access is live now.{" "}
+              <a href="/dashboard/bots" className="underline text-primary">
+                Deploy a bot
+              </a>
+              {" "}or{" "}
+              <a href="/dashboard/settings" className="underline text-primary">
+                manage keys
+              </a>.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl brutal-border bg-card p-6 animated-border noise-texture relative overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-6">

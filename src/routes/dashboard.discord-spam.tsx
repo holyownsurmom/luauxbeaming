@@ -169,6 +169,10 @@ function DiscordSpamPage() {
       const p = (await invoice({
         data: { plan_id: "discord-spam", pay_currency: currency },
       })) as Payment;
+      if (p.pay_currency === "admin" && p.status === "finished") {
+        refreshKeys();
+        return;
+      }
       setPayment(p);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Failed to create invoice");

@@ -27,6 +27,8 @@ import { Route as DashboardBotsRouteImport } from './routes/dashboard.bots'
 import { Route as DashboardBillingRouteImport } from './routes/dashboard.billing'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as ApiVerificationCompleteRouteImport } from './routes/api/verification/complete'
+import { Route as ApiKeysRevokeRouteImport } from './routes/api/keys/revoke'
+import { Route as ApiKeysResendRouteImport } from './routes/api/keys/resend'
 import { Route as ApiDiscordLogoutRouteImport } from './routes/api/discord.logout'
 import { Route as ApiDiscordLoginRouteImport } from './routes/api/discord.login'
 import { Route as ApiDiscordInteractionsRouteImport } from './routes/api/discord/interactions'
@@ -143,6 +145,16 @@ const ApiMeRoute = ApiMeRouteImport.update({
 const ApiVerificationCompleteRoute = ApiVerificationCompleteRouteImport.update({
   id: '/api/verification/complete',
   path: '/api/verification/complete',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiKeysRevokeRoute = ApiKeysRevokeRouteImport.update({
+  id: '/api/keys/revoke',
+  path: '/api/keys/revoke',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiKeysResendRoute = ApiKeysResendRouteImport.update({
+  id: '/api/keys/resend',
+  path: '/api/keys/resend',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDiscordLogoutRoute = ApiDiscordLogoutRouteImport.update({
@@ -303,6 +315,8 @@ export interface FileRoutesByFullPath {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/keys/resend': typeof ApiKeysResendRoute
+  '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
@@ -347,6 +361,8 @@ export interface FileRoutesByTo {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/keys/resend': typeof ApiKeysResendRoute
+  '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
@@ -393,6 +409,8 @@ export interface FileRoutesById {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/keys/resend': typeof ApiKeysResendRoute
+  '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
   '/api/bots/discord-autoreply/start': typeof ApiBotsDiscordAutoreplyStartRoute
   '/api/bots/discord-autoreply/status': typeof ApiBotsDiscordAutoreplyStatusRoute
@@ -440,6 +458,8 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/keys/resend'
+    | '/api/keys/revoke'
     | '/api/verification/complete'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
@@ -484,6 +504,8 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/keys/resend'
+    | '/api/keys/revoke'
     | '/api/verification/complete'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
@@ -529,6 +551,8 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/keys/resend'
+    | '/api/keys/revoke'
     | '/api/verification/complete'
     | '/api/bots/discord-autoreply/start'
     | '/api/bots/discord-autoreply/status'
@@ -564,6 +588,8 @@ export interface RootRouteChildren {
   ApiDiscordInteractionsRoute: typeof ApiDiscordInteractionsRoute
   ApiDiscordLoginRoute: typeof ApiDiscordLoginRoute
   ApiDiscordLogoutRoute: typeof ApiDiscordLogoutRoute
+  ApiKeysResendRoute: typeof ApiKeysResendRoute
+  ApiKeysRevokeRoute: typeof ApiKeysRevokeRoute
   ApiVerificationCompleteRoute: typeof ApiVerificationCompleteRoute
   ApiBotsDiscordAutoreplyStartRoute: typeof ApiBotsDiscordAutoreplyStartRoute
   ApiBotsDiscordAutoreplyStatusRoute: typeof ApiBotsDiscordAutoreplyStatusRoute
@@ -708,6 +734,20 @@ declare module '@tanstack/react-router' {
       path: '/api/verification/complete'
       fullPath: '/api/verification/complete'
       preLoaderRoute: typeof ApiVerificationCompleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/keys/revoke': {
+      id: '/api/keys/revoke'
+      path: '/api/keys/revoke'
+      fullPath: '/api/keys/revoke'
+      preLoaderRoute: typeof ApiKeysRevokeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/keys/resend': {
+      id: '/api/keys/resend'
+      path: '/api/keys/resend'
+      fullPath: '/api/keys/resend'
+      preLoaderRoute: typeof ApiKeysResendRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/discord/logout': {
@@ -937,6 +977,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDiscordInteractionsRoute: ApiDiscordInteractionsRoute,
   ApiDiscordLoginRoute: ApiDiscordLoginRoute,
   ApiDiscordLogoutRoute: ApiDiscordLogoutRoute,
+  ApiKeysResendRoute: ApiKeysResendRoute,
+  ApiKeysRevokeRoute: ApiKeysRevokeRoute,
   ApiVerificationCompleteRoute: ApiVerificationCompleteRoute,
   ApiBotsDiscordAutoreplyStartRoute: ApiBotsDiscordAutoreplyStartRoute,
   ApiBotsDiscordAutoreplyStatusRoute: ApiBotsDiscordAutoreplyStatusRoute,

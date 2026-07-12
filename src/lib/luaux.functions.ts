@@ -119,14 +119,96 @@ export const createInvoice = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { requireUser, admin, ensureProfile } = await import("./luaux-server.server");
+    const { requireUser, admin, ensureProfile, isAdminSession } = await import("./luaux-server.server");
     const user = await requireUser();
     await ensureProfile(user);
     const db = admin();
+    const isAdm = await isAdminSession();
     const { data: plan } = await db.from("plans").select("*").eq("id", data.plan_id).maybeSingle();
     if (!plan) throw new Error("Unknown plan");
 
     const order_id = `luaux_${user.id}_${Date.now()}`;
+
+    // Admin bypass: instantly activate without NOWPayments
+    if (isAdm) {
+      const { data: row } = await db
+        .from("payments")
+        .insert({
+          discord_id: user.id,
+          plan_id: plan.id,
+          np_payment_id: `admin_${Date.now()}`,
+          np_order_id: order_id,
+          pay_currency: "admin",
+          pay_amount: 0,
+          pay_address: "admin",
+          price_amount: 0,
+          status: "finished",
+          confirmations: 999,
+          required_confirmations: 1,
+        })
+        .select("id")
+        .single();
+
+      // Activate plan + add hours
+      const { data: profile } = await db
+        .from("profiles")
+        .select("plan_expires_at, bot_hours_remaining")
+        .eq("discord_id", user.id)
+        .maybeSingle();
+
+      const now = Date.now();
+      const existingExpiry = profile?.plan_expires_at
+        ? new Date(profile.plan_expires_at).getTime()
+        : 0;
+      const base = Math.max(existingExpiry, now);
+      const expiryDays = plan.duration_days || 90;
+
+      const planUpdate: Record<string, unknown> = {
+        active_plan_id: plan.id,
+        plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
+        bot_hours_remaining: Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
+      };
+      await db.from("profiles").update(planUpdate).eq("discord_id", user.id);
+
+      // For plugin plans, generate a key instantly
+      const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
+        verification: { prefix: "LX-VB", label: "Verification Bot" },
+        "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
+        "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
+      };
+      const meta = PLUGIN_META[plan.id];
+      if (plan.kind === "plugin" && meta && row) {
+        const rand = (n: number) => {
+          const bytes = new Uint8Array(n);
+          crypto.getRandomValues(bytes);
+          return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+            .join("")
+            .toUpperCase();
+        };
+        const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+        const expires = new Date(now + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
+        await db.from("verification_keys").insert({
+          discord_id: user.id,
+          key,
+          expires_at: expires,
+          source_payment_id: row.id,
+          plugin_id: plan.id,
+          delivered: true, // Admin gets it in dashboard, no DM needed
+        });
+      }
+
+      return {
+        id: row!.id,
+        pay_address: "admin",
+        pay_amount: 0,
+        pay_currency: "admin",
+        price_amount: 0,
+        status: "finished",
+        confirmations: 999,
+        required_confirmations: 1,
+      };
+    }
+
     const npRes = await fetch("https://api.nowpayments.io/v1/payment", {
       method: "POST",
       headers: {
@@ -362,5 +444,92 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       );
     }
 
+    return { ok: true };
+  });
+
+export const resendKey = createServerFn({ method: "POST" })
+  .inputValidator((input) => {
+    const o = input as { key_id?: string };
+    if (!o?.key_id) throw new Error("key_id required");
+    return { key_id: String(o.key_id) };
+  })
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const db = admin();
+
+    const { data: keyRow } = await db
+      .from("verification_keys")
+      .select("id, key, expires_at, discord_id, plugin_id, delivered")
+      .eq("id", data.key_id)
+      .eq("discord_id", user.id)
+      .maybeSingle();
+
+    if (!keyRow) throw new Error("Key not found");
+
+    const LABELS: Record<string, string> = {
+      verification: "Verification Bot",
+      "discord-spam": "Discord Spam",
+      "discord-autoreply": "Discord Auto-Reply",
+    };
+    const label = LABELS[keyRow.plugin_id] ?? keyRow.plugin_id;
+
+    const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ recipient_id: user.id }),
+    });
+
+    if (!dmRes.ok) {
+      throw new Error("Could not open DM. Please open a DM with the LuauX bot first and try again.");
+    }
+
+    const dm = (await dmRes.json()) as { id: string };
+    const isLifetime = new Date(keyRow.expires_at).getTime() - Date.now() > 365 * 24 * 60 * 60 * 1000;
+
+    await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        content:
+          `🔑 **LuauX ${label} — License Key**\n\n` +
+          `Your ${isLifetime ? "lifetime" : "monthly"} license key:\n\`\`\`${keyRow.key}\`\`\`\n` +
+          (isLifetime
+            ? `This key never expires.\n\n`
+            : `Expires: <t:${Math.floor(new Date(keyRow.expires_at).getTime() / 1000)}:F>\n\n`) +
+          `Keep this key private.`,
+      }),
+    });
+
+    await db
+      .from("verification_keys")
+      .update({ delivered: true })
+      .eq("id", keyRow.id);
+
+    return { ok: true };
+  });
+
+export const revokeKey = createServerFn({ method: "POST" })
+  .inputValidator((input) => {
+    const o = input as { key_id?: string };
+    if (!o?.key_id) throw new Error("key_id required");
+    return { key_id: String(o.key_id) };
+  })
+  .handler(async ({ data }) => {
+    const { admin } = await import("./luaux-server.server");
+    const db = admin();
+
+    const { error } = await db
+      .from("verification_keys")
+      .update({ expires_at: new Date().toISOString() })
+      .eq("id", data.key_id);
+
+    if (error) throw new Error(error.message);
     return { ok: true };
   });

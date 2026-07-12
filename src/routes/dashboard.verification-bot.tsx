@@ -12,6 +12,7 @@ import {
   getVerificationSettings,
   saveVerificationSettings,
   getSecuredAccounts,
+  resendKey,
 } from "@/lib/luaux.functions";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({

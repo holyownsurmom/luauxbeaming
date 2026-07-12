@@ -87,65 +87,84 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
             };
             const meta = PLUGIN_META[plan.id];
             if (plan.kind === "plugin" && meta) {
-              const rand = (n: number) => {
-                const bytes = new Uint8Array(n);
-                crypto.getRandomValues(bytes);
-                return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
-                  .join("")
-                  .toUpperCase();
-              };
-              const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
-              const expires = new Date(
-                Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
-              ).toISOString();
-              const { data: keyRow } = await db
+              // Idempotency: check if a key already exists for this payment
+              const { data: existingKey } = await db
                 .from("verification_keys")
-                .insert({
-                  discord_id: pmt.discord_id,
-                  key,
-                  expires_at: expires,
-                  source_payment_id: pmt.id,
-                  plugin_id: plan.id,
-                })
-                .select("id, key, expires_at")
-                .single();
+                .select("id, key, expires_at, delivered")
+                .eq("source_payment_id", pmt.id)
+                .maybeSingle();
 
-              try {
-                const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({ recipient_id: pmt.discord_id }),
-                });
-                if (dmRes.ok) {
-                  const dm = (await dmRes.json()) as { id: string };
-                  const isLifetime = plan.duration_days >= 3650;
-                  await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+              let keyRow = existingKey;
+              let key = existingKey?.key;
+              let expires = existingKey?.expires_at;
+
+              if (!existingKey) {
+                const rand = (n: number) => {
+                  const bytes = new Uint8Array(n);
+                  crypto.getRandomValues(bytes);
+                  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
+                    .join("")
+                    .toUpperCase();
+                };
+                key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
+                expires = new Date(
+                  Date.now() + plan.duration_days * 24 * 60 * 60 * 1000,
+                ).toISOString();
+                const { data: inserted } = await db
+                  .from("verification_keys")
+                  .insert({
+                    discord_id: pmt.discord_id,
+                    key,
+                    expires_at: expires,
+                    source_payment_id: pmt.id,
+                    plugin_id: plan.id,
+                  })
+                  .select("id, key, expires_at, delivered")
+                  .single();
+                keyRow = inserted;
+              }
+
+              // Attempt DM delivery (also retries if previous DM failed)
+              if (key && !keyRow?.delivered) {
+                try {
+                  const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
                     method: "POST",
                     headers: {
                       Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
                       "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({
-                      content:
-                        `✅ **LuauX ${meta.label} activated**\n\n` +
-                        `Your ${isLifetime ? "lifetime" : "monthly"} license key:\n\`\`\`${key}\`\`\`\n` +
-                        (isLifetime
-                          ? `This key never expires.\n\n`
-                          : `Expires: <t:${Math.floor(new Date(expires).getTime() / 1000)}:F>\n\n`) +
-                        `Keep this key private. You can view it anytime in your dashboard.`,
-                    }),
+                    body: JSON.stringify({ recipient_id: pmt.discord_id }),
                   });
-                  if (keyRow)
-                    await db
-                      .from("verification_keys")
-                      .update({ delivered: true })
-                      .eq("id", keyRow.id);
+                  if (dmRes.ok) {
+                    const dm = (await dmRes.json()) as { id: string };
+                    const isLifetime = plan.duration_days >= 3650;
+                    await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        content:
+                          `✅ **LuauX ${meta.label} activated**\n\n` +
+                          `Your ${isLifetime ? "lifetime" : "monthly"} license key:\n\`\`\`${key}\`\`\`\n` +
+                          (isLifetime
+                            ? `This key never expires.\n\n`
+                            : `Expires: <t:${Math.floor(new Date(expires).getTime() / 1000)}:F>\n\n`) +
+                          `Keep this key private. You can view it anytime in your dashboard.`,
+                      }),
+                    });
+                    if (keyRow)
+                      await db
+                        .from("verification_keys")
+                        .update({ delivered: true })
+                        .eq("id", keyRow.id);
+                  } else {
+                    console.warn(`[${plan.id}] DM channel failed for ${pmt.discord_id}`, await dmRes.text());
+                  }
+                } catch (e) {
+                  console.warn(`[${plan.id}] DM failed for ${pmt.discord_id}`, e);
                 }
-              } catch (e) {
-                console.warn(`[${plan.id}] DM failed`, e);
               }
             } else {
               const { data: profile } = await db

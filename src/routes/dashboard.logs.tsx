@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { ScrollText, RefreshCw, Filter } from "lucide-react";
+import { ScrollText, RefreshCw, Filter, Square, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,6 +23,7 @@ function LogsPage() {
   const [selectedBot, setSelectedBot] = useState<string>("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [nuking, setNuking] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const refreshBots = useCallback(async () => {
@@ -37,6 +39,33 @@ function LogsPage() {
       setLoading(false);
     }
   }, []);
+
+  const clearConsole = () => {
+    setAllLogs([]);
+    toast.success("Console cleared");
+  };
+
+  const removeAllBots = async () => {
+    setNuking(true);
+    try {
+      const res = await fetch("/api/bots/clear-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "all" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Remove all failed");
+      setAllLogs([]);
+      setBots([]);
+      setSelectedBot("all");
+      toast.success("All bots stopped & removed");
+      await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Remove all failed");
+    } finally {
+      setNuking(false);
+    }
+  };
 
   useEffect(() => {
     refreshBots();
@@ -78,7 +107,7 @@ function LogsPage() {
             Live console output from every active bot.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             onClick={() => {
               refreshBots();
@@ -86,6 +115,20 @@ function LogsPage() {
             className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-3 py-1.5 text-xs font-semibold"
           >
             <RefreshCw className="h-3 w-3" /> Refresh
+          </button>
+          <button
+            onClick={clearConsole}
+            className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-3 py-1.5 text-xs font-semibold"
+          >
+            Clear Console
+          </button>
+          <button
+            onClick={removeAllBots}
+            disabled={nuking || bots.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          >
+            <Trash2 className="h-3 w-3" />
+            {nuking ? "Removing…" : "Remove All Bots"}
           </button>
         </div>
       </header>
@@ -157,12 +200,22 @@ function LogsPage() {
               {filteredLogs.length} entries
             </span>
           </div>
-          <button
-            onClick={() => setAllLogs([])}
-            className="text-xs rounded-full bg-secondary/60 hover:bg-secondary px-3 py-1.5 font-semibold text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Clear All Consoles
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearConsole}
+              className="text-xs rounded-full bg-secondary/60 hover:bg-secondary px-3 py-1.5 font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Clear Console
+            </button>
+            <button
+              onClick={removeAllBots}
+              disabled={nuking}
+              className="inline-flex items-center gap-1 text-xs rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive px-3 py-1.5 font-semibold disabled:opacity-50"
+            >
+              <Square className="h-3 w-3" />
+              {nuking ? "Removing…" : "Stop & Remove All"}
+            </button>
+          </div>
         </div>
         {loading && allLogs.length === 0 ? (
           <div className="space-y-2">

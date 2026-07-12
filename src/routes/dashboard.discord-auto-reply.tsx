@@ -14,6 +14,7 @@ import {
   Shield,
   RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import { getPluginKeys, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { PluginPage } from "@/components/plugin-page";
@@ -182,21 +183,20 @@ function DiscordAutoReplyPage() {
   const stopAndClearAll = async () => {
     setStoppingId("all");
     try {
-      const targets = runningBots.filter(
-        (b) => b.status === "running" || b.status === "pending",
-      );
-      await Promise.all(
-        targets.map((b) =>
-          fetch("/api/bots/discord-autoreply/stop", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ botId: b.id }),
-          }).catch(() => {}),
-        ),
-      );
+      const res = await fetch("/api/bots/clear-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "discord-autoreply" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Clear all failed");
       setConsoleEntries([]);
       setSelectedBotId(null);
+      setRunningBots([]);
+      toast.success("All auto-reply bots stopped & removed");
       await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Clear all failed");
     } finally {
       setStoppingId(null);
     }

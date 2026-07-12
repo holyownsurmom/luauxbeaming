@@ -13,7 +13,8 @@ export const Route = createFileRoute("/api/bots/all-status")({
           .from("bot_jobs")
           .select("id, type, status, config, error, started_at, created_at")
           .eq("discord_id", user.id)
-          .in("status", ["pending", "running", "stopping", "stopped", "error"])
+          // Only live jobs — finished/nuked are hidden
+          .in("status", ["pending", "running", "stopping", "paused"])
           .order("created_at", { ascending: false });
 
         const bots = (jobs ?? []).map((j) => {

@@ -15,7 +15,7 @@ export const Route = createFileRoute("/api/bots/discord/status")({
           .eq("discord_id", user.id)
           .eq("type", "discord")
           .not("config->>subType", "eq", "autoreply")
-          .in("status", ["pending", "running", "stopping", "stopped", "error"])
+          .in("status", ["pending", "running", "stopping", "paused"])
           .order("created_at", { ascending: false });
 
         const bots = (jobs ?? []).map((j) => ({

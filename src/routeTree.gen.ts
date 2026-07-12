@@ -51,6 +51,7 @@ import { Route as ApiBotsMcStartRouteImport } from './routes/api/bots/mc/start'
 import { Route as ApiBotsMcPingRouteImport } from './routes/api/bots/mc/ping'
 import { Route as ApiBotsMcClearAllRouteImport } from './routes/api/bots/mc/clear-all'
 import { Route as ApiBotsMcPauseRouteImport } from './routes/api/bots/mc/pause'
+import { Route as ApiBotsClearAllRouteImport } from './routes/api/bots/clear-all'
 import { Route as ApiBotsDiscordStopRouteImport } from './routes/api/bots/discord/stop'
 import { Route as ApiBotsDiscordStatusRouteImport } from './routes/api/bots/discord/status'
 import { Route as ApiBotsDiscordStartRouteImport } from './routes/api/bots/discord/start'
@@ -254,6 +255,11 @@ const ApiBotsMcClearAllRoute = ApiBotsMcClearAllRouteImport.update({
 const ApiBotsMcPauseRoute = ApiBotsMcPauseRouteImport.update({
   id: '/api/bots/mc/pause',
   path: '/api/bots/mc/pause',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBotsClearAllRoute = ApiBotsClearAllRouteImport.update({
+  id: '/api/bots/clear-all',
+  path: '/api/bots/clear-all',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBotsMcStatusRoute = ApiBotsMcStatusRouteImport.update({
@@ -1018,6 +1024,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
   ApiBotsMcClearAllRoute: ApiBotsMcClearAllRoute,
   ApiBotsMcPauseRoute: ApiBotsMcPauseRoute,
+  ApiBotsClearAllRoute: ApiBotsClearAllRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
   ApiBotsWorkerPresenceTokensRoute: ApiBotsWorkerPresenceTokensRoute,

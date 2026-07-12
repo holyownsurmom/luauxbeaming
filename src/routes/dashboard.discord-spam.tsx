@@ -17,6 +17,7 @@ import {
   Settings,
   Shield,
 } from "lucide-react";
+import { toast } from "sonner";
 import { getPluginKeys, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 
@@ -250,21 +251,20 @@ function DiscordSpamPage() {
   const stopAndClearAll = async () => {
     setStoppingId("all");
     try {
-      const targets = runningBots.filter(
-        (b) => b.status === "running" || b.status === "pending",
-      );
-      await Promise.all(
-        targets.map((b) =>
-          fetch("/api/bots/discord/stop", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ botId: b.id }),
-          }).catch(() => {}),
-        ),
-      );
+      const res = await fetch("/api/bots/clear-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "discord" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Clear all failed");
       setConsoleEntries([]);
       setSelectedBotId(null);
+      setRunningBots([]);
+      toast.success("All spam bots stopped & removed");
       await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Clear all failed");
     } finally {
       setStoppingId(null);
     }

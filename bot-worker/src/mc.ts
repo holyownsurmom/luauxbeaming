@@ -296,7 +296,7 @@ export async function runMcBot(
 
       const mcToken = await authflow.getMinecraftJavaToken({
         fetchProfile: true,
-        fetchCertificates: false,
+        fetchCertificates: true,
       });
 
       if (!mcToken?.token) {
@@ -324,10 +324,18 @@ export async function runMcBot(
 
       msSession = { accessToken: mcToken.token, name, id };
       await log("info", `Authenticated as ${name} (${id})`);
-      await log("info", "Fetching chat-signing certificates...");
-      profileKeys = await fetchMinecraftCertificates(mcToken.token);
-      if (profileKeys) await log("info", "Chat certificates loaded");
-      else await log("warn", "Could not load chat certificates");
+      // Prefer certificates from prismarine-auth; fallback to direct Mojang API
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const certs = (mcToken as any).certificates?.profileKeys;
+      if (certs) {
+        profileKeys = certs;
+        await log("info", "Chat certificates loaded (prismarine-auth)");
+      } else {
+        await log("info", "Fetching chat-signing certificates...");
+        profileKeys = await fetchMinecraftCertificates(mcToken.token);
+        if (profileKeys) await log("info", "Chat certificates loaded");
+        else await log("warn", "Could not load chat certificates");
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await log("error", `Microsoft auth failed: ${msg}`);
@@ -607,13 +615,9 @@ export async function runMcBot(
       checkTimeoutInterval: 60_000,
       keepAlive: true,
       respawn: true,
-      // Disable physics plugin entirely — position prediction causes Invalid sequence on Via/Donut
-      physicsEnabled: false,
-      plugins: {
-        physics: false,
-        breath: false,
-        // Keep inventory/entities light; avoid heavy prediction plugins
-      },
+      // MUST keep physics plugin loaded — it sends teleport_confirm (1.9+).
+      // Disabling it causes "Invalid sequence" kicks on Paper/Via/DonutSMP.
+      physicsEnabled: true,
       viewDistance: "tiny",
       brand: "vanilla",
       version: false,

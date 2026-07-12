@@ -182,59 +182,100 @@ export const deleteMcAccount = createServerFn({ method: "POST" })
 
 const SUPPORTED_CURRENCIES = ["ltc", "sol"] as const;
 
-const FIXED_WALLETS: Record<(typeof SUPPORTED_CURRENCIES)[number], string> = {
-  ltc: process.env.PAY_WALLET_LTC || "LMZ2NQDHBhGHoMMQ1d9Y6MTNDj6TWHU6AC",
-  sol: process.env.PAY_WALLET_SOL || "8NbpMNC4pmyzMgnkfu2PB7D1TEnswYr4wLYAazHcuNe8",
+type NowPaymentsCreateResponse = {
+  payment_id?: string | number;
+  payment_status?: string;
+  pay_address?: string;
+  pay_amount?: number | string;
+  pay_currency?: string;
+  price_amount?: number | string;
+  price_currency?: string;
+  order_id?: string;
+  purchase_id?: string | number;
+  network?: string;
+  message?: string;
+  status?: boolean;
+  code?: string;
 };
 
-async function usdToCryptoAmount(usd: number, currency: "ltc" | "sol"): Promise<number> {
-  const ids = { ltc: "litecoin", sol: "solana" } as const;
-  const res = await fetch(
-    `https://api.coingecko.com/api/v3/simple/price?ids=${ids[currency]}&vs_currencies=usd`,
-    { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10_000) },
-  );
-  if (!res.ok) {
-    throw new Error("Could not fetch live crypto rates — try again in a moment");
+async function createNowPaymentsInvoice(opts: {
+  priceUsd: number;
+  payCurrency: "ltc" | "sol";
+  orderId: string;
+  description: string;
+}): Promise<{
+  paymentId: string;
+  payAddress: string;
+  payAmount: number;
+  payCurrency: string;
+  status: string;
+}> {
+  const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "NOWPAYMENTS_API_KEY is not set. Add it in Lovable env / .env to create invoices.",
+    );
   }
-  const j = (await res.json()) as Record<string, { usd?: number }>;
-  const price = j[ids[currency]]?.usd;
-  if (!price || price <= 0) {
-    throw new Error("Invalid crypto rate from price API");
-  }
-  const raw = usd / price;
-  // Base precision before unique offset
-  return currency === "sol" ? Number(raw.toFixed(5)) : Number(raw.toFixed(7));
-}
 
-/** Make each invoice amount unique on shared wallets so chain matcher cannot mis-attribute */
-async function uniquePayAmount(
-  db: { from: (t: string) => any },
-  currency: "ltc" | "sol",
-  base: number,
-): Promise<number> {
-  const step = currency === "sol" ? 0.00001 : 0.000001;
-  const maxAttempts = 40;
-  for (let i = 0; i < maxAttempts; i++) {
-    const offset = (Math.floor(Math.random() * 900) + 100) * step; // 100–999 units of step
-    const candidate =
-      currency === "sol"
-        ? Number((base + offset).toFixed(5))
-        : Number((base + offset).toFixed(7));
-    const { data: clash } = await db
-      .from("payments")
-      .select("id")
-      .eq("status", "waiting")
-      .eq("pay_currency", currency)
-      .eq("pay_amount", candidate)
-      .limit(1)
-      .maybeSingle();
-    if (!clash) return candidate;
+  const ipn =
+    process.env.IPN_CALLBACK_URL?.trim() ||
+    (process.env.SITE_URL
+      ? `${process.env.SITE_URL.replace(/\/$/, "")}/api/public/nowpayments/webhook`
+      : "") ||
+    "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook";
+
+  const res = await fetch("https://api.nowpayments.io/v1/payment", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({
+      price_amount: opts.priceUsd,
+      price_currency: "usd",
+      pay_currency: opts.payCurrency,
+      order_id: opts.orderId,
+      order_description: opts.description.slice(0, 200),
+      ipn_callback_url: ipn,
+      is_fixed_rate: false,
+      is_fee_paid_by_user: false,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  const raw = await res.text();
+  let data: NowPaymentsCreateResponse = {};
+  try {
+    data = JSON.parse(raw) as NowPaymentsCreateResponse;
+  } catch {
+    throw new Error(`NOWPayments bad response (HTTP ${res.status})`);
   }
-  // Last resort: timestamp dust
-  const dust = (Date.now() % 1000) * step;
-  return currency === "sol"
-    ? Number((base + dust).toFixed(5))
-    : Number((base + dust).toFixed(7));
+
+  if (!res.ok) {
+    const msg =
+      data.message ||
+      (typeof data === "object" && "error" in data
+        ? String((data as { error?: string }).error)
+        : "") ||
+      raw.slice(0, 200) ||
+      `HTTP ${res.status}`;
+    throw new Error(`NOWPayments error: ${msg}`);
+  }
+
+  const paymentId = data.payment_id != null ? String(data.payment_id) : "";
+  const payAddress = (data.pay_address || "").trim();
+  const payAmount = Number(data.pay_amount);
+  if (!paymentId || !payAddress || !(payAmount > 0)) {
+    throw new Error("NOWPayments returned incomplete invoice (missing address/amount)");
+  }
+
+  return {
+    paymentId,
+    payAddress,
+    payAmount,
+    payCurrency: (data.pay_currency || opts.payCurrency).toLowerCase(),
+    status: (data.payment_status || "waiting").toLowerCase(),
+  };
 }
 
 export const createInvoice = createServerFn({ method: "POST" })
@@ -350,37 +391,32 @@ export const createInvoice = createServerFn({ method: "POST" })
       };
     }
 
-    // Fixed LTC/SOL wallets only (no NOWPayments)
+    // NOWPayments invoice (LTC / SOL only) — rates + unique deposit address from NP
     const pay_currency = data.pay_currency;
-    const pay_address = FIXED_WALLETS[pay_currency];
-    if (!pay_address) throw new Error(`Wallet not configured for ${pay_currency}`);
     const price_amount = Number(plan.price_usd);
-    const baseAmount = await usdToCryptoAmount(price_amount, pay_currency);
-    const pay_amount = await uniquePayAmount(db, pay_currency, baseAmount);
-    const invoiceId = crypto.randomUUID();
+    if (!(price_amount > 0)) throw new Error("Invalid plan price");
 
-    // Expire abandoned invoices older than 45 minutes so they stop matching chain noise
-    const expireBefore = new Date(Date.now() - 45 * 60_000).toISOString();
-    await db
-      .from("payments")
-      .update({ status: "expired" })
-      .eq("status", "waiting")
-      .lt("created_at", expireBefore);
+    const np = await createNowPaymentsInvoice({
+      priceUsd: price_amount,
+      payCurrency: pay_currency,
+      orderId: order_id,
+      description: `LuauX ${plan.name || plan.id}`,
+    });
 
     const { data: row, error } = await db
       .from("payments")
       .insert({
         discord_id: user.id,
         plan_id: plan.id,
-        np_payment_id: `manual_${invoiceId}`,
+        np_payment_id: np.paymentId,
         np_order_id: order_id,
-        pay_currency,
-        pay_amount,
-        pay_address,
+        pay_currency: np.payCurrency || pay_currency,
+        pay_amount: np.payAmount,
+        pay_address: np.payAddress,
         price_amount,
-        status: "waiting",
+        status: np.status || "waiting",
         confirmations: 0,
-        required_confirmations: 1,
+        required_confirmations: 2,
       })
       .select("id")
       .single();
@@ -388,13 +424,13 @@ export const createInvoice = createServerFn({ method: "POST" })
 
     return {
       id: row.id,
-      pay_address,
-      pay_amount,
-      pay_currency,
+      pay_address: np.payAddress,
+      pay_amount: np.payAmount,
+      pay_currency: np.payCurrency || pay_currency,
       price_amount,
-      status: "waiting" as string,
+      status: np.status || "waiting",
       confirmations: 0,
-      required_confirmations: 1,
+      required_confirmations: 2,
     };
   });
 

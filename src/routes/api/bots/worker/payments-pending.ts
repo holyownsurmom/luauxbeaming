@@ -37,6 +37,7 @@ export const Route = createFileRoute("/api/bots/worker/payments-pending")({
           .eq("status", "waiting")
           .lt("created_at", since);
 
+        // Chain-watch only fixed-wallet invoices (manual_*). NOWPayments uses IPN webhooks.
         const { data, error } = await client
           .from("payments")
           .select(
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/api/bots/worker/payments-pending")({
           )
           .eq("status", "waiting")
           .in("pay_currency", ["ltc", "sol"])
+          .like("np_payment_id", "manual_%")
           .gte("created_at", since)
           .order("created_at", { ascending: true })
           .limit(40);

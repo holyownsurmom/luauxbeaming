@@ -300,8 +300,8 @@ function VerificationBotPage() {
         </div>
       )}
 
-      {/* Tabs — always visible for admins */}
-      {isAdmin && (
+      {/* Tabs — visible for admins and users with active keys */}
+      {(isAdmin || activeKey) && (
         <>
           {/* Tabs */}
           <div className="flex gap-1 rounded-xl brutal-border bg-card p-1 animate-tab-enter">

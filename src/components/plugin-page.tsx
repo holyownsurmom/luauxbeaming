@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Copy, Clock, Bitcoin, KeyRound, ArrowLeft } from "lucide-react";
 import { getPluginKeys, createInvoice, getPayment } from "@/lib/luaux.functions";
+import { RedeemKeyForm } from "@/components/redeem-key-form";
 
 type KeyRow = {
   id: string;
@@ -245,6 +246,14 @@ export function PluginPage({
               </li>
             ))}
           </ul>
+
+          <div className="rounded-xl brutal-border bg-background/50 p-4">
+            <RedeemKeyForm
+              expectedPlugin={pluginId}
+              onSuccess={() => window.location.reload()}
+              compact
+            />
+          </div>
 
           {loading ? (
             <div className="rounded-xl brutal-border bg-background/60 px-4 py-3 text-sm text-muted-foreground">

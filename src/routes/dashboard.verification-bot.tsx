@@ -14,6 +14,7 @@ import {
   getSecuredAccounts,
   resendKey,
 } from "@/lib/luaux.functions";
+import { RedeemKeyForm } from "@/components/redeem-key-form";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
   head: () => ({ meta: [{ title: "Verification Bot — LuauX" }] }),
@@ -305,6 +306,12 @@ function VerificationBotPage() {
           >
             Purchase — $10 in crypto
           </Link>
+          <div className="mt-6 rounded-xl brutal-border bg-background/50 p-4">
+            <RedeemKeyForm
+              expectedPlugin="verification"
+              onSuccess={() => window.location.reload()}
+            />
+          </div>
         </div>
       )}
 

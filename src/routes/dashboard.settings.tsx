@@ -21,6 +21,7 @@ import {
   grantAdminPlanAccess,
   getPlans,
 } from "@/lib/luaux.functions";
+import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { useSettings } from "@/lib/settings-context";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -216,10 +217,13 @@ function SettingsPage() {
           )}
 
           {tab === "bot-hours" && (
-            <Panel title={s.t("bot_hours")} subtitle="Remaining runtime and API access.">
-              <Field label="Bot hours remaining" value={`${hours.toFixed(1)}h`} />
-              <Field label="API key" value="Generated per plan — visit Bots to view" />
-            </Panel>
+            <>
+              <Panel title={s.t("bot_hours")} subtitle="Remaining runtime and API access.">
+                <Field label="Bot hours remaining" value={`${hours.toFixed(1)}h`} />
+                <Field label="API key" value="Generated per plan — visit Bots to view" />
+              </Panel>
+              <RedeemKeyPanel />
+            </>
           )}
 
           {tab === "notifications" && (
@@ -475,12 +479,24 @@ function SettingsPage() {
   );
 }
 
+function RedeemKeyPanel() {
+  return (
+    <Panel
+      title="Redeem key"
+      subtitle="Paste a license key from support, gift, or purchase DM."
+    >
+      <RedeemKeyForm />
+    </Panel>
+  );
+}
+
 function AdminIssueAccessPanel() {
   const issueKey = useServerFn(createAdminLicenseKey);
   const grantPlan = useServerFn(grantAdminPlanAccess);
   const fetchPlans = useServerFn(getPlans);
 
   const [discordId, setDiscordId] = useState("");
+  const [unassigned, setUnassigned] = useState(false);
   const [pluginId, setPluginId] = useState<"verification" | "discord-spam" | "discord-autoreply">(
     "verification",
   );
@@ -511,17 +527,27 @@ function AdminIssueAccessPanel() {
       <div className="space-y-6">
         <div className="rounded-xl brutal-border bg-background/40 p-4 space-y-3">
           <div className="text-xs font-semibold">Plugin license key</div>
-          <label className="text-xs space-y-1 block">
-            <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-              User Discord ID
-            </span>
+          <label className="flex items-center gap-2 text-xs">
             <input
-              className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-              value={discordId}
-              onChange={(e) => setDiscordId(e.target.value)}
-              placeholder="123456789012345678"
+              type="checkbox"
+              checked={unassigned}
+              onChange={(e) => setUnassigned(e.target.checked)}
             />
+            <span>Unassigned key (user redeems themselves)</span>
           </label>
+          {!unassigned && (
+            <label className="text-xs space-y-1 block">
+              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                User Discord ID
+              </span>
+              <input
+                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                value={discordId}
+                onChange={(e) => setDiscordId(e.target.value)}
+                placeholder="123456789012345678"
+              />
+            </label>
+          )}
           <label className="text-xs space-y-1 block">
             <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
               Tool
@@ -552,7 +578,7 @@ function AdminIssueAccessPanel() {
             />
           </label>
           <button
-            disabled={busy || !discordId.trim()}
+            disabled={busy || (!unassigned && !discordId.trim())}
             onClick={async () => {
               setBusy(true);
               setErr(null);
@@ -561,14 +587,19 @@ function AdminIssueAccessPanel() {
               try {
                 const r = (await issueKey({
                   data: {
-                    discord_id: discordId.trim(),
+                    discord_id: unassigned ? undefined : discordId.trim(),
+                    unassigned,
                     plugin_id: pluginId,
                     duration_days: days,
-                    dm_user: true,
+                    dm_user: !unassigned,
                   },
-                })) as { key: string };
+                })) as { key: string; unassigned?: boolean };
                 setLastKey(r.key);
-                setMsg("Key created and DM attempted.");
+                setMsg(
+                  r.unassigned
+                    ? "Unassigned key created — send to user to redeem."
+                    : "Key created and DM attempted.",
+                );
               } catch (e) {
                 setErr(e instanceof Error ? e.message : "Failed");
               } finally {
@@ -577,7 +608,7 @@ function AdminIssueAccessPanel() {
             }}
             className="rounded-lg bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold disabled:opacity-50"
           >
-            {busy ? "Working…" : "Create & DM key"}
+            {busy ? "Working…" : unassigned ? "Create redeem key" : "Create & DM key"}
           </button>
           {lastKey && (
             <div className="rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 font-mono text-xs break-all">

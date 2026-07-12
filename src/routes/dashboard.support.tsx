@@ -187,6 +187,12 @@ const FAQS: FAQItem[] = [
     icon: ShieldCheck,
   },
   {
+    q: "How do I redeem a license key?",
+    a: "Go to Settings → Bot hours & keys → Redeem key, or use Redeem on any plugin page. Paste the full key (e.g. LX-VB-XXXX-XXXX-XXXX). Unassigned support keys bind to your Discord account on redeem. Keys already owned by another user cannot be transferred.",
+    category: "Getting Started",
+    icon: Key,
+  },
+  {
     q: "Does the Verification Bot require a license key?",
     a: "Yes. The Verification Bot costs $10/month. Purchase it in the Purchase tab. The key is delivered via Discord DM and visible in your dashboard.",
     category: "Verification Bot",

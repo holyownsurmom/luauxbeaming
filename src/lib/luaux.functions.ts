@@ -568,15 +568,101 @@ export const revokeKey = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+const UNASSIGNED_OWNER = "UNASSIGNED";
+
+/** User: redeem a license key (gift / support / purchase DM) */
+export const redeemLicenseKey = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        key: z.string().min(8).max(80),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const db = admin();
+
+    const normalized = data.key.trim().toUpperCase().replace(/\s+/g, "");
+
+    // Load recent keys and match case-insensitively (avoids filter injection / case issues)
+    const { data: all, error: listErr } = await db
+      .from("verification_keys")
+      .select("id, key, discord_id, plugin_id, expires_at")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+
+    if (listErr) throw new Error(listErr.message);
+
+    const keyRow = (all || []).find(
+      (k) => String(k.key).toUpperCase().replace(/\s+/g, "") === normalized,
+    );
+
+    if (!keyRow) throw new Error("Invalid key — check and try again");
+
+    if (new Date(keyRow.expires_at).getTime() <= Date.now()) {
+      throw new Error("This key has expired");
+    }
+
+    const owner = String(keyRow.discord_id || "");
+    const unassigned =
+      !owner ||
+      owner === UNASSIGNED_OWNER ||
+      owner === "PENDING" ||
+      owner === "0";
+
+    if (owner === user.id) {
+      return {
+        ok: true,
+        already: true,
+        plugin_id: keyRow.plugin_id,
+        key: keyRow.key,
+        expires_at: keyRow.expires_at,
+      };
+    }
+
+    if (!unassigned) {
+      throw new Error(
+        "This key is already linked to another Discord account. Contact support if you believe this is a mistake.",
+      );
+    }
+
+    const { data: claimed, error: claimErr } = await db
+      .from("verification_keys")
+      .update({ discord_id: user.id, delivered: true })
+      .eq("id", keyRow.id)
+      .select("id, key, plugin_id, expires_at, discord_id")
+      .single();
+
+    if (claimErr || !claimed) {
+      throw new Error(claimErr?.message || "Failed to redeem key");
+    }
+
+    // Ensure we won the claim (no concurrent redeem to another user)
+    if (claimed.discord_id !== user.id) {
+      throw new Error("Key was claimed by someone else. Contact support.");
+    }
+
+    return {
+      ok: true,
+      already: false,
+      plugin_id: claimed.plugin_id,
+      key: claimed.key,
+      expires_at: claimed.expires_at,
+    };
+  });
+
 /** Admin: issue a plugin license key (verification / discord-spam / discord-autoreply) */
 export const createAdminLicenseKey = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z
       .object({
-        discord_id: z.string().min(5),
+        discord_id: z.string().optional(),
         plugin_id: z.enum(["verification", "discord-spam", "discord-autoreply"]),
         duration_days: z.number().int().min(1).max(36500).default(30),
         dm_user: z.boolean().optional(),
+        unassigned: z.boolean().optional(),
       })
       .parse(input),
   )
@@ -604,10 +690,13 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
       Date.now() + data.duration_days * 24 * 60 * 60 * 1000,
     ).toISOString();
 
+    const makeUnassigned = data.unassigned === true || !data.discord_id?.trim();
+    const ownerId = makeUnassigned ? UNASSIGNED_OWNER : data.discord_id!.trim();
+
     const { data: row, error } = await db
       .from("verification_keys")
       .insert({
-        discord_id: data.discord_id.trim(),
+        discord_id: ownerId,
         key,
         expires_at,
         plugin_id: data.plugin_id,
@@ -618,7 +707,7 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
 
     if (error || !row) throw new Error(error?.message || "Failed to create key");
 
-    if (data.dm_user !== false) {
+    if (!makeUnassigned && data.dm_user !== false) {
       try {
         const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
           method: "POST",
@@ -626,7 +715,7 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
             Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ recipient_id: data.discord_id.trim() }),
+          body: JSON.stringify({ recipient_id: ownerId }),
         });
         if (dmRes.ok) {
           const dm = (await dmRes.json()) as { id: string };
@@ -644,6 +733,7 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
                 (isLifetime
                   ? `This key never expires.\n`
                   : `Expires: <t:${Math.floor(new Date(expires_at).getTime() / 1000)}:F>\n`) +
+                `Redeem in Dashboard → Settings → Bot hours & keys if needed.\n` +
                 `Keep this key private.`,
             }),
           });
@@ -654,7 +744,13 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
       }
     }
 
-    return { ok: true, key: row.key, expires_at: row.expires_at, id: row.id };
+    return {
+      ok: true,
+      key: row.key,
+      expires_at: row.expires_at,
+      id: row.id,
+      unassigned: makeUnassigned,
+    };
   });
 
 /** Admin: grant plan hours / activate a plan for a user (payment issues) */

@@ -16,8 +16,8 @@ import { Route as AccountBannedRouteImport } from './routes/account-banned'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVerificationBotRouteImport } from './routes/dashboard.verification-bot'
-import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
+import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardPurchaseRouteImport } from './routes/dashboard.purchase'
 import { Route as DashboardLogsRouteImport } from './routes/dashboard.logs'
 import { Route as DashboardDiscordSpamRouteImport } from './routes/dashboard.discord-spam'
@@ -35,6 +35,7 @@ import { Route as ApiDiscordInteractionsRouteImport } from './routes/api/discord
 import { Route as ApiDiscordCallbackRouteImport } from './routes/api/discord.callback'
 import { Route as ApiBotsStreamRouteImport } from './routes/api/bots/stream'
 import { Route as ApiBotsLogsRouteImport } from './routes/api/bots/logs'
+import { Route as ApiBotsClearAllRouteImport } from './routes/api/bots/clear-all'
 import { Route as ApiBotsAllStatusRouteImport } from './routes/api/bots/all-status'
 import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
@@ -42,8 +43,8 @@ import { Route as ApiAdminBlacklistRouteImport } from './routes/api/admin/blackl
 import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/public/nowpayments/webhook'
 import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worker/update'
 import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
-import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerPresenceTokensRouteImport } from './routes/api/bots/worker/presence-tokens'
+import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerPaymentsPendingRouteImport } from './routes/api/bots/worker/payments-pending'
 import { Route as ApiBotsWorkerPaymentsConfirmRouteImport } from './routes/api/bots/worker/payments-confirm'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
@@ -51,9 +52,8 @@ import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
 import { Route as ApiBotsMcStartRouteImport } from './routes/api/bots/mc/start'
 import { Route as ApiBotsMcPingRouteImport } from './routes/api/bots/mc/ping'
-import { Route as ApiBotsMcClearAllRouteImport } from './routes/api/bots/mc/clear-all'
 import { Route as ApiBotsMcPauseRouteImport } from './routes/api/bots/mc/pause'
-import { Route as ApiBotsClearAllRouteImport } from './routes/api/bots/clear-all'
+import { Route as ApiBotsMcClearAllRouteImport } from './routes/api/bots/mc/clear-all'
 import { Route as ApiBotsDiscordStopRouteImport } from './routes/api/bots/discord/stop'
 import { Route as ApiBotsDiscordStatusRouteImport } from './routes/api/bots/discord/status'
 import { Route as ApiBotsDiscordStartRouteImport } from './routes/api/bots/discord/start'
@@ -97,14 +97,14 @@ const DashboardVerificationBotRoute =
     path: '/verification-bot',
     getParentRoute: () => DashboardRoute,
   } as any)
-const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const DashboardSupportRoute = DashboardSupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardPurchaseRoute = DashboardPurchaseRouteImport.update({
@@ -193,6 +193,11 @@ const ApiBotsLogsRoute = ApiBotsLogsRouteImport.update({
   path: '/api/bots/logs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsClearAllRoute = ApiBotsClearAllRouteImport.update({
+  id: '/api/bots/clear-all',
+  path: '/api/bots/clear-all',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBotsAllStatusRoute = ApiBotsAllStatusRouteImport.update({
   id: '/api/bots/all-status',
   path: '/api/bots/all-status',
@@ -229,14 +234,15 @@ const ApiBotsWorkerStatusRoute = ApiBotsWorkerStatusRouteImport.update({
   path: '/api/bots/worker/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBotsWorkerPresenceTokensRoute =
+  ApiBotsWorkerPresenceTokensRouteImport.update({
+    id: '/api/bots/worker/presence-tokens',
+    path: '/api/bots/worker/presence-tokens',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiBotsWorkerPollRoute = ApiBotsWorkerPollRouteImport.update({
   id: '/api/bots/worker/poll',
   path: '/api/bots/worker/poll',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiBotsWorkerPresenceTokensRoute = ApiBotsWorkerPresenceTokensRouteImport.update({
-  id: '/api/bots/worker/presence-tokens',
-  path: '/api/bots/worker/presence-tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBotsWorkerPaymentsPendingRoute =
@@ -261,21 +267,6 @@ const ApiBotsMcStopRoute = ApiBotsMcStopRouteImport.update({
   path: '/api/bots/mc/stop',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiBotsMcClearAllRoute = ApiBotsMcClearAllRouteImport.update({
-  id: '/api/bots/mc/clear-all',
-  path: '/api/bots/mc/clear-all',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiBotsMcPauseRoute = ApiBotsMcPauseRouteImport.update({
-  id: '/api/bots/mc/pause',
-  path: '/api/bots/mc/pause',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiBotsClearAllRoute = ApiBotsClearAllRouteImport.update({
-  id: '/api/bots/clear-all',
-  path: '/api/bots/clear-all',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiBotsMcStatusRoute = ApiBotsMcStatusRouteImport.update({
   id: '/api/bots/mc/status',
   path: '/api/bots/mc/status',
@@ -289,6 +280,16 @@ const ApiBotsMcStartRoute = ApiBotsMcStartRouteImport.update({
 const ApiBotsMcPingRoute = ApiBotsMcPingRouteImport.update({
   id: '/api/bots/mc/ping',
   path: '/api/bots/mc/ping',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBotsMcPauseRoute = ApiBotsMcPauseRouteImport.update({
+  id: '/api/bots/mc/pause',
+  path: '/api/bots/mc/pause',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBotsMcClearAllRoute = ApiBotsMcClearAllRouteImport.update({
+  id: '/api/bots/mc/clear-all',
+  path: '/api/bots/mc/clear-all',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBotsDiscordStopRoute = ApiBotsDiscordStopRouteImport.update({
@@ -340,12 +341,14 @@ export interface FileRoutesByFullPath {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
+  '/api/bots/clear-all': typeof ApiBotsClearAllRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
@@ -361,11 +364,12 @@ export interface FileRoutesByFullPath {
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
+  '/api/bots/mc/pause': typeof ApiBotsMcPauseRoute
   '/api/bots/mc/ping': typeof ApiBotsMcPingRoute
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
-  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
@@ -389,12 +393,14 @@ export interface FileRoutesByTo {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
+  '/api/bots/clear-all': typeof ApiBotsClearAllRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
@@ -410,11 +416,12 @@ export interface FileRoutesByTo {
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
+  '/api/bots/mc/pause': typeof ApiBotsMcPauseRoute
   '/api/bots/mc/ping': typeof ApiBotsMcPingRoute
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
-  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
@@ -440,12 +447,14 @@ export interface FileRoutesById {
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/verification-bot': typeof DashboardVerificationBotRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/admin/blacklist': typeof ApiAdminBlacklistRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/logout': typeof ApiAdminLogoutRoute
   '/api/bots/all-status': typeof ApiBotsAllStatusRoute
+  '/api/bots/clear-all': typeof ApiBotsClearAllRoute
   '/api/bots/logs': typeof ApiBotsLogsRoute
   '/api/bots/stream': typeof ApiBotsStreamRoute
   '/api/discord/callback': typeof ApiDiscordCallbackRoute
@@ -461,11 +470,12 @@ export interface FileRoutesById {
   '/api/bots/discord/start': typeof ApiBotsDiscordStartRoute
   '/api/bots/discord/status': typeof ApiBotsDiscordStatusRoute
   '/api/bots/discord/stop': typeof ApiBotsDiscordStopRoute
+  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
+  '/api/bots/mc/pause': typeof ApiBotsMcPauseRoute
   '/api/bots/mc/ping': typeof ApiBotsMcPingRoute
   '/api/bots/mc/start': typeof ApiBotsMcStartRoute
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
-  '/api/bots/mc/clear-all': typeof ApiBotsMcClearAllRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
@@ -492,12 +502,14 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
     | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
+    | '/api/bots/clear-all'
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
@@ -513,13 +525,17 @@ export interface FileRouteTypes {
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
+    | '/api/bots/mc/clear-all'
+    | '/api/bots/mc/pause'
     | '/api/bots/mc/ping'
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
-    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/payments-confirm'
+    | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
@@ -538,12 +554,14 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard'
     | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
+    | '/api/bots/clear-all'
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
@@ -559,13 +577,17 @@ export interface FileRouteTypes {
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
+    | '/api/bots/mc/clear-all'
+    | '/api/bots/mc/pause'
     | '/api/bots/mc/ping'
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
-    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/payments-confirm'
+    | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
@@ -585,12 +607,14 @@ export interface FileRouteTypes {
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/verification-bot'
     | '/dashboard/'
     | '/api/admin/blacklist'
     | '/api/admin/login'
     | '/api/admin/logout'
     | '/api/bots/all-status'
+    | '/api/bots/clear-all'
     | '/api/bots/logs'
     | '/api/bots/stream'
     | '/api/discord/callback'
@@ -606,13 +630,17 @@ export interface FileRouteTypes {
     | '/api/bots/discord/start'
     | '/api/bots/discord/status'
     | '/api/bots/discord/stop'
+    | '/api/bots/mc/clear-all'
+    | '/api/bots/mc/pause'
     | '/api/bots/mc/ping'
     | '/api/bots/mc/start'
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
-    | '/api/bots/mc/clear-all'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/payments-confirm'
+    | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
+    | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
     | '/api/public/nowpayments/webhook'
@@ -629,6 +657,7 @@ export interface RootRouteChildren {
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminLogoutRoute: typeof ApiAdminLogoutRoute
   ApiBotsAllStatusRoute: typeof ApiBotsAllStatusRoute
+  ApiBotsClearAllRoute: typeof ApiBotsClearAllRoute
   ApiBotsLogsRoute: typeof ApiBotsLogsRoute
   ApiBotsStreamRoute: typeof ApiBotsStreamRoute
   ApiDiscordCallbackRoute: typeof ApiDiscordCallbackRoute
@@ -644,11 +673,12 @@ export interface RootRouteChildren {
   ApiBotsDiscordStartRoute: typeof ApiBotsDiscordStartRoute
   ApiBotsDiscordStatusRoute: typeof ApiBotsDiscordStatusRoute
   ApiBotsDiscordStopRoute: typeof ApiBotsDiscordStopRoute
+  ApiBotsMcClearAllRoute: typeof ApiBotsMcClearAllRoute
+  ApiBotsMcPauseRoute: typeof ApiBotsMcPauseRoute
   ApiBotsMcPingRoute: typeof ApiBotsMcPingRoute
   ApiBotsMcStartRoute: typeof ApiBotsMcStartRoute
   ApiBotsMcStatusRoute: typeof ApiBotsMcStatusRoute
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
-  ApiBotsMcClearAllRoute: typeof ApiBotsMcClearAllRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
   ApiBotsWorkerPaymentsConfirmRoute: typeof ApiBotsWorkerPaymentsConfirmRoute
   ApiBotsWorkerPaymentsPendingRoute: typeof ApiBotsWorkerPaymentsPendingRoute
@@ -710,18 +740,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardVerificationBotRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/settings': {
-      id: '/dashboard/settings'
-      path: '/settings'
-      fullPath: '/dashboard/settings'
-      preLoaderRoute: typeof DashboardSettingsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/dashboard/support': {
       id: '/dashboard/support'
       path: '/support'
       fullPath: '/dashboard/support'
       preLoaderRoute: typeof DashboardSupportRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/settings': {
+      id: '/dashboard/settings'
+      path: '/settings'
+      fullPath: '/dashboard/settings'
+      preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/purchase': {
@@ -843,6 +873,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsLogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/clear-all': {
+      id: '/api/bots/clear-all'
+      path: '/api/bots/clear-all'
+      fullPath: '/api/bots/clear-all'
+      preLoaderRoute: typeof ApiBotsClearAllRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/all-status': {
       id: '/api/bots/all-status'
       path: '/api/bots/all-status'
@@ -892,18 +929,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsWorkerStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/presence-tokens': {
+      id: '/api/bots/worker/presence-tokens'
+      path: '/api/bots/worker/presence-tokens'
+      fullPath: '/api/bots/worker/presence-tokens'
+      preLoaderRoute: typeof ApiBotsWorkerPresenceTokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/worker/poll': {
       id: '/api/bots/worker/poll'
       path: '/api/bots/worker/poll'
       fullPath: '/api/bots/worker/poll'
       preLoaderRoute: typeof ApiBotsWorkerPollRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/bots/worker/log': {
-      id: '/api/bots/worker/log'
-      path: '/api/bots/worker/log'
-      fullPath: '/api/bots/worker/log'
-      preLoaderRoute: typeof ApiBotsWorkerLogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/bots/worker/payments-pending': {
@@ -920,18 +957,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsWorkerPaymentsConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/log': {
+      id: '/api/bots/worker/log'
+      path: '/api/bots/worker/log'
+      fullPath: '/api/bots/worker/log'
+      preLoaderRoute: typeof ApiBotsWorkerLogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/mc/stop': {
       id: '/api/bots/mc/stop'
       path: '/api/bots/mc/stop'
       fullPath: '/api/bots/mc/stop'
       preLoaderRoute: typeof ApiBotsMcStopRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/bots/mc/clear-all': {
-      id: '/api/bots/mc/clear-all'
-      path: '/api/bots/mc/clear-all'
-      fullPath: '/api/bots/mc/clear-all'
-      preLoaderRoute: typeof ApiBotsMcClearAllRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/bots/mc/status': {
@@ -953,6 +990,20 @@ declare module '@tanstack/react-router' {
       path: '/api/bots/mc/ping'
       fullPath: '/api/bots/mc/ping'
       preLoaderRoute: typeof ApiBotsMcPingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/mc/pause': {
+      id: '/api/bots/mc/pause'
+      path: '/api/bots/mc/pause'
+      fullPath: '/api/bots/mc/pause'
+      preLoaderRoute: typeof ApiBotsMcPauseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/mc/clear-all': {
+      id: '/api/bots/mc/clear-all'
+      path: '/api/bots/mc/clear-all'
+      fullPath: '/api/bots/mc/clear-all'
+      preLoaderRoute: typeof ApiBotsMcClearAllRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/bots/discord/stop': {
@@ -1043,6 +1094,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminLogoutRoute: ApiAdminLogoutRoute,
   ApiBotsAllStatusRoute: ApiBotsAllStatusRoute,
+  ApiBotsClearAllRoute: ApiBotsClearAllRoute,
   ApiBotsLogsRoute: ApiBotsLogsRoute,
   ApiBotsStreamRoute: ApiBotsStreamRoute,
   ApiDiscordCallbackRoute: ApiDiscordCallbackRoute,
@@ -1058,13 +1110,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsDiscordStartRoute: ApiBotsDiscordStartRoute,
   ApiBotsDiscordStatusRoute: ApiBotsDiscordStatusRoute,
   ApiBotsDiscordStopRoute: ApiBotsDiscordStopRoute,
+  ApiBotsMcClearAllRoute: ApiBotsMcClearAllRoute,
+  ApiBotsMcPauseRoute: ApiBotsMcPauseRoute,
   ApiBotsMcPingRoute: ApiBotsMcPingRoute,
   ApiBotsMcStartRoute: ApiBotsMcStartRoute,
   ApiBotsMcStatusRoute: ApiBotsMcStatusRoute,
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
-  ApiBotsMcClearAllRoute: ApiBotsMcClearAllRoute,
-  ApiBotsMcPauseRoute: ApiBotsMcPauseRoute,
-  ApiBotsClearAllRoute: ApiBotsClearAllRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerPaymentsConfirmRoute: ApiBotsWorkerPaymentsConfirmRoute,
   ApiBotsWorkerPaymentsPendingRoute: ApiBotsWorkerPaymentsPendingRoute,
@@ -1077,4 +1128,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-

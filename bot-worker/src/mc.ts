@@ -340,75 +340,13 @@ export async function runMcBot(
   });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function startAntiAfk(bot: any) {
-    if (antiAfkTimer) clearTimeout(antiAfkTimer);
-
-    // Soft human-like idle: mostly look around, rare micro-moves (less anticheat risk)
-    const tick = () => {
-      if (stopped || abortSignal.aborted || currentBot !== bot) return;
-      try {
-        if (!bot.entity) return;
-
-        // Natural head movement
-        if (Math.random() < 0.7) {
-          const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.55;
-          const pitch = Math.max(-0.6, Math.min(0.4, (Math.random() - 0.5) * 0.35));
-          bot.look(yaw, pitch, false);
-        }
-
-        // Rare short step (not every tick)
-        if (Math.random() < 0.12) {
-          const direction = pickRandom(["forward", "back", "left", "right"]);
-          bot.setControlState(direction, true);
-          setTimeout(() => {
-            try {
-              if (currentBot === bot) bot.setControlState(direction, false);
-            } catch {
-              /* ignore */
-            }
-          }, randomBetween(120, 450));
-        }
-
-        // Very rare sneak toggle
-        if (Math.random() < 0.03) {
-          try {
-            bot.setControlState("sneak", true);
-            setTimeout(() => {
-              try {
-                if (currentBot === bot) bot.setControlState("sneak", false);
-              } catch {
-                /* ignore */
-              }
-            }, randomBetween(400, 1200));
-          } catch {
-            /* ignore */
-          }
-        }
-
-        // Occasional look at nearby player
-        if (Math.random() < 0.06) {
-          try {
-            const nearestEntity = bot.nearestEntity(
-              (e: { type: string; username?: string }) =>
-                e.type === "player" && e.username !== bot.username,
-            );
-            if (nearestEntity) {
-              bot.lookAt(nearestEntity.position.offset(0, 1.6, 0));
-            }
-          } catch {
-            /* ignore */
-          }
-        }
-      } catch {
-        /* ignore movement errors */
-      }
-
-      if (!stopped && currentBot === bot) {
-        antiAfkTimer = setTimeout(tick, randomBetween(6000, 16000));
-      }
-    };
-
-    antiAfkTimer = setTimeout(tick, randomBetween(4000, 9000));
+  function startAntiAfk(_bot: any) {
+    // DISABLED: look/move/control packets cause "Invalid sequence" on modern SMP
+    // (ViaVersion / Paper / DonutSMP). Stay still — only chat keeps the session useful.
+    if (antiAfkTimer) {
+      clearTimeout(antiAfkTimer);
+      antiAfkTimer = null;
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -568,16 +506,14 @@ export async function runMcBot(
       port: config.serverPort,
       username: config.username || config.label || "Player",
       hideErrors: true,
-      // Longer keep-alive interval reduces false timeouts on laggy proxies
-      checkTimeoutInterval: 120_000,
+      checkTimeoutInterval: 60_000,
       keepAlive: true,
       respawn: true,
-      // Physics can desync on some servers and contribute to "Invalid sequence"
-      physicsEnabled: false,
+      // Keep physics on so client tick/position stay valid; do NOT send manual move packets
+      physicsEnabled: true,
       viewDistance: "tiny",
       brand: "vanilla",
-      version: false, // auto-negotiate
-      skipValidation: true,
+      version: false,
     };
 
     if (config.authType === "microsoft" && msSession) {
@@ -765,7 +701,13 @@ export async function runMcBot(
       }, delay);
     };
 
+    let lastChatKey = "";
+    let lastChatAt = 0;
+    let lastKickKey = "";
+    let lastKickAt = 0;
+
     bot.on("login", () => {
+      if (currentBot !== bot) return;
       connected = true;
       log("info", `Logged in as ${bot.username}`).catch(() => {});
     });
@@ -781,39 +723,54 @@ export async function runMcBot(
       log("info", "Spawned in world").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Longer settle time before any activity — reduces Timed out / Invalid sequence
+      // Sit still for a long time — no movement AFK (Invalid sequence on DonutSMP)
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
-      }, randomBetween(12000, 25000));
+      }, randomBetween(20000, 35000));
     });
 
     bot.on("chat", (username: string, message: string) => {
+      if (currentBot !== bot) return;
       if (username === bot.username) return;
+      const key = `${username}|${message}`;
+      const now = Date.now();
+      if (key === lastChatKey && now - lastChatAt < 2000) return;
+      lastChatKey = key;
+      lastChatAt = now;
       log("chat", `<${username}> ${message}`).catch(() => {});
     });
 
     bot.on("whisper", (username: string, message: string) => {
+      if (currentBot !== bot) return;
       log("chat", `[whisper] <${username}> ${message}`).catch(() => {});
     });
 
     bot.on("error", (err: Error) => {
+      if (currentBot !== bot) return;
       log("error", `Error: ${err.message}`).catch(() => {});
     });
 
     bot.on("kicked", async (reason: unknown) => {
+      if (currentBot !== bot && handlingDisconnect) return;
       const reasonText = formatKickReason(reason);
+      const now = Date.now();
+      if (reasonText === lastKickKey && now - lastKickAt < 3000) {
+        await scheduleReconnect(reasonText, true);
+        return;
+      }
+      lastKickKey = reasonText;
+      lastKickAt = now;
       log("warn", `Kicked: ${reasonText}`).catch(() => {});
       await scheduleReconnect(reasonText, true);
     });
 
     bot.on("end", async (reason: unknown) => {
       clearTimeout(connectionTimeout);
+      if (handlingDisconnect) return;
       const reasonText = formatKickReason(reason) || "connection closed";
       log("system", `Disconnected: ${reasonText}`).catch(() => {});
-      // kicked already schedules reconnect — avoid double reconnect on socketClosed
-      if (handlingDisconnect) return;
       await scheduleReconnect(reasonText, false);
     });
 

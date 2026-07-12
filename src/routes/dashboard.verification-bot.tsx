@@ -215,45 +215,80 @@ function VerificationBotPage() {
         </div>
       </header>
 
-      {activeKey ? (
-        <>
-          {/* Active license card */}
-          <div className="rounded-2xl brutal-border bg-card p-6 animated-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
-                <Check className="h-3.5 w-3.5" /> Active license
-              </div>
-              {!isAdmin && (
-                <span className="text-xs text-muted-foreground">
-                  Expires {new Date(activeKey.expires_at).toLocaleString()}
-                </span>
-              )}
+      {activeKey && (
+        <div className="rounded-2xl brutal-border bg-card p-6 animated-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
+              <Check className="h-3.5 w-3.5" /> Active license
             </div>
             {!isAdmin && (
-              <div className="mt-3 flex items-center gap-3">
-                <code className="flex-1 rounded-lg bg-secondary/40 px-4 py-3 font-mono text-lg tracking-wider">
-                  {activeKey.key}
-                </code>
-                <button
-                  onClick={() => copy(activeKey.key)}
-                  className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-4 py-3 text-xs font-semibold flex items-center gap-2"
-                >
-                  {copied === activeKey.key ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {copied === activeKey.key ? "Copied" : "Copy"}
-                </button>
-              </div>
-            )}
-            {isAdmin && (
-              <div className="mt-2 text-xs text-muted-foreground font-semibold">
-                Admin mode -- payment checks bypassed.
-              </div>
+              <span className="text-xs text-muted-foreground">
+                Expires {new Date(activeKey!.expires_at).toLocaleString()}
+              </span>
             )}
           </div>
+          {!isAdmin && (
+            <div className="mt-3 flex items-center gap-3">
+              <code className="flex-1 rounded-lg bg-secondary/40 px-4 py-3 font-mono text-lg tracking-wider">
+                {activeKey.key}
+              </code>
+              <button
+                onClick={() => copy(activeKey.key)}
+                className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-4 py-3 text-xs font-semibold flex items-center gap-2"
+              >
+                {copied === activeKey.key ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copied === activeKey.key ? "Copied" : "Copy"}
+              </button>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="mt-2 text-xs text-muted-foreground font-semibold">
+              Admin mode -- payment checks bypassed.
+            </div>
+          )}
+        </div>
+      )}
 
+      {!activeKey && !isAdmin && (
+        <div className="rounded-2xl brutal-border bg-card p-6">
+          <div className="text-xs uppercase tracking-widest text-muted-foreground">
+            No active license
+          </div>
+          <p className="mt-2 text-sm text-foreground/80">
+            Purchase the Verification Bot plugin to get a fresh key valid for 30 days. The LuauX
+            Discord bot will DM the key to you the instant your payment gets 2 confirmations.
+          </p>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="font-display text-4xl font-semibold text-gradient">$10</span>
+            <span className="text-sm text-muted-foreground">/ month</span>
+          </div>
+          <ul className="mt-4 space-y-1.5 text-sm text-foreground/80">
+            <li className="flex gap-2">
+              <Check className="h-4 w-4 text-primary" /> Auto-generated license key
+            </li>
+            <li className="flex gap-2">
+              <Check className="h-4 w-4 text-primary" /> Delivered via Discord DM
+            </li>
+            <li className="flex gap-2">
+              <Check className="h-4 w-4 text-primary" /> 30 days of access, renew anytime
+            </li>
+          </ul>
+          <Link
+            to="/dashboard/purchase"
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-2.5 text-sm font-semibold hover:bg-primary/90"
+          >
+            Purchase — $10 in crypto
+          </Link>
+        </div>
+      )}
+
+      {/* Tabs — always visible for admins */}
+      {isAdmin && (
+        <>
           {/* Tabs */}
           <div className="flex gap-1 rounded-xl brutal-border bg-card p-1">
             {[
@@ -662,37 +697,6 @@ function VerificationBotPage() {
             </div>
           )}
         </>
-      ) : (
-        <div className="rounded-2xl brutal-border bg-card p-6">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            No active license
-          </div>
-          <p className="mt-2 text-sm text-foreground/80">
-            Purchase the Verification Bot plugin to get a fresh key valid for 30 days. The LuauX
-            Discord bot will DM the key to you the instant your payment gets 2 confirmations.
-          </p>
-          <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-display text-4xl font-semibold text-gradient">$10</span>
-            <span className="text-sm text-muted-foreground">/ month</span>
-          </div>
-          <ul className="mt-4 space-y-1.5 text-sm text-foreground/80">
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> Auto-generated license key
-            </li>
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> Delivered via Discord DM
-            </li>
-            <li className="flex gap-2">
-              <Check className="h-4 w-4 text-primary" /> 30 days of access, renew anytime
-            </li>
-          </ul>
-          <Link
-            to="/dashboard/purchase"
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground brutal-border px-5 py-2.5 text-sm font-semibold hover:bg-primary/90"
-          >
-            Purchase — $10 in crypto
-          </Link>
-        </div>
       )}
     </div>
   );

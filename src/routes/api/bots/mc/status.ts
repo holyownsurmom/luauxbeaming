@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
+import { redactJobConfig } from "@/lib/luaux-server.server";
 
 export const Route = createFileRoute("/api/bots/mc/status")({
   server: {
@@ -9,7 +10,6 @@ export const Route = createFileRoute("/api/bots/mc/status")({
         if (!user) return unauthorized();
 
         const db = admin();
-        // Only live jobs — finished ones are nuked/hidden via clear-all
         const { data: jobs } = await db
           .from("bot_jobs")
           .select("id, status, config, error, started_at, created_at")
@@ -18,17 +18,17 @@ export const Route = createFileRoute("/api/bots/mc/status")({
           .in("status", ["pending", "running", "stopping", "paused"])
           .order("created_at", { ascending: false });
 
-        const bots = (jobs ?? []).map((j) => ({
-          id: j.id,
-          status: j.status,
-          label:
-            (j.config as Record<string, unknown>)?.label ||
-            (j.config as Record<string, unknown>)?.serverHost ||
-            "MC Bot",
-          error: j.error,
-          startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
-          config: j.config,
-        }));
+        const bots = (jobs ?? []).map((j) => {
+          const cfg = redactJobConfig(j.config);
+          return {
+            id: j.id,
+            status: j.status,
+            label: (cfg.label as string) || (cfg.serverHost as string) || "MC Bot",
+            error: j.error,
+            startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
+            config: cfg,
+          };
+        });
 
         return Response.json({ bots });
       },

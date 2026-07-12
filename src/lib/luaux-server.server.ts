@@ -14,7 +14,13 @@ type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: bo
 export const sessionConfig = () => ({
   password: process.env.SESSION_SECRET!,
   name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 30,
+  maxAge: 60 * 60 * 24 * 7, // 7 days (was 30)
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production" || !!process.env.LOVABLE_PROJECT_ID,
+    sameSite: "lax" as const,
+    path: "/",
+  },
 });
 
 export async function getSessionUser(): Promise<LuauxSessionUser | null> {
@@ -35,7 +41,46 @@ export async function requireUser(): Promise<LuauxSessionUser> {
 
 export async function isAdminSession(): Promise<boolean> {
   const data = await getSessionData();
-  return data.isAdmin === true;
+  if (data.isAdmin !== true) return false;
+  // Re-validate against admins table when possible (session flag alone is not enough)
+  try {
+    const user = data.user;
+    if (!user?.id) return false;
+    const { data: row } = await admin()
+      .from("admins")
+      .select("discord_id")
+      .eq("discord_id", user.id)
+      .maybeSingle();
+    // If admins table is empty/unused, fall back to session flag (break-glass password flow)
+    if (row) return true;
+    const { count } = await admin()
+      .from("admins")
+      .select("discord_id", { count: "exact", head: true });
+    if ((count ?? 0) === 0) return true; // no admins configured → password unlock still works
+    return false;
+  } catch {
+    return data.isAdmin === true;
+  }
+}
+
+/** Strip secrets from bot job config before sending to browser */
+export function redactJobConfig(config: unknown): Record<string, unknown> {
+  if (!config || typeof config !== "object") return {};
+  const c = { ...(config as Record<string, unknown>) };
+  const secretKeys = [
+    "ssid",
+    "token",
+    "botToken",
+    "bot_token",
+    "accessToken",
+    "password",
+    "flowToken",
+    "code",
+  ];
+  for (const k of secretKeys) {
+    if (k in c && c[k]) c[k] = "[redacted]";
+  }
+  return c;
 }
 
 export function admin() {

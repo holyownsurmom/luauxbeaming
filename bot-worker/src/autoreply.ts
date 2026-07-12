@@ -14,8 +14,22 @@ function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(t);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 function pickRandom<T>(arr: T[]): T {
@@ -76,12 +90,18 @@ export async function runDiscordAutoReplyBot(
   let reconnectAttempts = 0;
   let missedReplies = 0;
   let longAwayUntil = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let dmQueue: Promise<void> = Promise.resolve();
   const MAX_RECONNECT = 15;
 
   const cleanup = () => {
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
     if (ws) {
       try {
@@ -133,7 +153,11 @@ export async function runDiscordAutoReplyBot(
       180000,
     );
     log("info", `Gateway reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT})`).catch(() => {});
-    setTimeout(() => connectGateway(), delay);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectGateway();
+    }, delay);
   };
 
   const shouldThrottle = (): boolean => {
@@ -183,7 +207,7 @@ export async function runDiscordAutoReplyBot(
           const heartbeatInterval = d.heartbeat_interval;
           startHeartbeat(heartbeatInterval);
 
-          if (sessionId && lastSequence) {
+          if (sessionId != null && lastSequence != null) {
             sendPayload(6, {
               token: config.token,
               session_id: sessionId,
@@ -246,100 +270,104 @@ export async function runDiscordAutoReplyBot(
             if (!d.guild_id && d.author.id !== selfUserId && !d.author.bot) {
               const channelId = d.channel_id;
               const authorTag = `@${d.author.username}`;
-              await log("chat", `DM from ${authorTag}: "${d.content}"`);
+              const content = d.content as string;
+              // Serialize DM handling to avoid parallel replies / rate limits
+              dmQueue = dmQueue
+                .then(async () => {
+                  if (stopped || abortSignal.aborted) return;
+                  await log("chat", `DM from ${authorTag}: "${content}"`);
 
-              if (shouldGoAway()) {
-                await log("info", "AFK — skipping reply");
-                return;
-              }
-
-              if (shouldMissReply()) {
-                missedReplies++;
-                await log("info", `Missed reply to ${authorTag} (simulating not seeing message)`);
-                return;
-              }
-
-              if (shouldThrottle()) {
-                await log("info", "Throttled (3+ replies in 60s), skipping this message");
-                return;
-              }
-
-              const reply = variateMessage(
-                config.messages[Math.floor(Math.random() * config.messages.length)],
-              );
-
-              let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
-              if (replyCount < 3) {
-                delay = randomBetween(12000, 30000);
-              } else if (Math.random() < 0.12) {
-                delay = randomBetween(60000, 180000);
-                await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
-              }
-
-              if (config.typing) {
-                const typingTime = typingDuration(reply);
-                try {
-                  await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
-                    method: "POST",
-                    headers: { Authorization: config.token },
-                  });
-                } catch {
-                  /* typing failure is non-critical */
-                }
-                await log(
-                  "info",
-                  `Typing simulation... replying in ${(typingTime / 1000).toFixed(1)}s`,
-                );
-                await sleep(typingTime);
-                if (stopped) return;
-              } else {
-                await log("info", `Replying in ${(delay / 1000).toFixed(1)}s`);
-                await sleep(delay);
-                if (stopped) return;
-              }
-
-              try {
-                const res = await fetch(
-                  `https://discord.com/api/v9/channels/${channelId}/messages`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: config.token,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ content: reply }),
-                  },
-                );
-                if (res.ok) {
-                  replyCount++;
-                  recentReplyTimes.push(Date.now());
-                  await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
-                } else if (res.status === 429) {
-                  const body = await res.text();
-                  let retryAfter = 60000;
-                  try {
-                    const parsed = JSON.parse(body);
-                    if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 10000;
-                  } catch {
-                    /* use default */
+                  if (shouldGoAway()) {
+                    await log("info", "AFK — skipping reply");
+                    return;
                   }
-                  await log("warn", `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s`);
-                  await sleep(retryAfter);
-                } else if (res.status === 401 || res.status === 403) {
-                  await log("error", "Token revoked or access denied. Stopping.");
-                  await updateJob(jobId, "error", "Token invalid or banned");
-                  stopped = true;
-                  return;
-                } else {
-                  const text = await res.text();
-                  await log("error", `Failed to send auto-reply: ${text}`);
-                }
-              } catch (e) {
-                await log(
-                  "error",
-                  `Error sending auto-reply: ${e instanceof Error ? e.message : String(e)}`,
-                );
-              }
+                  if (shouldMissReply()) {
+                    missedReplies++;
+                    await log(
+                      "info",
+                      `Missed reply to ${authorTag} (simulating not seeing message)`,
+                    );
+                    return;
+                  }
+                  if (shouldThrottle()) {
+                    await log("info", "Throttled (3+ replies in 60s), skipping this message");
+                    return;
+                  }
+
+                  const reply = variateMessage(
+                    config.messages[Math.floor(Math.random() * config.messages.length)],
+                  );
+
+                  let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
+                  if (replyCount < 3) {
+                    delay = randomBetween(12000, 30000);
+                  } else if (Math.random() < 0.12) {
+                    delay = randomBetween(60000, 180000);
+                    await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
+                  }
+
+                  const typingTime = config.typing ? typingDuration(reply) : 0;
+                  const waitMs = Math.max(delay, typingTime);
+                  if (config.typing) {
+                    try {
+                      await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
+                        method: "POST",
+                        headers: { Authorization: config.token },
+                      });
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                  await log("info", `Replying in ${(waitMs / 1000).toFixed(1)}s`);
+                  await sleep(waitMs, abortSignal);
+                  if (stopped || abortSignal.aborted) return;
+
+                  try {
+                    const res = await fetch(
+                      `https://discord.com/api/v9/channels/${channelId}/messages`,
+                      {
+                        method: "POST",
+                        headers: {
+                          Authorization: config.token,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ content: reply }),
+                      },
+                    );
+                    if (res.ok) {
+                      replyCount++;
+                      recentReplyTimes.push(Date.now());
+                      await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
+                    } else if (res.status === 429) {
+                      const body = await res.text();
+                      let retryAfter = 60000;
+                      try {
+                        const parsed = JSON.parse(body);
+                        if (parsed.retry_after) retryAfter = parsed.retry_after * 1000 + 10000;
+                      } catch {
+                        /* use default */
+                      }
+                      await log(
+                        "warn",
+                        `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s`,
+                      );
+                      await sleep(retryAfter, abortSignal);
+                    } else if (res.status === 401 || res.status === 403) {
+                      await log("error", "Token revoked or access denied. Stopping.");
+                      await updateJob(jobId, "error", "Token invalid or banned");
+                      stopped = true;
+                    } else {
+                      const text = await res.text();
+                      await log("error", `Failed to send auto-reply: ${text}`);
+                    }
+                  } catch (e) {
+                    await log(
+                      "error",
+                      `Error sending auto-reply: ${e instanceof Error ? e.message : String(e)}`,
+                    );
+                  }
+                })
+                .catch(() => {});
             }
           }
 

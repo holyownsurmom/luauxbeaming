@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
+import { redactJobConfig } from "@/lib/luaux-server.server";
 
 export const Route = createFileRoute("/api/bots/discord/status")({
   server: {
@@ -18,14 +19,18 @@ export const Route = createFileRoute("/api/bots/discord/status")({
           .in("status", ["pending", "running", "stopping", "paused"])
           .order("created_at", { ascending: false });
 
-        const bots = (jobs ?? []).map((j) => ({
-          id: j.id,
-          status: j.status,
-          label: `Spam-${(j.config as Record<string, unknown>)?.channelId || "???"}`,
-          error: j.error,
-          startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
-          config: j.config,
-        }));
+        const bots = (jobs ?? []).map((j) => {
+          const cfg = redactJobConfig(j.config);
+          const ch = String(cfg.channelId || "???");
+          return {
+            id: j.id,
+            status: j.status,
+            label: `Spam-${ch.slice(-6)}`,
+            error: j.error,
+            startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
+            config: cfg,
+          };
+        });
 
         return Response.json({ bots });
       },

@@ -83,7 +83,13 @@ function LogsPage() {
         if (data.type === "log") {
           setAllLogs((prev) => [
             ...prev.slice(-999),
-            { ts: data.ts, level: data.level, msg: data.msg },
+            {
+              ts: data.ts,
+              level: data.level,
+              msg: data.msg,
+              // stash bot id in msg prefix for filter (kept in separate field via cast)
+              ...( { botId: data.botId || data.job_id } as object),
+            } as ConsoleEntry & { botId?: string },
           ]);
         }
       } catch {
@@ -95,6 +101,12 @@ function LogsPage() {
 
   const filteredLogs = allLogs.filter((l) => {
     if (levelFilter !== "all" && l.level !== levelFilter) return false;
+    if (selectedBot !== "all") {
+      const botId = (l as ConsoleEntry & { botId?: string }).botId;
+      if (botId && botId !== selectedBot) return false;
+      // if no botId on entry, keep when "all" only — drop when filtering
+      if (!botId) return false;
+    }
     return true;
   });
 

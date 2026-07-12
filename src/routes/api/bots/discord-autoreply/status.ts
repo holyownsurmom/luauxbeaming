@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
+import { redactJobConfig } from "@/lib/luaux-server.server";
 
 export const Route = createFileRoute("/api/bots/discord-autoreply/status")({
   server: {
@@ -18,16 +19,15 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/status")({
           .in("status", ["pending", "running", "stopping", "paused"])
           .order("created_at", { ascending: false });
 
-        const bots = (jobs ?? []).map((j) => {
-          const cfg = j.config as Record<string, unknown> | null;
-          const token = cfg?.token as string | undefined;
+        const bots = (jobs ?? []).map((j, idx) => {
+          const cfg = redactJobConfig(j.config);
           return {
             id: j.id,
             status: j.status,
-            label: `AutoReply-${token?.substring(0, 8) || "???"}`,
+            label: `Auto-Reply #${idx + 1}`,
             error: j.error,
             startedAt: j.started_at ? new Date(j.started_at).getTime() : null,
-            config: j.config,
+            config: cfg,
           };
         });
 

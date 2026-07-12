@@ -17,8 +17,19 @@ function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const t = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function pickRandom<T>(arr: T[]): T {
@@ -72,8 +83,10 @@ async function sendWithRetry(
   url: string,
   options: RequestInit,
   maxRetries = 2,
+  signal?: AbortSignal,
 ): Promise<Response | null> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) return null;
     try {
       const res = await fetch(url, options);
       if (res.status === 429) {
@@ -85,13 +98,13 @@ async function sendWithRetry(
         } catch {
           /* parse failure, use default */
         }
-        await sleep(retryAfter);
+        await sleep(retryAfter, signal);
         continue;
       }
       return res;
     } catch {
       if (attempt === maxRetries) return null;
-      await sleep(2000 * (attempt + 1));
+      await sleep(2000 * (attempt + 1), signal);
     }
   }
   return null;
@@ -172,8 +185,8 @@ export async function runDiscordBot(
     "system",
     `Warmup: ${(warmupMs / 60000).toFixed(1)}min idle before first message (anti-ban v4)...`,
   );
-  await sleep(warmupMs);
-  if (stopped) return;
+  await sleep(warmupMs, abortSignal);
+  if (stopped || abortSignal.aborted) return;
 
   await log(
     "system",
@@ -261,14 +274,14 @@ export async function runDiscordBot(
         "system",
         `Cooldown pause: ${(cooldown / 1000).toFixed(0)}s (sent ${sentCount} msgs, runtime ${rt.toFixed(0)}min)`,
       );
-      await sleep(cooldown);
+      await sleep(cooldown, abortSignal);
       if (stopped) return;
     }
 
     if (sentCount > 0 && sentCount % randomBetween(20, 40) === 0) {
       const longPause = randomBetween(1200, 3600) * 1000;
       await log("system", `Long AFK pause: ${(longPause / 1000).toFixed(0)}s (simulating offline)`);
-      await sleep(longPause);
+      await sleep(longPause, abortSignal);
       if (stopped) return;
     }
 
@@ -282,7 +295,7 @@ export async function runDiscordBot(
 
     // Human-like think + type delay (no typing API — that fingerprints selfbots)
     const typingTime = randomBetween(5000, 18000) + Math.min(msg.length * randomBetween(40, 90), 12000);
-    await sleep(typingTime);
+    await sleep(typingTime, abortSignal);
     if (stopped) return;
 
     // Session cap: end job after few messages to avoid spam pattern
@@ -304,6 +317,8 @@ export async function runDiscordBot(
           headers: apiHeaders,
           body: JSON.stringify({ content: msg }),
         },
+        2,
+        abortSignal,
       );
 
       if (!res) {
@@ -342,7 +357,7 @@ export async function runDiscordBot(
             "warn",
             `Rate limited (#${consecutiveRateLimits}). Waiting ${(retryAfter / 1000).toFixed(0)}s`,
           );
-          await sleep(retryAfter);
+          await sleep(retryAfter, abortSignal);
 
           if (consecutiveRateLimits >= 1) {
             const longPause = randomBetween(1800, 3600) * 1000;
@@ -350,7 +365,7 @@ export async function runDiscordBot(
               "warn",
               `Rate limit hit. Cool-down: ${(longPause / 1000).toFixed(0)}s then continue carefully`,
             );
-            await sleep(longPause);
+            await sleep(longPause, abortSignal);
             consecutiveRateLimits = 0;
           }
         }

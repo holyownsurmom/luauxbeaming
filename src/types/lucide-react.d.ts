@@ -15,6 +15,11 @@ declare module "lucide-react" {
 
   // Existing icons
   export const Zap: LucideIcon;
+  export const Key: LucideIcon;
+  export const Menu: LucideIcon;
+  export const Command: LucideIcon;
+  export const BookOpen: LucideIcon;
+  export const Users: LucideIcon;
   export const Play: LucideIcon;
   export const Square: LucideIcon;
   export const Plus: LucideIcon;

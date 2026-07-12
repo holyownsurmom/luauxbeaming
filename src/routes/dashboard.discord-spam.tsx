@@ -170,7 +170,7 @@ function DiscordSpamPage() {
         data: { plan_id: "discord-spam", pay_currency: currency },
       })) as Payment;
       if (p.pay_currency === "admin" && p.status === "finished") {
-        refreshKeys();
+        fetchKeys({ data: { plugin_id: "discord-spam" } }).then((d) => setKeys(d as KeyRow[]));
         return;
       }
       setPayment(p);

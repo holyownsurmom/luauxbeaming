@@ -93,7 +93,7 @@ export function PluginPage({
       // Admin bypass: skip payment view
       if (p.pay_currency === "admin" && p.status === "finished") {
         setAdminActivated(true);
-        refreshKeys();
+        fetchKeys({ data: { plugin_id: pluginId } }).then((d) => setKeys(d as KeyRow[]));
         return;
       }
       setPayment(p);

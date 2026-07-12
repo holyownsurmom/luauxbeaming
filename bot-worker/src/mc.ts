@@ -409,45 +409,93 @@ export async function runMcBot(
       host: config.serverHost,
       port: config.serverPort,
       username: config.authType === "offline" ? config.username || config.label : undefined,
-      auth: config.authType === "microsoft" ? "microsoft" : undefined,
-      authOptions: config.authType === "microsoft" ? {
-        deviceCodeCallback: (info: { verification_uri: string; user_code: string; expires_in: number }) => {
-          console.log("");
-          console.log("╔══════════════════════════════════════════════════╗");
-          console.log("║        🔐  MICROSOFT AUTHORIZATION REQUIRED     ║");
-          console.log("╠══════════════════════════════════════════════════╣");
-          console.log("║                                                  ║");
-          console.log(`║  Step 1: Open this link:                         ║`);
-          console.log(`║  ${info.verification_uri.padEnd(46)}║`);
-          console.log("║                                                  ║");
-          console.log(`║  Step 2: Enter this code:                        ║`);
-          console.log(`║  ${info.user_code.padEnd(46)}║`);
-          console.log("║                                                  ║");
-          console.log("║  Step 3: Sign in with your Microsoft account    ║");
-          console.log('║  Step 4: Click "Authorize" when prompted         ║');
-          console.log("║                                                  ║");
-          console.log(`║  ⏳ Expires in ${(info.expires_in / 60).toFixed(0)} minutes. Waiting...     ║`);
-          console.log("╚══════════════════════════════════════════════════╝");
-          console.log("");
-        },
-      } : undefined,
       hideErrors: true,
       checkTimeoutInterval: 60000,
       respawn: false,
     };
 
+    if (config.authType === "microsoft") {
+      try {
+        const { Authflow, Titles } = await import("prismarine-auth");
+        const cacheDir = `./prismarine-cache/${config.label || "default"}`;
+
+        await log("info", "Starting Microsoft device code authentication...");
+
+        const authflow = new Authflow(
+          undefined,
+          cacheDir,
+          { authTitle: Titles.MinecraftJava, flow: "msal" },
+          (info) => {
+            console.log("");
+            console.log("╔══════════════════════════════════════════════════╗");
+            console.log("║        MICROSOFT AUTHORIZATION REQUIRED         ║");
+            console.log("╠══════════════════════════════════════════════════╣");
+            console.log("║                                                  ║");
+            console.log("║  Step 1: Open this link:                         ║");
+            console.log(`║  ${info.verification_uri.padEnd(46)}║`);
+            console.log("║                                                  ║");
+            console.log("║  Step 2: Enter this code:                        ║");
+            console.log(`║  ${info.user_code.padEnd(46)}║`);
+            console.log("║                                                  ║");
+            console.log("║  Step 3: Sign in with your Microsoft account    ║");
+            console.log('║  Step 4: Click "Authorize" when prompted         ║');
+            console.log("║                                                  ║");
+            console.log(`║  Expires in ${(info.expires_in / 60).toFixed(0)} minutes. Waiting...       ║`);
+            console.log("╚══════════════════════════════════════════════════╝");
+            console.log("");
+          },
+        );
+
+        const mcToken = await authflow.getMinecraftJavaToken({ fetchProfile: true });
+
+        if (!mcToken?.token || !mcToken?.profile) {
+          await log("error", "Microsoft auth failed: no token or profile returned");
+          await updateJob(jobId, "error", "Microsoft auth failed");
+          authFailed = true;
+          return;
+        }
+
+        await log("info", `Authenticated as ${mcToken.profile.name}`);
+
+        botOptions.auth = "offline";
+        botOptions.username = mcToken.profile.name;
+        botOptions.session = {
+          accessToken: mcToken.token,
+          selectedProfile: {
+            name: mcToken.profile.name,
+            id: mcToken.profile.id,
+          },
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await log("error", `Microsoft auth failed: ${msg}`);
+        await updateJob(jobId, "error", `Microsoft auth failed: ${msg}`);
+        authFailed = true;
+        return;
+      }
+    }
+
     if (config.authType === "ssid" && config.ssid) {
       const cleanUuid = (config.uuid || "").replace(/-/g, "");
       const profileName = config.username || config.label;
 
-      if (!cleanUuid || cleanUuid.length !== 32) {
-        await log(
-          "error",
-          `Invalid UUID format: "${config.uuid}". Must be 32 hex characters.`,
-        );
-        await updateJob(jobId, "error", "Invalid UUID format");
-        authFailed = true;
-        return;
+      let resolvedUuid = cleanUuid;
+
+      if (!resolvedUuid || resolvedUuid.length !== 32) {
+        await log("info", "UUID not provided, fetching from Mojang...");
+        const fetchedUuid = await fetchUuidFromUsername(profileName);
+        if (fetchedUuid) {
+          resolvedUuid = fetchedUuid;
+          await log("info", `Resolved UUID: ${fetchedUuid}`);
+        } else {
+          await log(
+            "error",
+            `Could not resolve UUID for "${profileName}". Make sure the username is correct.`,
+          );
+          await updateJob(jobId, "error", `UUID not found for "${profileName}"`);
+          authFailed = true;
+          return;
+        }
       }
 
       botOptions.auth = "offline";
@@ -456,7 +504,7 @@ export async function runMcBot(
         accessToken: config.ssid,
         selectedProfile: {
           name: profileName,
-          id: cleanUuid,
+          id: resolvedUuid,
         },
       };
     }

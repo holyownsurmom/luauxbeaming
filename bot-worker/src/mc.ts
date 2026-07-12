@@ -171,7 +171,7 @@ export async function runMcBot(
   let msgIndex = 0;
   let reconnectAttempts = 0;
   let currentTimer: ReturnType<typeof setTimeout> | null = null;
-  let antiAfkTimer: ReturnType<typeof setInterval> | null = null;
+  let antiAfkTimer: ReturnType<typeof setTimeout> | null = null;
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let authFailed = false;
@@ -189,7 +189,7 @@ export async function runMcBot(
       currentTimer = null;
     }
     if (antiAfkTimer) {
-      clearInterval(antiAfkTimer);
+      clearTimeout(antiAfkTimer);
       antiAfkTimer = null;
     }
   };
@@ -215,44 +215,36 @@ export async function runMcBot(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function startAntiAfk(bot: any) {
-    if (antiAfkTimer) clearInterval(antiAfkTimer);
+    if (antiAfkTimer) clearTimeout(antiAfkTimer);
 
-    let lookOnlyPhase = true;
-
-    antiAfkTimer = setInterval(() => {
-      if (stopped || abortSignal.aborted) return;
+    // Soft human-like idle: mostly look around, rare micro-moves (less anticheat risk)
+    const tick = () => {
+      if (stopped || abortSignal.aborted || currentBot !== bot) return;
       try {
         if (!bot.entity) return;
 
-        const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.4;
-        const pitch = (Math.random() - 0.5) * 0.3;
-        bot.look(yaw, pitch, false);
+        // Natural head movement
+        if (Math.random() < 0.7) {
+          const yaw = bot.entity.yaw + (Math.random() - 0.5) * 0.55;
+          const pitch = Math.max(-0.6, Math.min(0.4, (Math.random() - 0.5) * 0.35));
+          bot.look(yaw, pitch, false);
+        }
 
-        if (!lookOnlyPhase && Math.random() < 0.25) {
+        // Rare short step (not every tick)
+        if (Math.random() < 0.12) {
           const direction = pickRandom(["forward", "back", "left", "right"]);
           bot.setControlState(direction, true);
-          const dur = randomBetween(200, 800);
           setTimeout(() => {
             try {
               if (currentBot === bot) bot.setControlState(direction, false);
             } catch {
               /* ignore */
             }
-          }, dur);
+          }, randomBetween(120, 450));
         }
 
-        if (!lookOnlyPhase && Math.random() < 0.08) {
-          bot.setControlState("jump", true);
-          setTimeout(() => {
-            try {
-              if (currentBot === bot) bot.setControlState("jump", false);
-            } catch {
-              /* ignore */
-            }
-          }, 100);
-        }
-
-        if (!lookOnlyPhase && Math.random() < 0.05) {
+        // Very rare sneak toggle
+        if (Math.random() < 0.03) {
           try {
             bot.setControlState("sneak", true);
             setTimeout(() => {
@@ -261,66 +253,36 @@ export async function runMcBot(
               } catch {
                 /* ignore */
               }
-            }, randomBetween(500, 1500));
+            }, randomBetween(400, 1200));
           } catch {
             /* ignore */
           }
         }
 
-        if (!lookOnlyPhase && Math.random() < 0.04) {
-          try {
-            const hotbar = bot.inventory?.slots?.slice(36, 45);
-            const heldItem = bot.heldItem;
-            if (hotbar && hotbar.length > 1) {
-              const emptySlot = hotbar.findIndex((s: { type: string } | null) => !s);
-              const filledSlot = hotbar.findIndex((s: { type: string } | null) => s && s !== heldItem);
-              if (filledSlot >= 0) {
-                bot.equip(filledSlot + 36, "hand");
-                setTimeout(() => {
-                  try {
-                    if (emptySlot >= 0) bot.equip(emptySlot + 36, "hand");
-                  } catch {
-                    /* ignore */
-                  }
-                }, randomBetween(2000, 5000));
-              }
-            }
-          } catch {
-            /* ignore inventory errors */
-          }
-        }
-
-        if (!lookOnlyPhase && Math.random() < 0.03) {
+        // Occasional look at nearby player
+        if (Math.random() < 0.06) {
           try {
             const nearestEntity = bot.nearestEntity(
-              (e: { type: string; username?: string }) => e.type === "player" && e.username !== bot.username,
+              (e: { type: string; username?: string }) =>
+                e.type === "player" && e.username !== bot.username,
             );
             if (nearestEntity) {
               bot.lookAt(nearestEntity.position.offset(0, 1.6, 0));
-              setTimeout(() => {
-                try {
-                  if (currentBot === bot) {
-                    bot.look(
-                      bot.entity.yaw + (Math.random() - 0.5) * 2,
-                      (Math.random() - 0.5) * 0.3,
-                      false,
-                    );
-                  }
-                } catch {
-                  /* ignore */
-                }
-              }, randomBetween(1000, 3000));
             }
           } catch {
-            /* ignore entity errors */
+            /* ignore */
           }
         }
-
-        lookOnlyPhase = false;
       } catch {
         /* ignore movement errors */
       }
-    }, randomBetween(4000, 10000));
+
+      if (!stopped && currentBot === bot) {
+        antiAfkTimer = setTimeout(tick, randomBetween(6000, 16000));
+      }
+    };
+
+    antiAfkTimer = setTimeout(tick, randomBetween(4000, 9000));
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

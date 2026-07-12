@@ -50,6 +50,58 @@ function errorEmbed(description: string) {
   return { title: "❌ Verification Failed", description, color: 0xff5c5c, footer: { text: "LuauX Verification" } };
 }
 
+async function resolveBotCredentials(
+  rawBody: string,
+  signature: string,
+  timestamp: string,
+  guildId?: string,
+): Promise<{ ok: boolean; botToken: string | null; publicKey: string | null }> {
+  const centralPublicKey =
+    process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "";
+
+  // 1) Prefer guild-specific bot credentials
+  if (guildId) {
+    const { data: settings } = await db()
+      .from("verification_settings")
+      .select("bot_public_key, bot_token")
+      .eq("guild_id", guildId)
+      .maybeSingle();
+
+    if (settings?.bot_public_key) {
+      if (verifyDiscordSignature(rawBody, signature, timestamp, settings.bot_public_key)) {
+        return {
+          ok: true,
+          botToken: settings.bot_token || null,
+          publicKey: settings.bot_public_key,
+        };
+      }
+    }
+  }
+
+  // 2) Central env key (optional)
+  if (centralPublicKey && verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)) {
+    return { ok: true, botToken: process.env.DISCORD_BOT_TOKEN || null, publicKey: centralPublicKey };
+  }
+
+  // 3) Discord endpoint verification PING has no guild_id — try all stored public keys
+  const { data: allSettings } = await db()
+    .from("verification_settings")
+    .select("bot_public_key, bot_token")
+    .not("bot_public_key", "is", null);
+
+  const tried = new Set<string>();
+  for (const row of allSettings || []) {
+    const key = (row.bot_public_key || "").trim();
+    if (!key || tried.has(key)) continue;
+    tried.add(key);
+    if (verifyDiscordSignature(rawBody, signature, timestamp, key)) {
+      return { ok: true, botToken: row.bot_token || null, publicKey: key };
+    }
+  }
+
+  return { ok: false, botToken: null, publicKey: null };
+}
+
 export const Route = createFileRoute("/api/discord/interactions")({
   server: {
     handlers: {
@@ -58,11 +110,8 @@ export const Route = createFileRoute("/api/discord/interactions")({
         const timestamp = request.headers.get("x-signature-timestamp") || "";
         const rawBody = await request.text();
 
-        const centralPublicKey =
-          process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "";
-
-        if (!centralPublicKey) {
-          return new Response("Server configuration error", { status: 500 });
+        if (!signature || !timestamp) {
+          return new Response("Missing signature headers", { status: 401 });
         }
 
         let body: Record<string, unknown>;
@@ -72,36 +121,25 @@ export const Route = createFileRoute("/api/discord/interactions")({
           return new Response("Invalid JSON", { status: 400 });
         }
 
+        // Discord PING (type 1) must respond with type 1 within ~3s after valid signature.
+        // PING has no guild_id — resolve credentials against all stored bot public keys.
         const guildId = body.guild_id as string | undefined;
+        const resolved = await resolveBotCredentials(rawBody, signature, timestamp, guildId);
 
-        let matchedPublicKey = centralPublicKey;
-        let botToken: string | null = null;
-
-        if (guildId) {
-          const { data: settings } = await db()
-            .from("verification_settings")
-            .select("bot_public_key, bot_token")
-            .eq("guild_id", guildId)
-            .maybeSingle();
-
-          if (settings?.bot_public_key) {
-            if (verifyDiscordSignature(rawBody, signature, timestamp, settings.bot_public_key)) {
-              matchedPublicKey = settings.bot_public_key;
-            }
-          }
-          if (settings?.bot_token) {
-            botToken = settings.bot_token;
-          }
-        }
-
-        if (matchedPublicKey === centralPublicKey && !verifyDiscordSignature(rawBody, signature, timestamp, centralPublicKey)) {
+        if (!resolved.ok) {
+          console.error("[interactions] Invalid signature", {
+            type: body.type,
+            guildId: guildId || null,
+            hasCentralKey: !!(process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY),
+          });
           return new Response("Invalid signature", { status: 401 });
         }
 
+        const botToken = resolved.botToken;
         const appId = body.application_id as string;
         const token = body.token as string;
 
-        // Ping
+        // Ping — must be first response after signature ok
         if (body.type === 1) {
           return Response.json({ type: 1 });
         }
@@ -118,9 +156,14 @@ export const Route = createFileRoute("/api/discord/interactions")({
 
           // --- Modal 1: MC Username + Email ---
           if (customId === "verify_mc_info") {
-            const rows = (components[0] as Record<string, unknown>)?.components as Array<Record<string, unknown>> | undefined;
-            const username = (rows?.[0]?.value as string) || "";
-            const email = (rows?.[1]?.value as string) || "";
+            // Discord modals: each ActionRow has one TextInput under components[i].components[0]
+            const getModalValue = (rowIndex: number) => {
+              const row = components?.[rowIndex] as Record<string, unknown> | undefined;
+              const fields = row?.components as Array<Record<string, unknown>> | undefined;
+              return String(fields?.[0]?.value || "").trim();
+            };
+            const username = getModalValue(0);
+            const email = getModalValue(1);
 
             if (!username || !email) {
               return Response.json({

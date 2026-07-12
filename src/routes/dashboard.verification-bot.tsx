@@ -610,14 +610,20 @@ function VerificationBotPage() {
                   <CodeBlock>https://luauxbeaming.lovable.app/api/discord/interactions</CodeBlock>
                 </div>
                 <ol className="list-decimal list-inside space-y-1.5 mt-3" start={6}>
+                  <li>
+                    <strong className="text-foreground">Save your bot Public Key + Token in LuauX first</strong>{" "}
+                    (Configuration tab) — Discord&apos;s PING has no server ID, so we match your key from the DB
+                  </li>
+                  <li>Paste the URL above into <strong className="text-foreground">Interactions Endpoint URL</strong></li>
                   <li>Click <strong className="text-foreground">Save Changes</strong></li>
-                  <li>Discord will send a PING request to verify the endpoint works — this is handled automatically</li>
+                  <li>Discord sends a PING — if save fails, wait for Lovable deploy, re-save settings, try again</li>
                 </ol>
                 <div className="flex items-start gap-2 mt-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
                   <AlertTriangle className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                   <p className="text-[11px]">
-                    <strong className="text-foreground">Endpoint must be HTTPS.</strong> Lovable provides this automatically.
-                    If you see a validation error, make sure your site is deployed and the URL is exactly as shown above.
+                    <strong className="text-foreground">Order matters:</strong> Save bot token + public key in
+                    LuauX → deploy live → set Interactions Endpoint URL in Discord Developer Portal.
+                    Public key must be the hex key from General Information (not the bot token).
                   </p>
                 </div>
               </GuideStep>

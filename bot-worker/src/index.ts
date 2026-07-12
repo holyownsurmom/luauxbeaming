@@ -5,11 +5,13 @@ import {
   flushAllLogs,
   checkJobStatuses,
   postVerificationResult,
+  fetchPresenceTokens,
   WORKER_ID as API_WORKER_ID,
 } from "./api.js";
 import { runMcBot, type McJobConfig, type JobRunResult } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 import { runSecureBot, type SecureJobConfig } from "./secure.js";
+import { syncPresenceBots, stopAllPresence } from "./verification-presence.js";
 
 const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
@@ -145,15 +147,31 @@ async function checkRunningJobs() {
   }
 }
 
+async function refreshPresence() {
+  try {
+    const bots = await fetchPresenceTokens();
+    syncPresenceBots(bots);
+    if (bots.length > 0) {
+      console.log(`[presence] synced ${bots.length} verification bot(s) online`);
+    }
+  } catch (e) {
+    console.error("[presence] sync failed:", e);
+  }
+}
+
 const pollTimer = setInterval(poll, POLL_INTERVAL);
 const statusCheckTimer = setInterval(checkRunningJobs, STATUS_CHECK_INTERVAL);
+const presenceTimer = setInterval(refreshPresence, 60_000);
 poll();
 checkRunningJobs();
+refreshPresence();
 
 async function shutdown() {
   console.log("[worker] shutting down...");
   clearInterval(pollTimer);
   clearInterval(statusCheckTimer);
+  clearInterval(presenceTimer);
+  stopAllPresence();
 
   const abortPromises: Promise<void>[] = [];
   for (const [id, controller] of runningJobs) {

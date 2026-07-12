@@ -43,6 +43,7 @@ import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/pu
 import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worker/update'
 import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
 import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
+import { Route as ApiBotsWorkerPresenceTokensRouteImport } from './routes/api/bots/worker/presence-tokens'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
@@ -227,6 +228,11 @@ const ApiBotsWorkerStatusRoute = ApiBotsWorkerStatusRouteImport.update({
 const ApiBotsWorkerPollRoute = ApiBotsWorkerPollRouteImport.update({
   id: '/api/bots/worker/poll',
   path: '/api/bots/worker/poll',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBotsWorkerPresenceTokensRoute = ApiBotsWorkerPresenceTokensRouteImport.update({
+  id: '/api/bots/worker/presence-tokens',
+  path: '/api/bots/worker/presence-tokens',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBotsWorkerLogRoute = ApiBotsWorkerLogRouteImport.update({
@@ -1007,6 +1013,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcClearAllRoute: ApiBotsMcClearAllRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
+  ApiBotsWorkerPresenceTokensRoute: ApiBotsWorkerPresenceTokensRoute,
   ApiBotsWorkerStatusRoute: ApiBotsWorkerStatusRoute,
   ApiBotsWorkerUpdateRoute: ApiBotsWorkerUpdateRoute,
   ApiPublicNowpaymentsWebhookRoute: ApiPublicNowpaymentsWebhookRoute,

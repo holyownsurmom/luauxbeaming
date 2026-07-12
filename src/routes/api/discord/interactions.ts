@@ -505,6 +505,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
           const memberId = (member?.user as Record<string, string>)?.id;
 
           if (customId === "verify_member") {
+            // Respond with modal immediately — no heavy work (must be <3s)
             if (!memberId || !gId) {
               return Response.json({
                 type: 4,
@@ -512,23 +513,8 @@ export const Route = createFileRoute("/api/discord/interactions")({
               });
             }
 
-            const { data: settings } = await db()
-              .from("verification_settings")
-              .select("verified_role_id, bot_token")
-              .eq("guild_id", gId)
-              .maybeSingle();
-
-            if (!settings) {
-              return Response.json({
-                type: 4,
-                data: {
-                  flags: 64,
-                  content:
-                    "This server is not configured for verification. Set it up in the LuauX Dashboard.",
-                },
-              });
-            }
-
+            // Fire-and-forget settings check is too slow; open modal always.
+            // Invalid guild will fail later on OTP with a clear message.
             return Response.json({
               type: 9,
               data: {

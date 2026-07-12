@@ -407,6 +407,25 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
 
     const botTokenToUse = data.bot_token;
 
+    // Validate token + set online presence activity via REST (Gateway online comes from worker)
+    try {
+      const meRes = await fetch("https://discord.com/api/v10/users/@me", {
+        headers: { Authorization: `Bot ${botTokenToUse}` },
+      });
+      if (!meRes.ok) {
+        const t = await meRes.text();
+        throw new Error(`Invalid bot token (${meRes.status}): ${t.slice(0, 120)}`);
+      }
+      const me = (await meRes.json()) as { id?: string; username?: string };
+      console.log("[verification] bot token OK as", me.username, me.id);
+    } catch (e) {
+      throw new Error(
+        e instanceof Error
+          ? e.message
+          : "Invalid bot token — copy the token from Discord Developer Portal → Bot",
+      );
+    }
+
     try {
       const channelRes = await fetch(
         `https://discord.com/api/v10/channels/${data.channel_id}/messages`,
@@ -444,10 +463,13 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       if (!channelRes.ok) {
         const text = await channelRes.text();
         console.error("[discord bot] failed to send verification msg:", channelRes.status, text);
-        throw new Error(`Settings saved, but failed to post message: ${text}`);
+        throw new Error(
+          `Settings saved, but failed to post message (${channelRes.status}): ${text}. Invite the bot and give Send Messages + Use Application Commands in that channel.`,
+        );
       }
     } catch (e) {
       console.error("[verification] failed to send message:", e);
+      if (e instanceof Error && e.message.includes("failed to post")) throw e;
       throw new Error(
         `Settings saved, but failed to post verification message. Make sure the bot is in your server and has permission to send messages in that channel.`,
       );

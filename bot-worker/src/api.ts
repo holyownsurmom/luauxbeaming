@@ -43,6 +43,23 @@ export async function pollJobs(workerId: string): Promise<Job[]> {
   return data.jobs ?? [];
 }
 
+export async function fetchPresenceTokens(): Promise<
+  Array<{ bot_token: string; guild_id: string; label?: string }>
+> {
+  try {
+    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/presence-tokens`, {
+      method: "GET",
+      headers,
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.bots ?? [];
+  } catch (e) {
+    console.error("[worker] fetchPresenceTokens failed:", e);
+    return [];
+  }
+}
+
 export interface LogEntry {
   job_id: string;
   discord_id: string;

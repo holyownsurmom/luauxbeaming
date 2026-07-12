@@ -41,16 +41,17 @@ export const Route = createFileRoute("/api/admin/login")({
         const db = adminDb();
         const discordId = session.data.user.id;
 
-        // Never auto-promote: password only unlocks pre-seeded admins
-        const { data: existing } = await db
-          .from("admins")
-          .select("discord_id")
-          .eq("discord_id", discordId)
-          .maybeSingle();
-        if (!existing) {
+        // Correct password → register this Discord account as admin (upsert).
+        // Session isAdmin alone is not enough; isAdminSession() always re-checks admins table.
+        // OAuth login clears isAdmin so alts never inherit admin without the password.
+        const { error: upsertErr } = await db.from("admins").upsert(
+          { discord_id: discordId },
+          { onConflict: "discord_id" },
+        );
+        if (upsertErr) {
           return Response.json(
-            { error: "This Discord account is not an authorized admin" },
-            { status: 403 },
+            { error: `Failed to register admin: ${upsertErr.message}` },
+            { status: 500 },
           );
         }
 

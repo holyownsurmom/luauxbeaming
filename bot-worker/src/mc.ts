@@ -68,6 +68,48 @@ async function fetchMinecraftProfile(accessToken: string): Promise<{ name: strin
   }
 }
 
+/** Chat-signing keypair (1.19+) — missing keys often cause Invalid sequence / chat kicks on modern SMPs */
+async function fetchMinecraftCertificates(accessToken: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch("https://api.minecraftservices.com/player/certificates", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const cert = await res.json();
+    if (!cert?.keyPair?.publicKey || !cert?.keyPair?.privateKey) return null;
+
+    const crypto = await import("crypto");
+    const toDer = (pem: string) => {
+      const b64 = pem
+        .replace(/-----BEGIN [A-Z ]+-----/g, "")
+        .replace(/-----END [A-Z ]+-----/g, "")
+        .replace(/\s+/g, "");
+      return Buffer.from(b64, "base64");
+    };
+    const publicDER = toDer(cert.keyPair.publicKey);
+    const privateDER = toDer(cert.keyPair.privateKey);
+    return {
+      publicPEM: cert.keyPair.publicKey,
+      privatePEM: cert.keyPair.privateKey,
+      publicDER,
+      privateDER,
+      signature: Buffer.from(cert.publicKeySignature || "", "base64"),
+      signatureV2: Buffer.from(cert.publicKeySignatureV2 || cert.publicKeySignature || "", "base64"),
+      expiresOn: new Date(cert.expiresAt),
+      refreshAfter: new Date(cert.refreshedAfter || cert.expiresAt),
+      public: crypto.createPublicKey({ key: publicDER, format: "der", type: "spki" }),
+      private: crypto.createPrivateKey({ key: privateDER, format: "der", type: "pkcs8" }),
+    };
+  } catch {
+    return null;
+  }
+}
+
 const MC_SUFFIXES = ["", " ", ".", "...", "!", "?", " ~", " :)"];
 
 function variateMessage(msg: string): string {
@@ -147,6 +189,8 @@ export async function runMcBot(
   if (config.interval < 5) config.interval = 5;
 
   let ssidProfile: { name: string; id: string } | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let profileKeys: any = null;
   // Microsoft session resolved ONCE per job (not on every reconnect)
   let msSession: {
     accessToken: string;
@@ -169,6 +213,13 @@ export async function runMcBot(
       return { status: "error", error: "SSID token invalid — could not resolve profile" };
     }
     await log("info", `Resolved profile: ${ssidProfile.name} (${ssidProfile.id})`);
+    await log("info", "Fetching chat-signing certificates for SSID session...");
+    profileKeys = await fetchMinecraftCertificates(config.ssid);
+    if (profileKeys) {
+      await log("info", "Chat certificates loaded");
+    } else {
+      await log("warn", "Could not load chat certificates — server may kick with Invalid sequence");
+    }
   }
 
   if (config.authType === "microsoft") {
@@ -273,6 +324,10 @@ export async function runMcBot(
 
       msSession = { accessToken: mcToken.token, name, id };
       await log("info", `Authenticated as ${name} (${id})`);
+      await log("info", "Fetching chat-signing certificates...");
+      profileKeys = await fetchMinecraftCertificates(mcToken.token);
+      if (profileKeys) await log("info", "Chat certificates loaded");
+      else await log("warn", "Could not load chat certificates");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await log("error", `Microsoft auth failed: ${msg}`);
@@ -501,6 +556,49 @@ export async function runMcBot(
       await new Promise((r) => setTimeout(r, 1500));
     }
 
+    const injectPremiumAuth = (
+      accessToken: string,
+      name: string,
+      rawUuid: string,
+    ) => {
+      const undashed = rawUuid.replace(/-/g, "");
+      const dashed =
+        undashed.length === 32
+          ? `${undashed.slice(0, 8)}-${undashed.slice(8, 12)}-${undashed.slice(12, 16)}-${undashed.slice(16, 20)}-${undashed.slice(20)}`
+          : rawUuid;
+      return (
+        client: {
+          session: unknown;
+          username: string;
+          uuid?: string;
+          profileKeys?: unknown;
+          emit: (event: string, data: unknown) => void;
+        },
+        options: {
+          accessToken?: string;
+          haveCredentials?: boolean;
+          connect: (client: unknown) => void;
+        },
+      ) => {
+        const session = {
+          accessToken,
+          clientToken: null,
+          selectedProfile: { name, id: undashed },
+          availableProfiles: [{ name, id: undashed }],
+        };
+        client.session = session;
+        client.username = name;
+        client.uuid = dashed;
+        options.accessToken = accessToken;
+        options.haveCredentials = true;
+        if (profileKeys) {
+          client.profileKeys = profileKeys;
+        }
+        client.emit("session", session);
+        options.connect(client);
+      };
+    };
+
     const botOptions: Record<string, unknown> = {
       host: config.serverHost,
       port: config.serverPort,
@@ -509,8 +607,13 @@ export async function runMcBot(
       checkTimeoutInterval: 60_000,
       keepAlive: true,
       respawn: true,
-      // Keep physics on so client tick/position stay valid; do NOT send manual move packets
-      physicsEnabled: true,
+      // Disable physics plugin entirely — position prediction causes Invalid sequence on Via/Donut
+      physicsEnabled: false,
+      plugins: {
+        physics: false,
+        breath: false,
+        // Keep inventory/entities light; avoid heavy prediction plugins
+      },
       viewDistance: "tiny",
       brand: "vanilla",
       version: false,
@@ -518,78 +621,16 @@ export async function runMcBot(
 
     if (config.authType === "microsoft" && msSession) {
       botOptions.username = msSession.name;
-      botOptions.auth = (
-        client: {
-          session: unknown;
-          username: string;
-          uuid?: string;
-          emit: (event: string, data: unknown) => void;
-        },
-        options: {
-          accessToken?: string;
-          haveCredentials?: boolean;
-          connect: (client: unknown) => void;
-        },
-      ) => {
-        const session = {
-          accessToken: msSession!.accessToken,
-          clientToken: null,
-          selectedProfile: {
-            name: msSession!.name,
-            id: msSession!.id,
-          },
-          availableProfiles: [{ name: msSession!.name, id: msSession!.id }],
-        };
-        client.session = session;
-        client.username = msSession!.name;
-        client.uuid = msSession!.id;
-        options.accessToken = msSession!.accessToken;
-        options.haveCredentials = true;
-        client.emit("session", session);
-        options.connect(client);
-      };
+      botOptions.auth = injectPremiumAuth(
+        msSession.accessToken,
+        msSession.name,
+        msSession.id,
+      );
     }
 
     if (config.authType === "ssid" && config.ssid && ssidProfile) {
-      // Custom auth: inject SSID token directly. auth:"microsoft" ignores session and re-auths.
-      // UUID must be dashed for some protocol paths and undashed for others — provide both forms.
-      const rawId = ssidProfile.id.replace(/-/g, "");
-      const dashedId =
-        rawId.length === 32
-          ? `${rawId.slice(0, 8)}-${rawId.slice(8, 12)}-${rawId.slice(12, 16)}-${rawId.slice(16, 20)}-${rawId.slice(20)}`
-          : ssidProfile.id;
-
       botOptions.username = ssidProfile.name;
-      botOptions.auth = (
-        client: {
-          session: unknown;
-          username: string;
-          uuid?: string;
-          emit: (event: string, data: unknown) => void;
-        },
-        options: {
-          accessToken?: string;
-          haveCredentials?: boolean;
-          connect: (client: unknown) => void;
-        },
-      ) => {
-        const session = {
-          accessToken: config.ssid,
-          clientToken: null,
-          selectedProfile: {
-            name: ssidProfile!.name,
-            id: rawId,
-          },
-          availableProfiles: [{ name: ssidProfile!.name, id: rawId }],
-        };
-        client.session = session;
-        client.username = ssidProfile!.name;
-        client.uuid = dashedId;
-        options.accessToken = config.ssid;
-        options.haveCredentials = true;
-        client.emit("session", session);
-        options.connect(client);
-      };
+      botOptions.auth = injectPremiumAuth(config.ssid, ssidProfile.name, ssidProfile.id);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -706,29 +747,30 @@ export async function runMcBot(
     let lastKickKey = "";
     let lastKickAt = 0;
 
+    let loggedInOnce = false;
+
     bot.on("login", () => {
       if (currentBot !== bot) return;
       connected = true;
+      if (loggedInOnce) return;
+      loggedInOnce = true;
       log("info", `Logged in as ${bot.username}`).catch(() => {});
     });
 
     bot.on("spawn", () => {
       if (currentBot !== bot) return;
-      if (loopsStarted) {
-        log("info", "Respawned in world").catch(() => {});
-        return;
-      }
+      if (loopsStarted) return;
       loopsStarted = true;
       reconnectAttempts = 0;
-      log("info", "Spawned in world").catch(() => {});
+      log("info", "Spawned in world (idle mode — no movement packets)").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Sit still for a long time — no movement AFK (Invalid sequence on DonutSMP)
+      // Sit completely still; only chat after settle
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
-      }, randomBetween(20000, 35000));
+      }, randomBetween(25000, 40000));
     });
 
     bot.on("chat", (username: string, message: string) => {

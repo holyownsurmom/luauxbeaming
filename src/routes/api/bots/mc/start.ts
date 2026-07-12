@@ -79,6 +79,30 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           config.uuid = account.uuid || body.uuid || "";
         }
 
+        // Stop any other active MC jobs for this account so the server doesn't
+        // kick for "logged in from another location" / duplicate sessions.
+        const { data: existingJobs } = await db
+          .from("bot_jobs")
+          .select("id, config, status")
+          .eq("discord_id", user.id)
+          .eq("type", "mc")
+          .in("status", ["pending", "running", "claimed"]);
+
+        const toStop = (existingJobs || []).filter((j) => {
+          const cfg = (j.config || {}) as { accountId?: string };
+          return cfg.accountId === body.accountId;
+        });
+
+        if (toStop.length > 0) {
+          await db
+            .from("bot_jobs")
+            .update({ status: "stopping" })
+            .in(
+              "id",
+              toStop.map((j) => j.id),
+            );
+        }
+
         const { data: job, error } = await db
           .from("bot_jobs")
           .insert({

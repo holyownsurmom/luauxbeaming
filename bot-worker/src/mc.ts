@@ -382,17 +382,44 @@ export async function runMcBot(
       scheduleNext();
     };
 
-    const initialDelay = randomBetween(8000, 25000);
+    const initialDelay = randomBetween(15000, 40000);
     log("info", `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message...`).catch(() => {});
     currentTimer = setTimeout(() => {
-      if (stopped || abortSignal.aborted) return;
+      if (stopped || abortSignal.aborted || currentBot !== bot) return;
       sendOneMessage(bot);
     }, initialDelay);
   }
 
+  function extractChatText(node: unknown): string {
+    if (node == null) return "";
+    if (typeof node === "string") return node;
+    if (typeof node === "number" || typeof node === "boolean") return String(node);
+    if (Array.isArray(node)) return node.map(extractChatText).join("");
+    if (typeof node === "object") {
+      const obj = node as Record<string, unknown>;
+      let out = "";
+      if (typeof obj.text === "string") out += obj.text;
+      if (Array.isArray(obj.extra)) out += obj.extra.map(extractChatText).join("");
+      if (obj.with && Array.isArray(obj.with)) out += obj.with.map(extractChatText).join(" ");
+      if (typeof obj.translate === "string" && !out) out += obj.translate;
+      return out || JSON.stringify(node);
+    }
+    return String(node);
+  }
+
   function formatKickReason(reason: unknown): string {
     if (reason == null) return "unknown";
-    if (typeof reason === "string") return reason;
+    if (typeof reason === "string") {
+      try {
+        const parsed = JSON.parse(reason);
+        const text = extractChatText(parsed).trim();
+        return text || reason;
+      } catch {
+        return reason;
+      }
+    }
+    const text = extractChatText(reason).trim();
+    if (text) return text;
     try {
       return JSON.stringify(reason);
     } catch {
@@ -403,12 +430,18 @@ export async function runMcBot(
   function shouldReconnect(kickReason: unknown): boolean {
     const lower = formatKickReason(kickReason).toLowerCase();
     if (lower.includes("banned")) return false;
+    if (lower.includes("blocked")) return false;
+    if (lower.includes("security")) return false;
+    if (lower.includes("suspicious")) return false;
     if (lower.includes("authenticat")) return false;
     if (lower.includes("not authenticated")) return false;
     if (lower.includes("not logged into")) return false;
     if (lower.includes("invalid session")) return false;
     if (lower.includes("whitelist")) return false;
     if (lower.includes("full")) return false;
+    if (lower.includes("logged in from another")) return false;
+    if (lower.includes("already connected")) return false;
+    if (lower.includes("already logged in")) return false;
     return true;
   }
 
@@ -419,9 +452,13 @@ export async function runMcBot(
       host: config.serverHost,
       port: config.serverPort,
       username: config.username || config.label || "Player",
-      hideErrors: false,
-      checkTimeoutInterval: 60000,
-      respawn: false,
+      hideErrors: true,
+      checkTimeoutInterval: 60_000,
+      keepAlive: true,
+      respawn: true,
+      physicsEnabled: true,
+      viewDistance: "tiny",
+      brand: "vanilla",
     };
 
     if (config.authType === "microsoft") {
@@ -544,6 +581,73 @@ export async function runMcBot(
     currentBot = bot;
 
     let connected = false;
+    let handlingDisconnect = false;
+    let loopsStarted = false;
+
+    const scheduleReconnect = async (reasonText: string, fromKick: boolean) => {
+      if (handlingDisconnect) return;
+      handlingDisconnect = true;
+      cleanup();
+      if (currentBot === bot) {
+        try {
+          bot.removeAllListeners();
+          bot.end("reconnect");
+        } catch {
+          /* ignore */
+        }
+        currentBot = null;
+      }
+
+      if (stopped || abortSignal.aborted || authFailed) return;
+
+      const lower = reasonText.toLowerCase();
+      // Another session of this account is already online
+      if (
+        lower.includes("logged in from another") ||
+        lower.includes("already connected") ||
+        lower.includes("already logged in") ||
+        lower.includes("you logged in from another location")
+      ) {
+        const msg = `Kicked: account already online elsewhere. Stop other bots using this account. (${reasonText})`;
+        log("error", msg).catch(() => {});
+        await updateJob(jobId, "error", msg);
+        authFailed = true;
+        stopped = true;
+        return;
+      }
+
+      const doReconnect = shouldReconnect(reasonText);
+      if (!doReconnect) {
+        const msg = lower.includes("authenticat") || lower.includes("not logged into")
+          ? `Authentication failed: ${reasonText}. Your token may be expired — re-login and get a new token.`
+          : lower.includes("banned") || lower.includes("blocked") || lower.includes("suspicious")
+            ? `Account blocked/banned: ${reasonText}`
+            : `Not reconnecting: ${reasonText}`;
+        log("error", msg).catch(() => {});
+        await updateJob(jobId, "error", msg);
+        authFailed = true;
+        stopped = true;
+        return;
+      }
+
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        log("error", "Max reconnect attempts reached").catch(() => {});
+        await updateJob(jobId, "error", "Max reconnect attempts");
+        stopped = true;
+        return;
+      }
+
+      reconnectAttempts++;
+      const baseDelay = reconnectAttempts <= 3
+        ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
+        : randomBetween(45, 150) * 1000;
+      const delay = baseDelay + randomBetween(0, 8000);
+      log(
+        "info",
+        `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})${fromKick ? " after kick" : ""}`,
+      ).catch(() => {});
+      setTimeout(() => connect(), delay);
+    };
 
     bot.on("login", () => {
       connected = true;
@@ -552,12 +656,21 @@ export async function runMcBot(
     });
 
     bot.on("spawn", () => {
+      if (loopsStarted && currentBot === bot) {
+        log("info", "Respawned in world").catch(() => {});
+        return;
+      }
+      loopsStarted = true;
       log("info", "Spawned in world").catch(() => {});
       updateJob(jobId, "running").catch(() => {});
       reconnectAttempts = 0;
 
-      startAntiAfk(bot);
-      startMessageLoop(bot);
+      // Wait a bit after spawn before AFK/messages — reduces proxy/anticheat kicks
+      setTimeout(() => {
+        if (stopped || abortSignal.aborted || currentBot !== bot) return;
+        startAntiAfk(bot);
+        startMessageLoop(bot);
+      }, randomBetween(3000, 8000));
     });
 
     bot.on("chat", (username: string, message: string) => {
@@ -576,64 +689,16 @@ export async function runMcBot(
     bot.on("kicked", async (reason: unknown) => {
       const reasonText = formatKickReason(reason);
       log("warn", `Kicked: ${reasonText}`).catch(() => {});
-      cleanup();
-      if (currentBot === bot) currentBot = null;
-
-      const doReconnect = shouldReconnect(reasonText);
-      if (!doReconnect) {
-        const lower = reasonText.toLowerCase();
-        const msg = lower.includes("authenticat") || lower.includes("not logged into")
-          ? `Authentication failed: ${reasonText}. Your token may be expired — re-login and get a new token.`
-          : lower.includes("banned")
-            ? `Banned: ${reasonText}`
-            : `Not reconnecting: ${reasonText}`;
-        log("error", msg).catch(() => {});
-        await updateJob(jobId, "error", msg);
-        authFailed = true;
-        stopped = true;
-        return;
-      }
-
-      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS && !stopped && !abortSignal.aborted) {
-        reconnectAttempts++;
-        const baseDelay = reconnectAttempts <= 3
-          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
-          : randomBetween(30, 120) * 1000;
-        const delay = baseDelay + randomBetween(0, 5000);
-        log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
-        setTimeout(() => connect(), delay);
-      } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        log("error", "Max reconnect attempts reached").catch(() => {});
-        await updateJob(jobId, "error", "Max reconnect attempts");
-        stopped = true;
-      }
+      await scheduleReconnect(reasonText, true);
     });
 
     bot.on("end", async (reason: unknown) => {
+      clearTimeout(connectionTimeout);
       const reasonText = formatKickReason(reason) || "connection closed";
       log("system", `Disconnected: ${reasonText}`).catch(() => {});
-      cleanup();
-      if (currentBot === bot) currentBot = null;
-
-      if (stopped || abortSignal.aborted || authFailed) return;
-
-      if (shouldReconnect(reasonText) && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const baseDelay = reconnectAttempts <= 3
-          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
-          : randomBetween(30, 120) * 1000;
-        const delay = baseDelay + randomBetween(0, 5000);
-        log("info", `Reconnecting in ${(delay / 1000).toFixed(0)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`).catch(() => {});
-        setTimeout(() => connect(), delay);
-      } else if (!shouldReconnect(reasonText)) {
-        log("error", `Connection lost: ${reasonText} — not reconnecting`).catch(() => {});
-        await updateJob(jobId, "error", reasonText);
-        stopped = true;
-      } else {
-        log("error", "Max reconnect attempts reached").catch(() => {});
-        await updateJob(jobId, "error", "Connection lost");
-        stopped = true;
-      }
+      // kicked already schedules reconnect — avoid double reconnect on socketClosed
+      if (handlingDisconnect) return;
+      await scheduleReconnect(reasonText, false);
     });
 
     bot.on("death", () => {
@@ -641,16 +706,12 @@ export async function runMcBot(
     });
 
     const connectionTimeout = setTimeout(() => {
-      if (!connected && !stopped) {
+      if (!connected && !stopped && !handlingDisconnect) {
         log("error", "Connection timed out").catch(() => {});
         cleanup();
         disconnectBot();
       }
     }, CONNECTION_TIMEOUT_MS);
-
-    bot.on("end", () => {
-      clearTimeout(connectionTimeout);
-    });
   }
 
   connect();

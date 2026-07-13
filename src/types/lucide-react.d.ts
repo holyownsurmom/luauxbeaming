@@ -442,4 +442,7 @@ declare module "lucide-react" {
   export const Lobster: LucideIcon;
   export const Squid: LucideIcon;
   export const Jellyfish: LucideIcon;
+  export const Gift: LucideIcon;
+  export const Wallet: LucideIcon;
+  export const Settings2: LucideIcon;
 }

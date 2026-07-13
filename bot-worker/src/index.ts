@@ -189,12 +189,21 @@ async function checkRunningJobs() {
   }
 }
 
+let lastPresenceLog = 0;
+let lastPresenceCount = -1;
+
 async function refreshPresence() {
   try {
     const bots = await fetchPresenceTokens();
     syncPresenceBots(bots);
-    if (bots.length > 0) {
-      console.log(`[presence] synced ${bots.length} verification bot(s) online`);
+    const n = bots.length;
+    const now = Date.now();
+    // Avoid flooding pm2 logs every 60s when nothing changed
+    if (n !== lastPresenceCount || now - lastPresenceLog > 10 * 60_000) {
+      lastPresenceCount = n;
+      lastPresenceLog = now;
+      if (n > 0) console.log(`[presence] ${n} verification bot(s) online`);
+      else console.log("[presence] no bot token configured");
     }
   } catch (e) {
     console.error("[presence] sync failed:", e);

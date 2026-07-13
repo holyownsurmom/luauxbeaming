@@ -103,6 +103,8 @@ function scheduleReconnect(bot: PresenceBot, reason: string) {
 
 function connect(bot: PresenceBot) {
   if (bot.stopped || bot.connecting) return;
+  // Already online — don't tear down a healthy gateway
+  if (bot.ws && bot.ws.readyState === WebSocket.OPEN) return;
   bot.connecting = true;
 
   if (bot.reconnectTimer) {
@@ -113,7 +115,10 @@ function connect(bot: PresenceBot) {
   if (bot.ws) {
     try {
       bot.ws.removeAllListeners();
-      bot.ws.close();
+      // terminate half-open sockets instead of close() to avoid
+      // "WebSocket was closed before the connection was established"
+      if (bot.ws.readyState === WebSocket.CONNECTING) bot.ws.terminate();
+      else bot.ws.close();
     } catch {
       /* ignore */
     }
@@ -255,7 +260,11 @@ function connect(bot: PresenceBot) {
   });
 
   ws.on("error", (err) => {
-    console.error(`[presence] gateway error ${bot.label}:`, err.message);
+    // ECONNRESET / transient network — reconnect handles it; avoid stack spam
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/ECONNRESET|ECONNREFUSED|ETIMEDOUT|closed before/i.test(msg)) {
+      console.error(`[presence] gateway error ${bot.label}:`, msg);
+    }
   });
 }
 

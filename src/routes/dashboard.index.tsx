@@ -108,7 +108,7 @@ function Overview() {
   return (
     <div className="space-y-8 animate-page-in">
       {/* Hero header */}
-      <header className="relative overflow-hidden rounded-3xl animated-border bg-card/60 p-8 md:p-10 noise-texture">
+      <header className="relative overflow-hidden rounded-3xl animated-border bg-card/60 p-8 md:p-10 noise-texture shine-card">
         {/* Background effects */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/4 pointer-events-none" />
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/6 rounded-full blur-[120px] pointer-events-none animate-glow-breathe" />
@@ -189,12 +189,12 @@ function Overview() {
       <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
         <Link
           to="/dashboard/purchase"
-          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
+          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture shine-card"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500 icon-pop">
               <ShoppingCart className="h-5 w-5 text-primary" />
             </div>
             <div className="font-semibold text-sm">Get a Plan</div>
@@ -209,12 +209,12 @@ function Overview() {
 
         <Link
           to="/dashboard/bots"
-          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture"
+          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture shine-card"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative">
-            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500">
+            <div className="h-11 w-11 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center mb-4 group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500 icon-pop">
               <BotIcon className="h-5 w-5 text-primary" />
             </div>
             <div className="font-semibold text-sm">MC Auto-Message</div>
@@ -345,7 +345,7 @@ function PluginCard({
   return (
     <Link
       to={to}
-      className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 block overflow-hidden transition-all duration-500 magnetic-hover holographic"
+      className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 block overflow-hidden transition-all duration-500 magnetic-hover holographic shine-card"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />

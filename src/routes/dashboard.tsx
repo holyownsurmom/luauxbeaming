@@ -142,7 +142,8 @@ function SidebarContent({
                       onNavigate();
                       onClose?.();
                     }}
-                    className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group/item ${
+                    data-active={active ? "true" : "false"}
+                    className={`nav-glide w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group/item ${
                       active
                         ? "bg-primary/10 text-primary border border-primary/25 shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.08)]"
                         : "text-foreground/60 hover:bg-primary/5 hover:text-foreground/90 border border-transparent"
@@ -386,9 +387,13 @@ function DashboardLayout() {
 
       {/* Main content */}
       <main className="min-h-screen relative noise-texture">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/4 rounded-full blur-[150px] pointer-events-none animate-glow-breathe" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-primary/3 rounded-full blur-[120px] pointer-events-none opacity-40" />
-        <div className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative">
+        <div className="absolute inset-0 mesh-drift opacity-40 pointer-events-none" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/4 rounded-full blur-[150px] pointer-events-none animate-glow-breathe spotlight-pulse" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-primary/3 rounded-full blur-[120px] pointer-events-none opacity-40 aurora-blob aurora-blob-slow" />
+        <div
+          key={path}
+          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative animate-route-enter"
+        >
           <Outlet />
         </div>
       </main>

@@ -15,6 +15,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
+import { useReveal } from "@/hooks/use-reveal";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -224,12 +225,34 @@ function GoldDivider() {
 function FloatingParticles() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      {/* Aurora mesh + blobs */}
+      <div className="absolute inset-0 mesh-drift opacity-70" />
+      <div className="aurora-blob aurora-blob-slow top-[-10%] left-[10%] h-[42vw] w-[42vw] max-h-[520px] max-w-[520px] bg-primary/15" />
+      <div
+        className="aurora-blob aurora-blob-fast bottom-[-5%] right-[5%] h-[36vw] w-[36vw] max-h-[420px] max-w-[420px] bg-primary/10"
+        style={{ animationDelay: "-6s" }}
+      />
+      <div
+        className="aurora-blob top-[40%] left-[50%] h-[28vw] w-[28vw] max-h-[320px] max-w-[320px] -translate-x-1/2 bg-primary/8"
+        style={{ animationDelay: "-12s" }}
+      />
       <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
       <div className="absolute top-[40%] right-[15%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float-slow" style={{ animationDelay: "2s" }} />
       <div className="absolute top-[60%] left-[20%] w-1 h-1 rounded-full bg-primary/25 animate-float" style={{ animationDelay: "4s" }} />
       <div className="absolute top-[30%] right-[25%] w-2.5 h-2.5 rounded-full bg-primary/15 animate-float-slow" style={{ animationDelay: "1s" }} />
       <div className="absolute top-[70%] right-[10%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float" style={{ animationDelay: "3s" }} />
       <div className="absolute top-[15%] left-[40%] w-1 h-1 rounded-full bg-primary/25 animate-float-slow" style={{ animationDelay: "5s" }} />
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="absolute bottom-0 w-1 h-1 rounded-full bg-primary/35 particle-rise"
+          style={{
+            left: `${12 + i * 18}%`,
+            animationDelay: `${i * 2.2}s`,
+            animationDuration: `${10 + i * 1.5}s`,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -286,6 +309,7 @@ function Index() {
     avatar: string | null;
   } | null>(null);
   const navigate = useNavigate();
+  useReveal([me]);
 
   useEffect(() => {
     fetch("/api/me")
@@ -589,7 +613,7 @@ function Index() {
         <div className="absolute inset-0 bg-gradient-to-b from-primary/3 via-transparent to-primary/3 pointer-events-none" />
         <div className="mx-auto max-w-6xl px-6 py-24 relative">
           <div className="mb-16 flex flex-wrap items-end justify-between gap-6">
-            <div>
+            <div className="reveal-up">
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// platform</div>
               <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-2xl leading-tight tracking-tight text-gradient">
                 Everything you need to
@@ -597,18 +621,20 @@ function Index() {
                 automate at scale.
               </h2>
             </div>
-            <p className="max-w-sm text-sm text-muted-foreground">
+            <p className="max-w-sm text-sm text-muted-foreground reveal-up delay-2">
               A focused toolkit for operators. No bloat. No feature bingo. Six things, done
               properly.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
+            {FEATURES.map((f, i) => {
+              const delays = ["delay-1", "delay-2", "delay-3", "delay-4", "delay-5", "delay-6"] as const;
+              const delayClass = delays[Math.min(i, delays.length - 1)];
+              return (
               <div
                 key={f.tag}
-                className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/70 magnetic-hover holographic noise-texture"
-                style={{ animationDelay: `${i * 0.1}s` }}
+                className={`group relative rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/70 magnetic-hover holographic noise-texture shine-card reveal-up ${delayClass}`}
               >
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                 <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -619,7 +645,7 @@ function Index() {
                       {f.label}
                     </span>
                   </div>
-                  <div className="mb-4 h-12 w-12 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500 group-hover:scale-110">
+                  <div className="mb-4 h-12 w-12 rounded-xl bg-primary/10 border border-primary/15 flex items-center justify-center group-hover:bg-primary/20 group-hover:shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.2)] transition-all duration-500 icon-pop">
                     <f.Icon className="h-6 w-6 text-primary" />
                   </div>
                   <h3 className="font-display text-2xl font-semibold tracking-tight">{f.title}</h3>
@@ -629,7 +655,8 @@ function Index() {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       </section>
@@ -638,7 +665,7 @@ function Index() {
 
       {/* PRICING */}
       <section id="pricing" className="mx-auto max-w-6xl px-6 py-24 md:py-32">
-        <div className="mb-16 text-center">
+        <div className="mb-16 text-center reveal-up">
           <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// pricing</div>
           <h2 className="mt-3 font-display text-4xl md:text-6xl font-semibold tracking-tight text-gradient">
             Simple. Transparent. <span className="text-shimmer" style={{ textShadow: "0 0 40px color-mix(in oklch, var(--primary) 30%, transparent)" }}>Crypto.</span>
@@ -649,10 +676,13 @@ function Index() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3 items-start">
-          {PLANS.map((p) => (
+          {PLANS.map((p, pi) => {
+            const delays = ["delay-1", "delay-2", "delay-3"] as const;
+            const delayClass = delays[Math.min(pi, delays.length - 1)];
+            return (
             <div
               key={p.name}
-              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture ${
+              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture shine-card reveal-scale ${delayClass} ${
                 p.highlight
                   ? "border-2 border-primary/60 bg-card/80 lg:-translate-y-4 glow-primary pricing-glow holographic"
                   : "border border-border/40 bg-card/50 hover:border-primary/30 magnetic-hover holographic"
@@ -717,29 +747,30 @@ function Index() {
                       : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
                   }`}
                 >
-                  Get started
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+                   Get started
+                 </button>
+               )}
+             </div>
+            );
+          })}
+         </div>
+       </section>
 
-      <GoldDivider />
+       <GoldDivider />
 
-      {/* REVIEWS */}
-      <section className="bg-card/20 relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/3 via-transparent to-primary/3 pointer-events-none" />
-        <div className="mx-auto max-w-6xl px-6 py-24 relative">
-          <div className="mb-14 flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// reviews</div>
-              <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-xl leading-tight tracking-tight text-gradient">
-                Loved by operators
-                <br />
-                worldwide.
-              </h2>
-            </div>
+       {/* REVIEWS */}
+       <section className="bg-card/20 relative">
+         <div className="absolute inset-0 bg-gradient-to-b from-primary/3 via-transparent to-primary/3 pointer-events-none" />
+         <div className="mx-auto max-w-6xl px-6 py-24 relative">
+           <div className="mb-14 flex flex-wrap items-end justify-between gap-6">
+             <div className="reveal-left">
+               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// reviews</div>
+               <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-xl leading-tight tracking-tight text-gradient">
+                 Loved by operators
+                 <br />
+                 worldwide.
+               </h2>
+             </div>
             <div className="flex items-center gap-4">
               <div className="font-display text-5xl font-semibold text-gradient-gold">4.7</div>
               <div className="text-xs uppercase tracking-widest">

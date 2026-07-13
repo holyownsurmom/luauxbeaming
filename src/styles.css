@@ -1079,3 +1079,226 @@ html[data-theme="blue"] {
       inset 0 1px 0 color-mix(in oklch, oklch(1 0 0) 20%, transparent);
   }
 }
+
+/* ===================================================================
+   MOTION SYSTEM v2 — scroll reveals, aurora, mesh, route enter
+   =================================================================== */
+
+@utility reveal-scale {
+  opacity: 0;
+  transform: scale(0.94) translateY(12px);
+  transition:
+    opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.75s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  filter: blur(6px);
+}
+@utility reveal-left {
+  opacity: 0;
+  transform: translateX(-28px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@utility reveal-right {
+  opacity: 0;
+  transform: translateX(28px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  .reveal-scale.revealed {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  .reveal-left.revealed,
+  .reveal-right.revealed {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .reveal-up {
+    filter: blur(2px);
+    transition:
+      opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.75s cubic-bezier(0.16, 1, 0.3, 1),
+      filter 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .reveal-up.revealed {
+    filter: blur(0);
+  }
+}
+
+/* Stagger delays for reveal children */
+@utility delay-1 { transition-delay: 0.08s; animation-delay: 0.08s; }
+@utility delay-2 { transition-delay: 0.16s; animation-delay: 0.16s; }
+@utility delay-3 { transition-delay: 0.24s; animation-delay: 0.24s; }
+@utility delay-4 { transition-delay: 0.32s; animation-delay: 0.32s; }
+@utility delay-5 { transition-delay: 0.4s; animation-delay: 0.4s; }
+@utility delay-6 { transition-delay: 0.48s; animation-delay: 0.48s; }
+
+/* Aurora background blobs */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(4%, -3%) scale(1.05); }
+  66% { transform: translate(-3%, 4%) scale(0.96); }
+}
+@utility aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+  animation: aurora-drift 18s ease-in-out infinite;
+  will-change: transform;
+}
+@utility aurora-blob-slow {
+  animation-duration: 28s;
+}
+@utility aurora-blob-fast {
+  animation-duration: 12s;
+}
+
+/* Mesh / grid drift */
+@keyframes mesh-pan {
+  0% { background-position: 0 0; }
+  100% { background-position: 48px 48px; }
+}
+@utility mesh-drift {
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--primary) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--primary) 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: mesh-pan 20s linear infinite;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+}
+
+/* Soft spotlight follow (static center pulse) */
+@keyframes spotlight-breathe {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.08); }
+}
+@utility spotlight-pulse {
+  animation: spotlight-breathe 7s ease-in-out infinite;
+}
+
+/* Route / panel enter */
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.99);
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+@utility animate-route-enter {
+  animation: route-enter 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Icon pop on parent hover */
+@layer base {
+  .icon-pop {
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .group:hover .icon-pop {
+    transform: scale(1.12) rotate(-3deg);
+  }
+}
+
+/* Shine sweep on cards */
+@keyframes shine-sweep {
+  0% { transform: translateX(-120%) skewX(-15deg); }
+  100% { transform: translateX(220%) skewX(-15deg); }
+}
+@utility shine-card {
+  position: relative;
+  overflow: hidden;
+}
+@layer base {
+  .shine-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, oklch(1 0 0) 8%, transparent),
+      transparent
+    );
+    transform: translateX(-120%) skewX(-15deg);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .shine-card:hover::after {
+    animation: shine-sweep 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* Nav item glide */
+@layer base {
+  .nav-glide {
+    position: relative;
+    transition: color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+  }
+  .nav-glide::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    border-radius: 999px;
+    background: var(--primary);
+    transform: translateY(-50%);
+    transition: height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 0 12px color-mix(in oklch, var(--primary) 50%, transparent);
+  }
+  .nav-glide:hover::before,
+  .nav-glide[data-active="true"]::before {
+    height: 60%;
+  }
+  .nav-glide:hover {
+    transform: translateX(2px);
+  }
+}
+
+/* Blob float particles denser */
+@keyframes particle-rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  15% { opacity: 0.6; }
+  85% { opacity: 0.4; }
+  100% { transform: translateY(-40vh) scale(0.6); opacity: 0; }
+}
+@utility particle-rise {
+  animation: particle-rise 12s linear infinite;
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up,
+  .reveal-scale,
+  .reveal-left,
+  .reveal-right {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
+  .aurora-blob,
+  .mesh-drift,
+  .spotlight-pulse,
+  .particle-rise,
+  .animate-route-enter,
+  .stagger-cascade > * {
+    animation: none !important;
+  }
+}

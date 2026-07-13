@@ -245,7 +245,7 @@ function BotsPage() {
     };
   }, [handleMsAuthMessage]);
 
-  // Backup poll for MS auth codes (SSE can lag or miss on Lovable)
+  // Backup poll for MS auth codes (SSE can lag or miss)
   useEffect(() => {
     const poll = async () => {
       try {

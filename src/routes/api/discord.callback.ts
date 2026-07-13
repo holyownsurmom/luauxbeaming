@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSession } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
-import { sessionConfig } from "@/lib/luaux-server.server";
+import { envStr, sessionConfig, siteOrigin } from "@/lib/luaux-server.server";
 import { getClientIp, checkVpn } from "@/lib/vpn-check";
 
 type StoredUser = {
@@ -27,17 +27,38 @@ export const Route = createFileRoute("/api/discord/callback")({
         const state = url.searchParams.get("state");
         const session = await useSession<SessionData>(sessionConfig());
 
-        if (!code || !state || state !== session.data.oauth_state) {
-          return new Response("Invalid OAuth state", { status: 400 });
+        if (!code || !state) {
+          return new Response("Missing OAuth code/state", { status: 400 });
+        }
+        if (!session.data.oauth_state) {
+          return new Response(
+            "Login session expired (cookie missing). Clear cookies for luaux.wtf and try again from https://luaux.wtf",
+            { status: 400 },
+          );
+        }
+        if (state !== session.data.oauth_state) {
+          return new Response("Invalid OAuth state — start login again from the site", {
+            status: 400,
+          });
         }
 
-        const redirect_uri = `${url.origin}/api/discord/callback`;
+        const origin = siteOrigin(request);
+        // Must exactly match the redirect_uri used in /api/discord/login
+        const redirect_uri = `${origin}/api/discord/callback`;
+
+        const clientId = envStr("DISCORD_CLIENT_ID");
+        const clientSecret = envStr("DISCORD_CLIENT_SECRET");
+        if (!clientId || !clientSecret || !origin) {
+          console.error("[discord] missing DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / SITE_URL");
+          return new Response("Discord OAuth is not configured", { status: 503 });
+        }
+
         const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            client_id: process.env.DISCORD_CLIENT_ID!,
-            client_secret: process.env.DISCORD_CLIENT_SECRET!,
+            client_id: clientId,
+            client_secret: clientSecret,
             grant_type: "authorization_code",
             code,
             redirect_uri,
@@ -45,8 +66,17 @@ export const Route = createFileRoute("/api/discord/callback")({
         });
         if (!tokenRes.ok) {
           const t = await tokenRes.text();
-          console.error("[discord] token exchange failed", tokenRes.status, t);
-          return new Response("Token exchange failed", { status: 502 });
+          console.error(
+            "[discord] token exchange failed",
+            tokenRes.status,
+            t,
+            "redirect_uri=",
+            redirect_uri,
+          );
+          return new Response(
+            `Token exchange failed (${tokenRes.status}). Discord redirect must be exactly:\n${redirect_uri}\n\nDiscord said: ${t.slice(0, 300)}`,
+            { status: 502 },
+          );
         }
         const tokens = (await tokenRes.json()) as { access_token: string };
 
@@ -64,8 +94,8 @@ export const Route = createFileRoute("/api/discord/callback")({
         };
 
         const db = createClient(
-          process.env.SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          envStr("SUPABASE_URL"),
+          envStr("SUPABASE_SERVICE_ROLE_KEY"),
           { auth: { persistSession: false, autoRefreshToken: false } },
         );
 
@@ -110,21 +140,24 @@ export const Route = createFileRoute("/api/discord/callback")({
           vpnBlocked = vpnResult.vpn;
         }
 
-        const joinRes = await fetch(
-          `https://discord.com/api/guilds/${process.env.DISCORD_GUILD_ID}/members/${user.id}`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
-              "Content-Type": "application/json",
+        const guildId = envStr("DISCORD_GUILD_ID");
+        const botToken = envStr("DISCORD_BOT_TOKEN");
+        if (guildId && botToken) {
+          const joinRes = await fetch(
+            `https://discord.com/api/guilds/${guildId}/members/${user.id}`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bot ${botToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ access_token: tokens.access_token }),
             },
-            body: JSON.stringify({ access_token: tokens.access_token }),
-          },
-        );
-        if (!joinRes.ok && joinRes.status !== 204 && joinRes.status !== 201) {
-          console.warn("[discord] guild join non-fatal", joinRes.status, await joinRes.text());
+          );
+          if (!joinRes.ok && joinRes.status !== 204 && joinRes.status !== 201) {
+            console.warn("[discord] guild join non-fatal", joinRes.status, await joinRes.text());
+          }
         }
-
         const avatarUrl = user.avatar
           ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`
           : null;

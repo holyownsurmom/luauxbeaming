@@ -11,13 +11,42 @@ export type LuauxSessionUser = {
 
 type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean; vpnBlocked?: boolean };
 
+/** Strip accidental quotes from env values (common when pasting into Vercel/CLI) */
+export function envStr(name: string, fallback = ""): string {
+  const raw = process.env[name] ?? fallback;
+  let v = String(raw).trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
+export function siteOrigin(request?: Request): string {
+  const site = envStr("SITE_URL").replace(/\/$/, "");
+  if (site) return site;
+  if (request) {
+    const xfHost = request.headers.get("x-forwarded-host");
+    const xfProto = request.headers.get("x-forwarded-proto") || "https";
+    if (xfHost) return `${xfProto}://${xfHost}`.replace(/\/$/, "");
+    try {
+      return new URL(request.url).origin.replace(/\/$/, "");
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
 export const sessionConfig = () => ({
-  password: process.env.SESSION_SECRET!,
+  password: envStr("SESSION_SECRET") || "dev-only-session-secret-change-me-32b",
   name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 7, // 7 days (was 30)
+  maxAge: 60 * 60 * 24 * 7, // 7 days
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production" || !!process.env.LOVABLE_PROJECT_ID,
+    secure: true,
     sameSite: "lax" as const,
     path: "/",
   },

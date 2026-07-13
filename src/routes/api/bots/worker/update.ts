@@ -22,7 +22,8 @@ async function notifyErrorDiscord(userId: string, jobType: string, errorMsg: str
     jobType === "secure" ? "Verification Bot" :
     "Bot";
 
-  const message = `⚠️ **${typeLabel}** crashed or errored.\n\n**Error:** \`${errorMsg.slice(0, 500)}\`\n\nCheck your logs at https://luauxbeaming.lovable.app/dashboard/logs`;
+  const site = (process.env.SITE_URL || "https://luaux.wtf").replace(/\/$/, "");
+  const message = `⚠️ **${typeLabel}** crashed or errored.\n\n**Error:** \`${errorMsg.slice(0, 500)}\`\n\nCheck your logs at ${site}/dashboard/logs`;
 
   try {
     const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {

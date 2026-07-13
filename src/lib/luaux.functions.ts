@@ -213,7 +213,7 @@ async function createNowPaymentsInvoice(opts: {
   const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      "NOWPAYMENTS_API_KEY is not set. Add it in Lovable env / .env to create invoices.",
+      "NOWPAYMENTS_API_KEY is not set. Add it in Vercel env / .env to create invoices.",
     );
   }
 
@@ -223,11 +223,11 @@ async function createNowPaymentsInvoice(opts: {
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/^https?:\/\//, "")}`
       : "") ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+    "https://luaux.wtf";
   const ipn =
     process.env.IPN_CALLBACK_URL?.trim() ||
-    (siteBase ? `${siteBase}/api/public/nowpayments/webhook` : "") ||
-    "https://luauxbeaming.lovable.app/api/public/nowpayments/webhook";
+    `${siteBase}/api/public/nowpayments/webhook`;
 
   const res = await fetch("https://api.nowpayments.io/v1/payment", {
     method: "POST",

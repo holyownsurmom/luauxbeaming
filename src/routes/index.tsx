@@ -34,9 +34,9 @@ export const Route = createFileRoute("/")({
           "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
       },
       { property: "og:type", content: "website" },
-      { property: "og:url", content: "https://luauxbeaming.lovable.app/" },
+      { property: "og:url", content: "https://luaux.wtf/" },
     ],
-    links: [{ rel: "canonical", href: "https://luauxbeaming.lovable.app/" }],
+    links: [{ rel: "canonical", href: "https://luaux.wtf/" }],
     scripts: [
       {
         type: "application/ld+json",

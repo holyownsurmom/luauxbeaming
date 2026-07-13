@@ -1,4 +1,4 @@
--- Bot jobs table: Lovable UI writes here, bot-worker picks up
+-- Bot jobs table: site UI writes here, bot-worker picks up
 CREATE TABLE public.bot_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   discord_id TEXT NOT NULL REFERENCES public.profiles(discord_id) ON DELETE CASCADE,
@@ -19,7 +19,7 @@ GRANT ALL ON public.bot_jobs TO service_role;
 ALTER TABLE public.bot_jobs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "service role only" ON public.bot_jobs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Bot logs table: bot-worker writes here, Lovable UI reads
+-- Bot logs table: bot-worker writes here, site UI reads
 CREATE TABLE public.bot_logs (
   id BIGSERIAL PRIMARY KEY,
   job_id UUID NOT NULL REFERENCES public.bot_jobs(id) ON DELETE CASCADE,

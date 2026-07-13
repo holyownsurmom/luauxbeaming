@@ -2,7 +2,7 @@
 
 Runs Minecraft and Discord bots on a real Node.js host (Railway, Fly.io, or VPS).
 
-The Lovable site (UI, auth, payments) writes job rows to Supabase. This worker picks them up, runs the actual bots, and writes logs back.
+The LuauX site (UI, auth, payments) on Vercel writes jobs via the worker API. This worker picks them up, runs the bots, and writes logs back.
 
 ## Setup
 
@@ -14,11 +14,11 @@ The Lovable site (UI, auth, payments) writes job rows to Supabase. This worker p
 
 1. Push this `bot-worker/` directory to a GitHub repo (or use a subfolder)
 2. Create a new Railway project
-3. Set environment variables in Railway dashboard:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `WORKER_ID` (e.g. `worker-1`)
-   - `POLL_INTERVAL_MS` (default `3000`)
+ 3. Set environment variables in Railway dashboard:
+    - `SITE_URL` (e.g. `https://luaux.wtf`)
+    - `WORKER_SECRET` (must match the site)
+    - `WORKER_ID` (e.g. `worker-1`)
+    - `POLL_INTERVAL_MS` (default `3000`)
 4. Railway will auto-deploy from your repo
 
 ## Deploy to Fly.io

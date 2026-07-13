@@ -3,4 +3,4 @@ Allow: /
 Disallow: /dashboard
 Disallow: /api/
 
-Sitemap: https://luauxbeaming.lovable.app/sitemap.xml
+Sitemap: https://luaux.wtf/sitemap.xml

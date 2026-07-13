@@ -1,4 +1,4 @@
-# LuauX Full Setup Guide
+﻿# LuauX Full Setup Guide
 
 Complete step-by-step guide to deploy the LuauX Minecraft bot management platform from scratch.
 
@@ -8,8 +8,8 @@ Complete step-by-step guide to deploy the LuauX Minecraft bot management platfor
 
 1. [What You're Building](#1-what-youre-building)
 2. [Prerequisites](#2-prerequisites)
-3. [Deploy the Lovable Site](#3-deploy-the-lovable-site)
-4. [Configure Lovable Environment Variables](#4-configure-lovable-environment-variables)
+3. [Deploy the LuauX site](#3-deploy-the-hosting-site)
+4. [Configure Vercel environment Variables](#4-configure-hosting-environment-variables)
 5. [Configure Discord OAuth2](#5-configure-discord-oauth2)
 6. [Run All Database Migrations](#6-run-all-database-migrations)
 7. [Set Up the Bot Worker on Your VPS](#7-set-up-the-bot-worker-on-your-vps)
@@ -33,28 +33,28 @@ A web platform where users:
 - View live terminal-style console output for all running bots
 
 ```
-┌─────────────────────────────┐       HTTP (REST API)        ┌───────────────────────┐
-│  Lovable Site                │◄──────────────────────────────►│  Bot Worker            │
-│  (UI + Auth + Payments)      │                                │  (Your VPS)            │
-│                              │  - POST /api/bots/worker/poll  │                       │
-│  Cloudflare edge runtime     │  - POST /api/bots/worker/log   │  Runs MC mineflayer   │
-│  Managed Supabase (DB+RLS)   │  - POST /api/bots/worker/update│  Runs Discord HTTP    │
-│  Discord OAuth2              │                                │  spam bots             │
-│  NOWPayments crypto gateway  │                                │  No Supabase creds    │
-└─────────────────────────────┘                                │  needed on worker      │
-                                                                └───────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”       HTTP (REST API)        â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  LuauX site                â”‚â—„â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–ºâ”‚  Bot Worker            â”‚
+â”‚  (UI + Auth + Payments)      â”‚                                â”‚  (Your VPS)            â”‚
+â”‚                              â”‚  - POST /api/bots/worker/poll  â”‚                       â”‚
+â”‚  Cloudflare edge runtime     â”‚  - POST /api/bots/worker/log   â”‚  Runs MC mineflayer   â”‚
+â”‚  Managed Supabase (DB+RLS)   â”‚  - POST /api/bots/worker/updateâ”‚  Runs Discord HTTP    â”‚
+â”‚  Discord OAuth2              â”‚                                â”‚  spam bots             â”‚
+â”‚  NOWPayments crypto gateway  â”‚                                â”‚  No Supabase creds    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                                â”‚  needed on worker      â”‚
+                                                                â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-**Key design**: The bot worker has NO access to the database. It communicates with the Lovable site exclusively via HTTP REST API endpoints. The Lovable site acts as the bridge between the worker and Supabase.
+**Key design**: The bot worker has NO access to the database. It communicates with the LuauX site exclusively via HTTP REST API endpoints. The LuauX site acts as the bridge between the worker and Supabase.
 
 ---
 
 ## 2. Prerequisites
 
-### For the Lovable site (hosted)
+### For the LuauX site (hosted)
 
-- [Lovable](https://lovable.dev) account (free tier works)
-- GitHub repository connected to Lovable
+- [Vercel](https://vercel.com) account (free tier works)
+- GitHub repository connected to hosting
 
 ### For the bot worker (your VPS)
 
@@ -67,15 +67,15 @@ A web platform where users:
 
 - [Discord Developer Portal](https://discord.com/developers/applications) account
 - [NOWPayments](https://nowpayments.io) account (merchant)
-- [Supabase](https://supabase.com) (managed by Lovable — don't create one manually)
+- [Supabase](https://supabase.com) (managed by hosting â€” don't create one manually)
 
 ---
 
-## 3. Deploy the Lovable Site
+## 3. Deploy the LuauX site
 
 ### 3a. Push the code to GitHub
 
-The repository must be connected to your Lovable project.
+The repository must be connected to your Vercel project.
 
 ```bash
 cd luauxbeaming
@@ -84,17 +84,17 @@ git commit -m "initial deploy"
 git push origin main
 ```
 
-Lovable auto-deploys on every push to the connected branch.
+hosting auto-deploys on every push to the connected branch.
 
 ### 3b. Wait for the first deploy
 
-Go to [Lovable Dashboard](https://lovable.dev/projects) → your project. Watch the build logs. The first deploy takes 2-3 minutes. When it's done you'll see a live URL like `https://luauxbeaming.lovable.app`.
+Go to [Vercel Dashboard](https://hosting.dev/projects) â†’ your project. Watch the build logs. The first deploy takes 2-3 minutes. When it's done you'll see a live URL like `https://luaux.wtf`.
 
 ---
 
-## 4. Configure Lovable Environment Variables
+## 4. Configure Vercel environment Variables
 
-Go to your Lovable project → **Settings** (gear icon) → **Environment Variables**.
+Go to your Vercel project â†’ **Settings** (gear icon) â†’ **Environment Variables**.
 
 Add every variable in this table. **Do not skip any.**
 
@@ -103,16 +103,16 @@ Add every variable in this table. **Do not skip any.**
 | `SESSION_SECRET`         | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Encrypts session cookies. Never change after first deploy.                         |
 | `ADMIN_PASSWORD`         | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Password to unlock admin mode in the dashboard.                                    |
 | `WORKER_SECRET`          | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Shared secret between site and bot worker. Must match exactly.                     |
-| `IPN_CALLBACK_URL`       | `https://luauxbeaming.lovable.app/api/public/nowpayments/webhook`  | NOWPayments sends payment confirmations here.                                      |
-| `DISCORD_CLIENT_ID`      | Your Discord app client ID                                         | From Discord Developer Portal → OAuth2 → Client Information                        |
-| `DISCORD_CLIENT_SECRET`  | Your Discord app client secret                                     | From Discord Developer Portal → OAuth2 → Client Information                        |
-| `DISCORD_BOT_TOKEN`      | Your Discord bot token                                             | From Discord Developer Portal → Bot → Token. Used for auto-joining guilds and DMs. |
-| `NOWPAYMENTS_API_KEY`    | Your NOWPayments API key                                           | From NOWPayments Dashboard → Merchant → API Keys                                   |
-| `NOWPAYMENTS_IPN_SECRET` | Your NOWPayments IPN secret                                        | From NOWPayments Dashboard → Merchant → IPN. Used to verify webhook signatures.    |
+| `IPN_CALLBACK_URL`       | `https://luaux.wtf/api/public/nowpayments/webhook`  | NOWPayments sends payment confirmations here.                                      |
+| `DISCORD_CLIENT_ID`      | Your Discord app client ID                                         | From Discord Developer Portal â†’ OAuth2 â†’ Client Information                        |
+| `DISCORD_CLIENT_SECRET`  | Your Discord app client secret                                     | From Discord Developer Portal â†’ OAuth2 â†’ Client Information                        |
+| `DISCORD_BOT_TOKEN`      | Your Discord bot token                                             | From Discord Developer Portal â†’ Bot â†’ Token. Used for auto-joining guilds and DMs. |
+| `NOWPAYMENTS_API_KEY`    | Your NOWPayments API key                                           | From NOWPayments Dashboard â†’ Merchant â†’ API Keys                                   |
+| `NOWPAYMENTS_IPN_SECRET` | Your NOWPayments IPN secret                                        | From NOWPayments Dashboard â†’ Merchant â†’ IPN. Used to verify webhook signatures.    |
 
-> **DO NOT set** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or `SUPABASE_ANON_KEY`. Lovable manages these automatically. Setting them manually will break things.
+> **DO NOT set** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, or `SUPABASE_ANON_KEY`. hosting manages these automatically. Setting them manually will break things.
 
-After adding all variables, click **Save** and Lovable will trigger a redeploy.
+After adding all variables, click **Save** and hosting will trigger a redeploy.
 
 ---
 
@@ -121,10 +121,10 @@ After adding all variables, click **Save** and Lovable will trigger a redeploy.
 ### 5a. Create a Discord Application
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
-2. Click **New Application** → name it (e.g. "LuauX") → **Create**
+2. Click **New Application** â†’ name it (e.g. "LuauX") â†’ **Create**
 3. Go to **OAuth2** in the left sidebar
 4. Copy the **Client ID** and **Client Secret** (generate one if needed)
-5. Paste these into the Lovable environment variables as `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`
+5. Paste these into the Vercel environment variables as `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET`
 
 ### 5b. Set the Redirect URI
 
@@ -133,7 +133,7 @@ In the same OAuth2 page:
 1. Under **Redirects**, click **Add Redirect**
 2. Enter:
    ```
-   https://luauxbeaming.lovable.app/api/discord/callback
+   https://luaux.wtf/api/discord/callback
    ```
 3. Click **Save Changes**
 
@@ -141,7 +141,7 @@ In the same OAuth2 page:
 
 1. In the Developer Portal, go to **Bot** in the left sidebar
 2. Under **Token**, click **Reset Token** and copy it
-3. Paste it into the Lovable env var `DISCORD_BOT_TOKEN`
+3. Paste it into the Vercel env var `DISCORD_BOT_TOKEN`
 4. Under **Privileged Gateway Intents**, enable:
    - **Message Content Intent** (required)
    - **Server Members Intent** (recommended)
@@ -149,7 +149,7 @@ In the same OAuth2 page:
 
 ### 5d. Invite the bot to your server
 
-1. Go to **OAuth2** → **URL Generator**
+1. Go to **OAuth2** â†’ **URL Generator**
 2. Under **Scopes**, check `bot`
 3. Under **Bot Permissions**, check:
    - Send Messages
@@ -163,11 +163,11 @@ In the same OAuth2 page:
 
 ## 6. Run All Database Migrations
 
-The Lovable-managed Supabase starts empty. You must create all tables manually using the SQL Editor.
+The hosting-managed Supabase starts empty. You must create all tables manually using the SQL Editor.
 
 ### 6a. Open the SQL Editor
 
-1. Go to your Lovable project → **Cloud** tab → **Database** → **SQL Editor**
+1. Go to your Vercel project â†’ **Cloud** tab â†’ **Database** â†’ **SQL Editor**
 2. You'll see an empty editor. Paste SQL here and click **Run**.
 
 ### 6b. Run this SQL (all tables in one block)
@@ -308,7 +308,7 @@ CREATE POLICY "service role only" ON public.verification_keys
 
 -- ============================================================
 -- TABLE: bot_jobs
--- Lovable UI writes pending jobs, bot-worker claims and runs them
+-- hosting UI writes pending jobs, bot-worker claims and runs them
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.bot_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -333,7 +333,7 @@ CREATE POLICY "service role only" ON public.bot_jobs FOR ALL TO service_role USI
 
 -- ============================================================
 -- TABLE: bot_logs
--- Bot-worker writes log entries, Lovable UI reads them
+-- Bot-worker writes log entries, hosting UI reads them
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.bot_logs (
   id BIGSERIAL PRIMARY KEY,
@@ -366,7 +366,7 @@ You should see: `bot_jobs`, `bot_logs`, `mc_accounts`, `payments`, `plans`, `pro
 
 ## 7. Set Up the Bot Worker on Your VPS
 
-The bot worker is a standalone Node.js application. It runs on your VPS and polls the Lovable site for jobs.
+The bot worker is a standalone Node.js application. It runs on your VPS and polls the LuauX site for jobs.
 
 ### 7a. Copy bot-worker to the VPS
 
@@ -380,16 +380,16 @@ The folder should contain:
 
 ```
 bot-worker/
-├── src/
-│   ├── index.ts       # Main entry point — poll loop + graceful shutdown
-│   ├── api.ts         # HTTP client for the Lovable REST API
-│   ├── mc.ts          # Mineflayer MC bot logic
-│   └── discord.ts     # Discord HTTP API spam logic
-├── package.json
-├── tsconfig.json
-├── .env               # ← You create this
-├── .env.example       # Reference template
-└── .gitignore
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ index.ts       # Main entry point â€” poll loop + graceful shutdown
+â”‚   â”œâ”€â”€ api.ts         # HTTP client for the hosting REST API
+â”‚   â”œâ”€â”€ mc.ts          # Mineflayer MC bot logic
+â”‚   â””â”€â”€ discord.ts     # Discord HTTP API spam logic
+â”œâ”€â”€ package.json
+â”œâ”€â”€ tsconfig.json
+â”œâ”€â”€ .env               # â† You create this
+â”œâ”€â”€ .env.example       # Reference template
+â””â”€â”€ .gitignore
 ```
 
 ### 7b. Install Node.js 22+
@@ -419,13 +419,13 @@ This installs `mineflayer`, `dotenv`, and dev tools. It takes about 30 seconds.
 Create a file called `.env` (no extension, just `.env`) in the `bot-worker/` folder with these exact contents:
 
 ```
-SITE_URL=https://luauxbeaming.lovable.app
+SITE_URL=https://luaux.wtf
 WORKER_SECRET=f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78
 WORKER_ID=worker-1
 POLL_INTERVAL_MS=3000
 ```
 
-> **CRITICAL**: The `WORKER_SECRET` here must **exactly match** the `WORKER_SECRET` you set in Lovable environment variables in Step 4. If even one character is different, all requests will fail with 401 Unauthorized.
+> **CRITICAL**: The `WORKER_SECRET` here must **exactly match** the `WORKER_SECRET` you set in Vercel environment variables in Step 4. If even one character is different, all requests will fail with 401 Unauthorized.
 
 ### 7e. Test the worker
 
@@ -442,7 +442,7 @@ You should see:
 [worker] poll ok: 0 pending jobs
 ```
 
-Leave this terminal open. The worker is now running and polling the Lovable site every 3 seconds for new jobs.
+Leave this terminal open. The worker is now running and polling the LuauX site every 3 seconds for new jobs.
 
 **If you see errors**, check the [Troubleshooting](#11-troubleshooting) section.
 
@@ -475,7 +475,7 @@ pm2 restart luaux-worker
 **Option B: Windows Task Scheduler**
 
 1. Open Task Scheduler
-2. Create Basic Task → name it "LuauX Bot Worker"
+2. Create Basic Task â†’ name it "LuauX Bot Worker"
 3. Trigger: "At log on"
 4. Action: "Start a program"
    - Program: `C:\Program Files\nodejs\node.exe`
@@ -487,9 +487,9 @@ pm2 restart luaux-worker
 
 ## 8. Test Everything
 
-### 8a. Test the Lovable site
+### 8a. Test the LuauX site
 
-1. Open `https://luauxbeaming.lovable.app` in your browser
+1. Open `https://luaux.wtf` in your browser
 2. Click **Login with Discord**
 3. Authorize the app on Discord
 4. You should see the dashboard
@@ -497,15 +497,15 @@ pm2 restart luaux-worker
 ### 8b. Test MC Auto-Message
 
 1. Go to the **MC Auto-Message** page in the dashboard
-2. Click the **Settings** tab → **Admin** sub-tab
+2. Click the **Settings** tab â†’ **Admin** sub-tab
 3. Enter the admin password: `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`
 4. You should see "ADMIN" badge appear
 5. Go back to **MC Auto-Message**
 6. Add a Minecraft account:
    - **Label**: any name (e.g. "Test Bot")
    - **Auth Type**: pick based on your server:
-     - `offline` — for cracked/offline-mode servers (no credentials needed, just a username)
-     - `ssid` — for premium servers (requires SSID token + username + UUID)
+     - `offline` â€” for cracked/offline-mode servers (no credentials needed, just a username)
+     - `ssid` â€” for premium servers (requires SSID token + username + UUID)
    - **Username**: your Minecraft username
    - For SSID auth: also fill in **SSID token** and **UUID**
 7. Enter the **Server Configuration**:
@@ -513,7 +513,7 @@ pm2 restart luaux-worker
    - **Server Port**: `25565` (default)
    - **Messages**: type messages, one per line
    - **Interval**: seconds between messages (default: 5)
-8. Click **Ping Server** — should show player count and MOTD
+8. Click **Ping Server** â€” should show player count and MOTD
 9. Click **Launch** on the account
 10. You should see live console output within 3-5 seconds
 11. Click **Stop** to shut down the bot
@@ -526,7 +526,7 @@ Your SSID token is the Minecraft session access token. The UUID is your player's
 
 1. Go to https://namemc.com/profile/YourUsername
 2. Your UUID is displayed on the profile page (with dashes, e.g. `12345678-abcd-1234-abcd-123456789abc`)
-3. Enter it in the UUID field — dashes are automatically removed
+3. Enter it in the UUID field â€” dashes are automatically removed
 
 **Method 2: Mojang API**
 
@@ -544,7 +544,7 @@ Your SSID token is the Minecraft session access token. The UUID is your player's
    - Go to the **Network** tab
    - Click on any channel to trigger a request
    - Find a request to `discord.com/api/v9/channels/...`
-   - Click on it → **Headers** tab → find the `Authorization` header
+   - Click on it â†’ **Headers** tab â†’ find the `Authorization` header
    - Copy the value (it's a long string, does NOT start with "Bot")
 3. Enter the token, channel ID, and messages
 4. Click **Start Spamming**
@@ -577,17 +577,17 @@ Admin is password-based, not a database role. Anyone who enters the correct pass
 2. Click the **Admin** sub-tab
 3. Enter the admin password
 4. Click **Login**
-5. The page reloads — you should see "ADMIN" badge
+5. The page reloads â€” you should see "ADMIN" badge
 
 ### Logout
 
-1. Settings → Admin → click **Logout**
+1. Settings â†’ Admin â†’ click **Logout**
 
 ### Change the password
 
-1. Go to Lovable Dashboard → Settings → Environment Variables
+1. Go to Vercel Dashboard â†’ Settings â†’ Environment Variables
 2. Update `ADMIN_PASSWORD` to a new value
-3. Save — Lovable will redeploy
+3. Save â€” hosting will redeploy
 
 ---
 
@@ -597,83 +597,83 @@ Admin is password-based, not a database role. Anyone who enters the correct pass
 
 ```
 User clicks "Launch"
-       │
-       ▼
-POST /api/bots/mc/start  →  bot_jobs row (status: pending, config: JSONB)
-       │
-       ▼
+       â”‚
+       â–¼
+POST /api/bots/mc/start  â†’  bot_jobs row (status: pending, config: JSONB)
+       â”‚
+       â–¼
 Bot-worker polls POST /api/bots/worker/poll  every 3 seconds
-       │
-       ▼
-Worker claims the job  →  bot_jobs row (status: running, worker_id: "worker-1")
-       │
-       ▼
+       â”‚
+       â–¼
+Worker claims the job  â†’  bot_jobs row (status: running, worker_id: "worker-1")
+       â”‚
+       â–¼
 Worker runs mineflayer bot with the user's config (SSID, server, messages, interval)
-       │
-       ▼
+       â”‚
+       â–¼
 Bot connects to Minecraft server, sends messages on interval
-       │
-       ▼
+       â”‚
+       â–¼
 Worker posts logs to POST /api/bots/worker/log  (batched every 2 seconds)
-       │
-       ▼
+       â”‚
+       â–¼
 Frontend reads logs via SSE endpoint (polls every 2 seconds)
-       │
-       ▼
-User clicks "Stop"  →  API sets status to "stopping"
-       │
-       ▼
+       â”‚
+       â–¼
+User clicks "Stop"  â†’  API sets status to "stopping"
+       â”‚
+       â–¼
 Worker detects stop signal on next poll, aborts the bot
-       │
-       ▼
-Worker sets status to "completed"  →  job done
+       â”‚
+       â–¼
+Worker sets status to "completed"  â†’  job done
 ```
 
 ### Discord Auto-Spam Flow
 
 ```
 User enters token + channel + messages, clicks "Start"
-       │
-       ▼
-POST /api/bots/discord/start  →  bot_jobs row (status: pending)
-       │
-       ▼
+       â”‚
+       â–¼
+POST /api/bots/discord/start  â†’  bot_jobs row (status: pending)
+       â”‚
+       â–¼
 Bot-worker picks up the job
-       │
-       ▼
+       â”‚
+       â–¼
 Worker sends messages via Discord HTTP API (POST discord.com/api/v9/channels/{id}/messages)
-       │
-       ├── Random delays between messages (humanization)
-       ├── Auto-delete sent messages (optional)
-       ├── Handles rate limits (429 responses)
-       └── No Gateway connection — pure HTTP
+       â”‚
+       â”œâ”€â”€ Random delays between messages (humanization)
+       â”œâ”€â”€ Auto-delete sent messages (optional)
+       â”œâ”€â”€ Handles rate limits (429 responses)
+       â””â”€â”€ No Gateway connection â€” pure HTTP
 ```
 
 ### Payment Flow
 
 ```
 User clicks "Buy" on a plan
-       │
-       ▼
-POST /api/public/nowpayments/create  →  NOWPayments creates invoice
-       │
-       ▼
+       â”‚
+       â–¼
+POST /api/public/nowpayments/create  â†’  NOWPayments creates invoice
+       â”‚
+       â–¼
 User sees crypto wallet address + amount
-       │
-       ▼
+       â”‚
+       â–¼
 User sends crypto (LTC, SOL, USDT, USDC)
-       │
-       ▼
+       â”‚
+       â–¼
 NOWPayments sends webhook to POST /api/public/nowpayments/webhook
-       │
-       ├── Verifies IPN signature (HMAC-SHA512)
-       ├── Checks confirmations (waits for 2+)
-       │
-       ▼
+       â”‚
+       â”œâ”€â”€ Verifies IPN signature (HMAC-SHA512)
+       â”œâ”€â”€ Checks confirmations (waits for 2+)
+       â”‚
+       â–¼
 On payment confirmed:
-  ├── Plan purchases  →  sets active_plan_id + plan_expires_at + bot_hours
-  ├── Plugin purchases →  generates license key + DMs it to user
-  └── Hours-only packs →  adds bot hours + sets plan expiry
+  â”œâ”€â”€ Plan purchases  â†’  sets active_plan_id + plan_expires_at + bot_hours
+  â”œâ”€â”€ Plugin purchases â†’  generates license key + DMs it to user
+  â””â”€â”€ Hours-only packs â†’  adds bot hours + sets plan expiry
 ```
 
 ---
@@ -690,10 +690,10 @@ On payment confirmed:
 
 ### Bot doesn't start / no console output
 
-1. Check the bot-worker terminal — is it running? Any errors?
-2. Check the Lovable deploy — did it succeed?
-3. Check that `WORKER_SECRET` matches exactly in both Lovable env vars AND bot-worker `.env`
-4. Open browser DevTools → Network → check if `/api/bots/worker/poll` returns 200
+1. Check the bot-worker terminal â€” is it running? Any errors?
+2. Check the hosting deploy â€” did it succeed?
+3. Check that `WORKER_SECRET` matches exactly in both Vercel env vars AND bot-worker `.env`
+4. Open browser DevTools â†’ Network â†’ check if `/api/bots/worker/poll` returns 200
 
 ### Discord login goes to localhost
 
@@ -701,18 +701,18 @@ On payment confirmed:
 
 ### Logs not showing in real-time
 
-- The SSE stream polls every 2 seconds — a slight delay is normal
+- The SSE stream polls every 2 seconds â€” a slight delay is normal
 - Check bot-worker terminal for any connection errors
 
 ### Bot worker shows "poll failed: 401"
 
-- `WORKER_SECRET` doesn't match between Lovable env vars and bot-worker `.env`
+- `WORKER_SECRET` doesn't match between Vercel env vars and bot-worker `.env`
 - Copy-paste the exact same value into both places
 
 ### Bot worker shows "poll failed: 404"
 
-- The Lovable site hasn't deployed the worker API endpoints yet
-- Push the latest code to GitHub and wait for Lovable to rebuild (check deploy logs)
+- The LuauX site hasn't deployed the worker API endpoints yet
+- Push the latest code to GitHub and wait for hosting to rebuild (check deploy logs)
 
 ### mineflayer won't connect to server
 
@@ -730,9 +730,9 @@ On payment confirmed:
 
 ### Discord spam isn't sending
 
-- Your user token may be invalid or expired — get a fresh one from DevTools
-- The channel ID must be correct (right-click channel → Copy ID with Developer Mode enabled)
-- Discord may be rate-limiting — check the console for 429 errors
+- Your user token may be invalid or expired â€” get a fresh one from DevTools
+- The channel ID must be correct (right-click channel â†’ Copy ID with Developer Mode enabled)
+- Discord may be rate-limiting â€” check the console for 429 errors
 - **Warning**: Using user tokens (self-botting) violates Discord TOS and can result in account ban
 
 ### VPS RDP won't connect
@@ -747,90 +747,90 @@ On payment confirmed:
 
 ```
 luauxbeaming/
-├── src/
-│   ├── routes/
-│   │   ├── api/
-│   │   │   ├── admin/
-│   │   │   │   ├── login.ts              # Admin password → session.isAdmin
-│   │   │   │   └── logout.ts             # Clears isAdmin from session
-│   │   │   ├── bots/
-│   │   │   │   ├── mc/
-│   │   │   │   │   ├── start.ts          # Creates bot_jobs row (type: mc)
-│   │   │   │   │   ├── stop.ts           # Sets job status to "stopping"
-│   │   │   │   │   ├── status.ts         # Returns current bot status
-│   │   │   │   │   └── ping.ts           # Pings MC server via api.mcsrvstat.us
-│   │   │   │   ├── discord/
-│   │   │   │   │   ├── start.ts          # Creates bot_jobs row (type: discord)
-│   │   │   │   │   ├── stop.ts           # Sets job status to "stopping"
-│   │   │   │   │   └── status.ts         # Returns current bot status
-│   │   │   │   ├── worker/
-│   │   │   │   │   ├── poll.ts           # Worker claims pending/stopping jobs
-│   │   │   │   │   ├── log.ts            # Worker posts batched log entries
-│   │   │   │   │   └── update.ts         # Worker updates job status
-│   │   │   │   ├── logs.ts              # Read bot logs for display
-│   │   │   │   ├── stream.ts            # SSE endpoint for live log streaming
-│   │   │   │   └── all-status.ts        # Returns all active bot statuses
-│   │   │   ├── discord.login.ts          # Redirects to Discord OAuth2
-│   │   │   ├── discord.callback.ts       # Handles OAuth2 callback
-│   │   │   ├── discord.logout.ts         # Clears Discord session
-│   │   │   ├── me.ts                     # Returns current user + isAdmin flag
-│   │   │   └── public/
-│   │   │       └── nowpayments/
-│   │   │           └── webhook.ts        # NOWPayments IPN callback
-│   │   ├── dashboard.tsx                 # Dashboard layout + sidebar nav
-│   │   ├── dashboard.index.tsx           # Main dashboard / home
-│   │   ├── dashboard.bots.tsx            # MC Auto-Message page
-│   │   ├── dashboard.discord-spam.tsx    # Discord Auto-Spam page
-│   │   ├── dashboard.discord-bot.tsx     # Discord Bot Launcher page
-│   │   ├── dashboard.discord-auto-reply.tsx  # Discord Auto-Reply (placeholder)
-│   │   ├── dashboard.verification-bot.tsx    # Verification Bot page
-│   │   ├── dashboard.billing.tsx         # Plans / purchase page
-│   │   ├── dashboard.settings.tsx        # Settings + admin panel
-│   │   ├── dashboard.logs.tsx            # Historical logs viewer
-│   │   └── dashboard.support.tsx         # Support page
-│   ├── lib/
-│   │   ├── api-helpers.ts               # Session helpers (getSessionUser, requireUser, etc.)
-│   │   ├── luaux.functions.ts            # Server functions (DB queries, plan checks)
-│   │   └── luaux-server.server.ts        # Server-side Supabase client + session utilities
-│   └── components/
-│       ├── bot-console.tsx               # Shared terminal log display component
-│       └── plugin-page.tsx              # Shared plugin launcher UI
-├── bot-worker/
-│   ├── src/
-│   │   ├── index.ts                      # Main poll loop + graceful shutdown
-│   │   ├── api.ts                        # HTTP client (poll, log, update, fetchWithRetry)
-│   │   ├── mc.ts                         # Mineflayer bot (SSID auth, 30s timeout)
-│   │   └── discord.ts                    # Discord HTTP API spam (rate limit, abort)
-│   ├── .env                              # SITE_URL + WORKER_SECRET (NOT in git)
-│   ├── .env.example                      # Template
-│   ├── .gitignore                        # Excludes .env and node_modules
-│   ├── package.json                      # deps: mineflayer, dotenv
-│   └── tsconfig.json
-├── supabase/
-│   └── migrations/                       # SQL migration files (reference only)
-│       ├── 20260709122619_...sql         # plans, profiles, payments, mc_accounts
-│       ├── 20260709124925_...sql         # verification_keys + plugin plans
-│       ├── 20260709130412_...sql         # discord-spam + discord-autoreply plans
-│       ├── 20260709132431_...sql         # Misc schema updates
-│       ├── 20260710000000_bot_worker.sql # bot_jobs + bot_logs tables
-│       ├── 20260710080907_...sql         # Additional indexes
-│       ├── 20260710093154_...sql         # RLS policy updates
-│       ├── 20260711000000_add_completed_status.sql  # Adds 'completed' to status CHECK
-│       └── 20260711000001_add_mc_accounts_uuid.sql  # Adds uuid column to mc_accounts
-├── vite.config.ts                        # Build config (mineflayer/discord externalized)
-├── package.json
-├── tsconfig.json
-├── components.json                       # shadcn/ui config
-├── eslint.config.js
-├── bun.lock
-└── SETUP_GUIDE.md                        # This file
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ routes/
+â”‚   â”‚   â”œâ”€â”€ api/
+â”‚   â”‚   â”‚   â”œâ”€â”€ admin/
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ login.ts              # Admin password â†’ session.isAdmin
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ logout.ts             # Clears isAdmin from session
+â”‚   â”‚   â”‚   â”œâ”€â”€ bots/
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ mc/
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ start.ts          # Creates bot_jobs row (type: mc)
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ stop.ts           # Sets job status to "stopping"
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ status.ts         # Returns current bot status
+â”‚   â”‚   â”‚   â”‚   â”‚   â””â”€â”€ ping.ts           # Pings MC server via api.mcsrvstat.us
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ discord/
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ start.ts          # Creates bot_jobs row (type: discord)
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ stop.ts           # Sets job status to "stopping"
+â”‚   â”‚   â”‚   â”‚   â”‚   â””â”€â”€ status.ts         # Returns current bot status
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ worker/
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ poll.ts           # Worker claims pending/stopping jobs
+â”‚   â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ log.ts            # Worker posts batched log entries
+â”‚   â”‚   â”‚   â”‚   â”‚   â””â”€â”€ update.ts         # Worker updates job status
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ logs.ts              # Read bot logs for display
+â”‚   â”‚   â”‚   â”‚   â”œâ”€â”€ stream.ts            # SSE endpoint for live log streaming
+â”‚   â”‚   â”‚   â”‚   â””â”€â”€ all-status.ts        # Returns all active bot statuses
+â”‚   â”‚   â”‚   â”œâ”€â”€ discord.login.ts          # Redirects to Discord OAuth2
+â”‚   â”‚   â”‚   â”œâ”€â”€ discord.callback.ts       # Handles OAuth2 callback
+â”‚   â”‚   â”‚   â”œâ”€â”€ discord.logout.ts         # Clears Discord session
+â”‚   â”‚   â”‚   â”œâ”€â”€ me.ts                     # Returns current user + isAdmin flag
+â”‚   â”‚   â”‚   â””â”€â”€ public/
+â”‚   â”‚   â”‚       â””â”€â”€ nowpayments/
+â”‚   â”‚   â”‚           â””â”€â”€ webhook.ts        # NOWPayments IPN callback
+â”‚   â”‚   â”œâ”€â”€ dashboard.tsx                 # Dashboard layout + sidebar nav
+â”‚   â”‚   â”œâ”€â”€ dashboard.index.tsx           # Main dashboard / home
+â”‚   â”‚   â”œâ”€â”€ dashboard.bots.tsx            # MC Auto-Message page
+â”‚   â”‚   â”œâ”€â”€ dashboard.discord-spam.tsx    # Discord Auto-Spam page
+â”‚   â”‚   â”œâ”€â”€ dashboard.discord-bot.tsx     # Discord Bot Launcher page
+â”‚   â”‚   â”œâ”€â”€ dashboard.discord-auto-reply.tsx  # Discord Auto-Reply (placeholder)
+â”‚   â”‚   â”œâ”€â”€ dashboard.verification-bot.tsx    # Verification Bot page
+â”‚   â”‚   â”œâ”€â”€ dashboard.billing.tsx         # Plans / purchase page
+â”‚   â”‚   â”œâ”€â”€ dashboard.settings.tsx        # Settings + admin panel
+â”‚   â”‚   â”œâ”€â”€ dashboard.logs.tsx            # Historical logs viewer
+â”‚   â”‚   â””â”€â”€ dashboard.support.tsx         # Support page
+â”‚   â”œâ”€â”€ lib/
+â”‚   â”‚   â”œâ”€â”€ api-helpers.ts               # Session helpers (getSessionUser, requireUser, etc.)
+â”‚   â”‚   â”œâ”€â”€ luaux.functions.ts            # Server functions (DB queries, plan checks)
+â”‚   â”‚   â””â”€â”€ luaux-server.server.ts        # Server-side Supabase client + session utilities
+â”‚   â””â”€â”€ components/
+â”‚       â”œâ”€â”€ bot-console.tsx               # Shared terminal log display component
+â”‚       â””â”€â”€ plugin-page.tsx              # Shared plugin launcher UI
+â”œâ”€â”€ bot-worker/
+â”‚   â”œâ”€â”€ src/
+â”‚   â”‚   â”œâ”€â”€ index.ts                      # Main poll loop + graceful shutdown
+â”‚   â”‚   â”œâ”€â”€ api.ts                        # HTTP client (poll, log, update, fetchWithRetry)
+â”‚   â”‚   â”œâ”€â”€ mc.ts                         # Mineflayer bot (SSID auth, 30s timeout)
+â”‚   â”‚   â””â”€â”€ discord.ts                    # Discord HTTP API spam (rate limit, abort)
+â”‚   â”œâ”€â”€ .env                              # SITE_URL + WORKER_SECRET (NOT in git)
+â”‚   â”œâ”€â”€ .env.example                      # Template
+â”‚   â”œâ”€â”€ .gitignore                        # Excludes .env and node_modules
+â”‚   â”œâ”€â”€ package.json                      # deps: mineflayer, dotenv
+â”‚   â””â”€â”€ tsconfig.json
+â”œâ”€â”€ supabase/
+â”‚   â””â”€â”€ migrations/                       # SQL migration files (reference only)
+â”‚       â”œâ”€â”€ 20260709122619_...sql         # plans, profiles, payments, mc_accounts
+â”‚       â”œâ”€â”€ 20260709124925_...sql         # verification_keys + plugin plans
+â”‚       â”œâ”€â”€ 20260709130412_...sql         # discord-spam + discord-autoreply plans
+â”‚       â”œâ”€â”€ 20260709132431_...sql         # Misc schema updates
+â”‚       â”œâ”€â”€ 20260710000000_bot_worker.sql # bot_jobs + bot_logs tables
+â”‚       â”œâ”€â”€ 20260710080907_...sql         # Additional indexes
+â”‚       â”œâ”€â”€ 20260710093154_...sql         # RLS policy updates
+â”‚       â”œâ”€â”€ 20260711000000_add_completed_status.sql  # Adds 'completed' to status CHECK
+â”‚       â””â”€â”€ 20260711000001_add_mc_accounts_uuid.sql  # Adds uuid column to mc_accounts
+â”œâ”€â”€ vite.config.ts                        # Build config (mineflayer/discord externalized)
+â”œâ”€â”€ package.json
+â”œâ”€â”€ tsconfig.json
+â”œâ”€â”€ components.json                       # shadcn/ui config
+â”œâ”€â”€ eslint.config.js
+â”œâ”€â”€ bun.lock
+â””â”€â”€ SETUP_GUIDE.md                        # This file
 ```
 
 ---
 
 ## 13. Environment Variables Reference
 
-### Lovable Cloud (set in Lovable Dashboard → Settings → Env Vars)
+### Vercel (set in Vercel Dashboard â†’ Settings â†’ Env Vars)
 
 | Variable                    | Purpose                                | Required       |
 | --------------------------- | -------------------------------------- | -------------- |
@@ -843,16 +843,16 @@ luauxbeaming/
 | `DISCORD_BOT_TOKEN`         | Discord bot token (auto-join + DMs)    | **Yes**        |
 | `NOWPAYMENTS_API_KEY`       | NOWPayments API key                    | **Yes**        |
 | `NOWPAYMENTS_IPN_SECRET`    | NOWPayments IPN signature verification | **Yes**        |
-| `SUPABASE_URL`              | Auto-managed by Lovable                | **Do NOT set** |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto-managed by Lovable                | **Do NOT set** |
-| `SUPABASE_ANON_KEY`         | Auto-managed by Lovable                | **Do NOT set** |
+| `SUPABASE_URL`              | Auto-managed by hosting                | **Do NOT set** |
+| `SUPABASE_SERVICE_ROLE_KEY` | Auto-managed by hosting                | **Do NOT set** |
+| `SUPABASE_ANON_KEY`         | Auto-managed by hosting                | **Do NOT set** |
 
 ### Bot Worker (set in `bot-worker/.env` on VPS)
 
 | Variable           | Purpose                                                         | Required |
 | ------------------ | --------------------------------------------------------------- | -------- |
-| `SITE_URL`         | Your Lovable site URL (e.g. `https://luauxbeaming.lovable.app`) | **Yes**  |
-| `WORKER_SECRET`    | Must match Lovable's `WORKER_SECRET` exactly                    | **Yes**  |
+| `SITE_URL`         | Your LuauX site URL (e.g. `https://luaux.wtf`) | **Yes**  |
+| `WORKER_SECRET`    | Must match Vercel `WORKER_SECRET` exactly                    | **Yes**  |
 | `WORKER_ID`        | Unique ID for this worker instance (e.g. `worker-1`)            | **Yes**  |
 | `POLL_INTERVAL_MS` | How often to poll for jobs (default: `3000`)                    | No       |
 
@@ -862,7 +862,8 @@ luauxbeaming/
 
 | Credential     | Value                                                              | Where it's used                            |
 | -------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| Admin password | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Dashboard Settings → Admin tab             |
-| Worker secret  | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Lovable env vars + bot-worker `.env`       |
-| Session secret | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Lovable env vars only                      |
-| Site URL       | `https://luauxbeaming.lovable.app`                                 | bot-worker `.env` + Discord OAuth redirect |
+| Admin password | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Dashboard Settings â†’ Admin tab             |
+| Worker secret  | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Vercel env vars + bot-worker `.env`       |
+| Session secret | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Vercel env vars only                      |
+| Site URL       | `https://luaux.wtf`                                 | bot-worker `.env` + Discord OAuth redirect |
+

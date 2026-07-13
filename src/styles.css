@@ -376,7 +376,7 @@ html[data-theme="blue"] {
   to { opacity: 1; transform: translateY(0); }
 }
 @utility animate-fade-in-up {
-  animation: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fade-in-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes fade-in-scale {
@@ -792,23 +792,37 @@ html[data-theme="blue"] {
   background-size: 24px 24px;
 }
 
-/* === Stagger cascade (for lists) === */
+/* === Stagger cascade (for lists) — never leave content stuck at opacity 0 === */
 @layer base {
   .stagger-cascade > * {
-    opacity: 0;
-    transform: translateY(16px);
-    animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .stagger-cascade > *:nth-child(1) { animation-delay: 0.05s; }
-  .stagger-cascade > *:nth-child(2) { animation-delay: 0.1s; }
-  .stagger-cascade > *:nth-child(3) { animation-delay: 0.15s; }
-  .stagger-cascade > *:nth-child(4) { animation-delay: 0.2s; }
-  .stagger-cascade > *:nth-child(5) { animation-delay: 0.25s; }
-  .stagger-cascade > *:nth-child(6) { animation-delay: 0.3s; }
-  .stagger-cascade > *:nth-child(7) { animation-delay: 0.35s; }
-  .stagger-cascade > *:nth-child(8) { animation-delay: 0.4s; }
-  .stagger-cascade > *:nth-child(9) { animation-delay: 0.45s; }
-  .stagger-cascade > *:nth-child(10) { animation-delay: 0.5s; }
+  .stagger-cascade > *:nth-child(1) { animation-delay: 0.04s; }
+  .stagger-cascade > *:nth-child(2) { animation-delay: 0.08s; }
+  .stagger-cascade > *:nth-child(3) { animation-delay: 0.12s; }
+  .stagger-cascade > *:nth-child(4) { animation-delay: 0.16s; }
+  .stagger-cascade > *:nth-child(5) { animation-delay: 0.2s; }
+  .stagger-cascade > *:nth-child(6) { animation-delay: 0.24s; }
+  .stagger-cascade > *:nth-child(7) { animation-delay: 0.28s; }
+  .stagger-cascade > *:nth-child(8) { animation-delay: 0.32s; }
+  .stagger-cascade > *:nth-child(9) { animation-delay: 0.36s; }
+  .stagger-cascade > *:nth-child(10) { animation-delay: 0.4s; }
+  /* Safety: after animation window, force visible */
+  .stagger-cascade > * {
+    animation-fill-mode: both;
+  }
+}
+
+/* Hard fallback if animations are blocked / broken */
+@supports not (animation: fade-in-up 0.5s both) {
+  .stagger-cascade > *,
+  .animate-fade-in-up,
+  .animate-page-in,
+  .animate-route-enter {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
 }
 
 /* === Glow text (for headings) === */

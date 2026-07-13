@@ -51,8 +51,32 @@ function PurchasePage() {
     required_confirmations: number;
   } | null>(null);
 
+  const [plansLoading, setPlansLoading] = useState(true);
+
   useEffect(() => {
-    fetchPlans().then((d) => setPlans(d as Plan[]));
+    setPlansLoading(true);
+    fetchPlans()
+      .then((d) => {
+        const list = (Array.isArray(d) ? d : []) as Plan[];
+        setPlans(
+          list.map((p) => ({
+            ...p,
+            features: Array.isArray(p.features)
+              ? p.features
+              : typeof p.features === "string"
+                ? (() => {
+                    try {
+                      return JSON.parse(p.features as unknown as string);
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : [],
+          })),
+        );
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load plans"))
+      .finally(() => setPlansLoading(false));
     fetchProfile().then((d) => {
       const p = (d as { profile?: { bot_hours_remaining?: number } })?.profile;
       setBotHours(Number(p?.bot_hours_remaining ?? 0));
@@ -136,7 +160,7 @@ function PurchasePage() {
   const hourTotal = selectedHours * 1.5;
 
   return (
-    <div className="space-y-8 animate-page-in">
+    <div className="space-y-8">
       <header>
         <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("choose_plan")}</h1>
         <p className="mt-2 text-muted-foreground">{s.t("choose_plan_sub")}</p>
@@ -268,17 +292,40 @@ function PurchasePage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-5 stagger-cascade">
+      {plansLoading && (
+        <div className="text-sm text-muted-foreground">Loading plans…</div>
+      )}
+      {!plansLoading &&
+        plans.filter(
+          (p) =>
+            (p.kind ?? "plan") === "plan" &&
+            !String(p.id).startsWith("hours_") &&
+            ["starter", "pro", "enterprise", "basic", "elite"].includes(p.id),
+        ).length === 0 && (
+          <div className="rounded-2xl border border-border/60 bg-card p-6 text-sm text-muted-foreground">
+            No plans found in the database. Run{" "}
+            <code className="text-primary">ALL_MIGRATIONS.sql</code> in Supabase SQL Editor.
+          </div>
+        )}
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {plans
-          .filter((p) => (p.kind ?? "plan") === "plan")
+          .filter(
+            (p) =>
+              (p.kind ?? "plan") === "plan" &&
+              !String(p.id).startsWith("hours_") &&
+              ["starter", "pro", "enterprise", "basic", "elite"].includes(p.id),
+          )
           .map((plan) => {
             const isPro = plan.id === "pro";
             const hoursPerDay = Math.round(plan.bot_hours / Math.max(plan.duration_days, 1));
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-2xl brutal-border bg-card p-7 flex flex-col animated-border noise-texture overflow-hidden ${
-                  isPro ? "ring-2 ring-primary/50 magnetic-hover holographic" : "magnetic-hover"
+                className={`relative rounded-2xl border border-border/60 bg-card p-6 md:p-7 flex flex-col overflow-hidden transition-all duration-300 ${
+                  isPro
+                    ? "ring-2 ring-primary/50 shadow-[0_0_40px_-12px] shadow-primary/30"
+                    : "hover:border-primary/30"
                 }`}
               >
                 {isPro && (

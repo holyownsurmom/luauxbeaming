@@ -93,31 +93,26 @@ function Overview() {
   const profile = data?.profile;
   const plan = data?.plan;
   const displayName = profile?.global_name || profile?.username || "friend";
-  const maxBots = active && plan ? plan.max_bots : 0;
-  const botHours = active ? Number(profile?.bot_hours_remaining ?? 0) : 0;
+  const maxBots = plan?.max_bots ?? (isAdmin ? 999 : 0);
+  const botHours = Number(profile?.bot_hours_remaining ?? 0);
   const daysLeft =
-    active && profile?.plan_expires_at
+    profile?.plan_expires_at
       ? Math.max(
           0,
           Math.ceil(
             (new Date(profile.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
           ),
         )
-      : 0;
+      : isAdmin
+        ? 999
+        : 0;
 
   return (
-    <div className="space-y-8 animate-page-in">
+    <div className="space-y-6 md:space-y-8">
       {/* Hero header */}
-      <header className="relative overflow-hidden rounded-3xl animated-border bg-card/60 p-8 md:p-10 noise-texture shine-card">
-        {/* Background effects */}
+      <header className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 md:p-10">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/4 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/6 rounded-full blur-[120px] pointer-events-none animate-glow-breathe" />
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-primary/4 rounded-full blur-[100px] pointer-events-none" />
-        {/* Top gold line */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-        {/* Corner accents */}
-        <div className="absolute top-0 left-0 w-20 h-20 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none rounded-tl-3xl" />
-        <div className="absolute bottom-0 right-0 w-20 h-20 bg-gradient-to-tl from-primary/8 to-transparent pointer-events-none rounded-br-3xl" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
         <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
@@ -178,18 +173,18 @@ function Overview() {
       </header>
 
       {/* Stats row */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={BotIcon} label="Max Bots" value={maxBots} hint={maxBots === 0 ? "no plan" : "concurrent"} locked={!active} delay={0} />
-        <StatCard icon={Clock} label="Bot Hours" value={botHours} suffix="h" decimals={1} hint={active ? "included" : "no plan"} locked={!active} delay={1} />
-        <StatCard icon={Calendar} label="Days Left" value={daysLeft} hint={active ? "until renewal" : "no plan"} locked={!active} delay={2} />
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <StatCard icon={BotIcon} label="Max Bots" value={maxBots} hint={isAdmin ? "admin" : maxBots === 0 ? "no plan" : "concurrent"} locked={!active && !isAdmin} delay={0} />
+        <StatCard icon={Clock} label="Bot Hours" value={botHours} suffix="h" decimals={1} hint={active || isAdmin ? "remaining" : "no plan"} locked={!active && !isAdmin} delay={1} />
+        <StatCard icon={Calendar} label="Days Left" value={daysLeft} hint={isAdmin ? "admin" : active ? "until renewal" : "no plan"} locked={!active && !isAdmin} delay={2} />
         <StatCard icon={Puzzle} label="Plugins" value={0} hint="owned" locked={false} delay={3} />
       </section>
 
       {/* Quick actions + plugins */}
-      <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         <Link
           to="/dashboard/purchase"
-          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture shine-card"
+          className="group relative rounded-2xl border border-border/50 bg-card p-6 hover:bg-card/90 hover:border-primary/30 magnetic-hover overflow-hidden"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -209,7 +204,7 @@ function Overview() {
 
         <Link
           to="/dashboard/bots"
-          className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 magnetic-hover holographic overflow-hidden noise-texture shine-card"
+          className="group relative rounded-2xl border border-border/50 bg-card p-6 hover:bg-card/90 hover:border-primary/30 magnetic-hover overflow-hidden"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -253,7 +248,7 @@ function Overview() {
         <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground/60 mb-4">
           <Sparkles className="h-3.5 w-3.5 text-primary" /> Plugins
         </div>
-        <div className="grid md:grid-cols-3 gap-4 stagger-cascade">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           <PluginCard
             to="/dashboard/discord-spam"
             icon={Zap}
@@ -299,8 +294,8 @@ function StatCard({
 }) {
   return (
     <div
-      className={`tilt-card rounded-2xl border border-border/40 bg-card/50 p-5 relative overflow-hidden transition-all duration-500 hover:border-primary/30 group animate-fade-in-up magnetic-hover holographic ${locked ? "opacity-50" : ""}`}
-      style={{ animationDelay: `${delay * 0.1}s`, opacity: 0 }}
+      className={`tilt-card rounded-2xl border border-border/50 bg-card p-5 relative overflow-hidden transition-all duration-300 hover:border-primary/30 group magnetic-hover ${locked ? "opacity-60" : ""}`}
+      style={{ animationDelay: `${delay * 0.08}s` }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
@@ -345,7 +340,7 @@ function PluginCard({
   return (
     <Link
       to={to}
-      className="group relative rounded-2xl border border-border/40 bg-card/50 p-6 hover:bg-card/70 hover:border-primary/30 block overflow-hidden transition-all duration-500 magnetic-hover holographic shine-card"
+      className="group relative rounded-2xl border border-border/50 bg-card p-6 hover:bg-card/90 hover:border-primary/30 block overflow-hidden transition-all duration-300 magnetic-hover"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />

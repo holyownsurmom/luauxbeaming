@@ -386,13 +386,11 @@ function DashboardLayout() {
       </div>
 
       {/* Main content */}
-      <main className="min-h-screen relative noise-texture">
-        <div className="absolute inset-0 mesh-drift opacity-40 pointer-events-none" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-primary/4 rounded-full blur-[150px] pointer-events-none animate-glow-breathe spotlight-pulse" />
-        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-primary/3 rounded-full blur-[120px] pointer-events-none opacity-40 aurora-blob aurora-blob-slow" />
+      <main className="min-h-screen relative">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[240px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
         <div
           key={path}
-          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative animate-route-enter"
+          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative"
         >
           <Outlet />
         </div>

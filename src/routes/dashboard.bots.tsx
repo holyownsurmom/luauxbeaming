@@ -268,6 +268,7 @@ function BotsPage() {
           level?: string;
         }>;
         if (cancelled) return;
+        const seen = new Set<string>();
         const entries: ConsoleEntry[] = [];
         for (const row of logs) {
           if (row.ts > logPollSinceRef.current) logPollSinceRef.current = row.ts;
@@ -275,13 +276,20 @@ function BotsPage() {
             handleMsAuthMessage(String(row.msg || ""), row.botId);
             continue;
           }
+          // Dedupe identical lines within same second (reconnect spam)
+          const key = `${Math.floor(row.ts / 1000)}|${row.level}|${row.msg}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
           entries.push({
             ts: row.ts,
             level: (row.level as ConsoleEntry["level"]) || "info",
             msg: row.msg,
           });
         }
-        if (entries.length) setConsoleEntries(entries.slice(-500));
+        if (entries.length) {
+          entries.sort((a, b) => a.ts - b.ts);
+          setConsoleEntries(entries.slice(-500));
+        }
       } catch {
         /* ignore */
       }
@@ -321,8 +329,22 @@ function BotsPage() {
             !String(row.msg || "").startsWith("MS_AUTH_REQUIRED|")
           ) {
             setConsoleEntries((prev) => {
-              const exists = prev.some((p) => p.ts === row.ts && p.msg === row.msg);
+              const key = `${Math.floor(row.ts / 1000)}|${row.level}|${row.msg}`;
+              const exists = prev.some(
+                (p) =>
+                  p.msg === row.msg &&
+                  p.level === row.level &&
+                  Math.abs(p.ts - row.ts) < 2000,
+              );
               if (exists) return prev;
+              // also skip if same second key already present
+              if (
+                prev.some(
+                  (p) => `${Math.floor(p.ts / 1000)}|${p.level}|${p.msg}` === key,
+                )
+              ) {
+                return prev;
+              }
               return [
                 ...prev.slice(-499),
                 { ts: row.ts, level: (row.level as ConsoleEntry["level"]) || "info", msg: row.msg },

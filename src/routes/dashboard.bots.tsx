@@ -168,30 +168,34 @@ function BotsPage() {
   }, []);
 
   const reload = async () => {
-    const p = (await fetchProfile()) as {
-      active: boolean;
-      isAdmin?: boolean;
-      plan: { max_bots: number } | null;
-      profile?: {
-        bot_hours_remaining?: number;
-        active_plan_id?: string | null;
-        plan_expires_at?: string | null;
-      } | null;
-    };
-    setIsAdmin(p.isAdmin ?? false);
-    const bypass = adminBypassesPaywall(!!p.isAdmin);
-    setActive(bypass ? true : p.active);
-    const hours = Number(p.profile?.bot_hours_remaining ?? 0);
-    const planActive =
-      !!p.profile?.active_plan_id &&
-      !!p.profile?.plan_expires_at &&
-      new Date(p.profile.plan_expires_at).getTime() > Date.now();
-    // Hours-only access: 1 concurrent bot (matches /api/bots/mc/start)
-    setMaxBots(
-      bypass ? 999 : planActive ? Math.max(1, Number(p.plan?.max_bots ?? 1)) : hours > 0 ? 1 : 0,
-    );
-    const a = (await fetchAccounts()) as Account[];
-    setAccounts(a);
+    try {
+      const p = (await fetchProfile()) as {
+        active: boolean;
+        isAdmin?: boolean;
+        plan: { max_bots: number } | null;
+        profile?: {
+          bot_hours_remaining?: number;
+          active_plan_id?: string | null;
+          plan_expires_at?: string | null;
+        } | null;
+      };
+      setIsAdmin(p.isAdmin ?? false);
+      const bypass = adminBypassesPaywall(!!p.isAdmin);
+      setActive(bypass ? true : p.active);
+      const hours = Number(p.profile?.bot_hours_remaining ?? 0);
+      const planActive =
+        !!p.profile?.active_plan_id &&
+        !!p.profile?.plan_expires_at &&
+        new Date(p.profile.plan_expires_at).getTime() > Date.now();
+      // Hours-only access: 1 concurrent bot (matches /api/bots/mc/start)
+      setMaxBots(
+        bypass ? 999 : planActive ? Math.max(1, Number(p.plan?.max_bots ?? 1)) : hours > 0 ? 1 : 0,
+      );
+      const a = (await fetchAccounts()) as Account[];
+      setAccounts(a);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load accounts / plan");
+    }
   };
 
   useEffect(() => {
@@ -210,13 +214,20 @@ function BotsPage() {
   }, []);
   void showPaywalls;
 
+  const statusFailRef = useRef(0);
   const refreshBots = useCallback(async () => {
     try {
       const res = await fetch("/api/bots/mc/status");
+      if (!res.ok) throw new Error(`Status ${res.status}`);
       const data = await res.json();
       if (data.bots) setRunningBots(data.bots);
+      statusFailRef.current = 0;
     } catch {
-      /* ignore status errors */
+      statusFailRef.current += 1;
+      // Don't wipe list on transient errors; toast after repeated failures
+      if (statusFailRef.current === 3) {
+        toast.error("Can't refresh bot status — check connection / worker");
+      }
     }
   }, []);
 
@@ -251,6 +262,10 @@ function BotsPage() {
       } catch {
         /* ignore parse errors */
       }
+    };
+    es.onerror = () => {
+      // Browser auto-reconnects EventSource; log poll remains backup
+      console.warn("[bots] console stream disconnected — reconnecting…");
     };
     return () => {
       es.close();
@@ -579,10 +594,14 @@ function BotsPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.error("Stop failed:", data.error || res.status);
+        toast.error(typeof data.error === "string" ? data.error : `Stop failed (${res.status})`);
+        return;
       }
       if (selectedBotId === botId) setSelectedBotId(null);
+      toast.success("Stop signal sent");
       await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Stop failed");
     } finally {
       setStoppingId(null);
     }

@@ -42,12 +42,17 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
         }
 
         // Fallback CAS
-        const { data: pendingJobs } = await client
+        const { data: pendingJobs, error: listErr } = await client
           .from("bot_jobs")
           .select("id, discord_id, type, config, created_at")
           .eq("status", "pending")
           .order("created_at", { ascending: true })
           .limit(limit);
+
+        if (listErr) {
+          console.error("[poll] pending list failed:", listErr.message);
+          return Response.json({ error: listErr.message }, { status: 500 });
+        }
 
         if (!pendingJobs?.length) return Response.json({ jobs: [] });
 

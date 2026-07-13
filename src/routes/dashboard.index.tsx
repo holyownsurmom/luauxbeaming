@@ -79,13 +79,26 @@ function Overview() {
     active: boolean;
     isAdmin?: boolean;
   } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    setLoadError(null);
+    fetchProfile()
+      .then((d) =>
+        setData(
+          d as { profile: Profile | null; plan: Plan | null; active: boolean; isAdmin?: boolean },
+        ),
+      )
+      .catch((e) => {
+        setLoadError(e instanceof Error ? e.message : "Failed to load profile");
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    fetchProfile().then((d) =>
-      setData(
-        d as { profile: Profile | null; plan: Plan | null; active: boolean; isAdmin?: boolean },
-      ),
-    );
+    load();
   }, [fetchProfile]);
 
   const active = data?.active ?? false;
@@ -117,8 +130,45 @@ function Overview() {
         ? 999
         : 0;
 
+  if (loading && !data) {
+    return (
+      <div className="space-y-6 md:space-y-8 animate-pulse">
+        <div className="h-40 rounded-3xl border border-border/50 bg-card/60" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 rounded-2xl border border-border/50 bg-card/40" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError && !data) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-card p-8 text-center space-y-4">
+        <p className="text-sm text-destructive font-medium">Could not load your workspace</p>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">{loadError}</p>
+        <button
+          type="button"
+          onClick={load}
+          className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 md:space-y-8">
+      {loadError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive flex items-center justify-between gap-3">
+          <span>Refresh failed: {loadError}</span>
+          <button type="button" onClick={load} className="underline font-semibold shrink-0">
+            Retry
+          </button>
+        </div>
+      )}
       {/* Hero header */}
       <header className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 md:p-10">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/4 pointer-events-none" />

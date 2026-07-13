@@ -38,14 +38,19 @@ console.log(
 const runningJobs = new Map<string, AbortController>();
 
 async function applyTerminal(jobId: string, result: JobRunResult) {
+  let ok = false;
   if (result.status === "error") {
-    await updateJob(jobId, "error", result.error || "Job failed");
+    ok = await updateJob(jobId, "error", result.error || "Job failed");
   } else if (result.status === "stopped") {
-    await updateJob(jobId, "stopped", result.error || "Stopped by user");
+    ok = await updateJob(jobId, "stopped", result.error || "Stopped by user");
   } else {
-    await updateJob(jobId, "completed");
+    ok = await updateJob(jobId, "completed");
   }
-  console.log(`[worker] job ${jobId} finished (${result.status})`);
+  if (!ok) {
+    console.error(`[worker] job ${jobId} terminal status NOT persisted (${result.status})`);
+  } else {
+    console.log(`[worker] job ${jobId} finished (${result.status})`);
+  }
 }
 
 async function releaseUnstartedJob(jobId: string, reason: string) {
@@ -85,17 +90,22 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         await applyTerminal(job.id, result);
       }
     } else if (job.type === "discord") {
-      await runDiscordBot(
-        job.id,
-        job.discord_id,
-        job.config as DiscordJobConfig,
-        controller.signal,
-      );
-      // discord.ts already writes error/completed terminal status — never overwrite with completed
-      if (controller.signal.aborted) {
-        await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
-      } else {
-        console.log(`[worker] job ${job.id} discord runner exited`);
+      try {
+        await runDiscordBot(
+          job.id,
+          job.discord_id,
+          job.config as DiscordJobConfig,
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
+        } else {
+          // Ensure terminal state even if discord runner forgot to write it
+          await applyTerminal(job.id, { status: "completed" });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        await applyTerminal(job.id, { status: "error", error: msg });
       }
     } else if (job.type === "secure") {
       const secureCfg = job.config as SecureJobConfig & { sessionId?: string };
@@ -168,6 +178,8 @@ async function checkRunningJobs() {
 
   const jobIds = Array.from(runningJobs.keys());
   const statuses = await checkJobStatuses(WORKER_ID, jobIds);
+  // null = API failure — do not abort/pause based on empty list
+  if (statuses == null) return;
 
   for (const { id, status } of statuses) {
     if (status === "paused") {

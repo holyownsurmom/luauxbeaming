@@ -139,21 +139,41 @@ export function createLogger(jobId: string, discordId: string) {
   };
 }
 
-export async function updateJob(jobId: string, status: string, error?: string) {
+const TERMINAL = new Set(["error", "stopped", "completed", "pending"]);
+
+export async function updateJob(jobId: string, status: string, error?: string): Promise<boolean> {
   const body: Record<string, string> = { job_id: jobId, status, worker_id: WORKER_ID };
   if (error) body.error = error;
-  try {
-    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      console.error(`[worker] update failed: HTTP ${res.status} for job ${jobId} → ${status}`);
+  const attempts = TERMINAL.has(status) ? 4 : 2;
+  let lastErr = "";
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      if (res.ok) return true;
+      lastErr = `HTTP ${res.status}`;
+      // Terminal updates: one more try without worker_id binding (server retries unbound on 409)
+      if (res.status === 409 && TERMINAL.has(status) && i === attempts - 2) {
+        const loose = { ...body };
+        delete (loose as { worker_id?: string }).worker_id;
+        const res2 = await fetchWithRetry(`${SITE_URL}/api/bots/worker/update`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(loose),
+        });
+        if (res2.ok) return true;
+        lastErr = `HTTP ${res2.status}`;
+      }
+    } catch (e) {
+      lastErr = e instanceof Error ? e.message : String(e);
     }
-  } catch (e) {
-    console.error("[worker] update failed:", e);
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
   }
+  console.error(`[worker] update FAILED job ${jobId} → ${status}: ${lastErr}`);
+  return false;
 }
 
 /** Only write terminal status if the job is still running/claimed (never clobber error/stopped). */
@@ -161,8 +181,8 @@ export async function finalizeJob(
   jobId: string,
   status: "completed" | "error" | "stopped",
   error?: string,
-) {
-  await updateJob(jobId, status, error);
+): Promise<boolean> {
+  return updateJob(jobId, status, error);
 }
 
 export async function flushAllLogs() {
@@ -196,31 +216,44 @@ export async function postVerificationResult(config: SecureJobConfig, result: Se
 export async function markVerificationSession(
   sessionId: string | undefined | null,
   status: "failed" | "otp_sent" | "secured",
-) {
-  if (!sessionId) return;
-  try {
-    await fetchWithRetry(`${SITE_URL}/api/verification/session-status`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ session_id: sessionId, status }),
-    });
-  } catch (e) {
-    console.error("[worker] markVerificationSession failed:", e);
+): Promise<boolean> {
+  if (!sessionId) return true;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetchWithRetry(`${SITE_URL}/api/verification/session-status`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ session_id: sessionId, status }),
+      });
+      if (res.ok) return true;
+      console.error(`[worker] markVerificationSession HTTP ${res.status} (try ${i + 1})`);
+    } catch (e) {
+      console.error("[worker] markVerificationSession failed:", e);
+    }
+    await new Promise((r) => setTimeout(r, 400 * (i + 1)));
   }
+  return false;
 }
 
-export async function checkJobStatuses(workerId: string, jobIds: string[]): Promise<{ id: string; status: string }[]> {
+/** null = request failed (do not treat as empty / no status changes) */
+export async function checkJobStatuses(
+  workerId: string,
+  jobIds: string[],
+): Promise<{ id: string; status: string }[] | null> {
   try {
     const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/status`, {
       method: "POST",
       headers,
       body: JSON.stringify({ worker_id: workerId, job_ids: jobIds }),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`[worker] checkJobStatuses HTTP ${res.status}`);
+      return null;
+    }
     const data = await res.json();
     return data.jobs ?? [];
   } catch (e) {
     console.error("[worker] checkJobStatuses failed:", e);
-    return [];
+    return null;
   }
 }

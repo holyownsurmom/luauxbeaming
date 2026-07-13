@@ -94,6 +94,16 @@ export const Route = createFileRoute("/api/verification/complete")({
 
         if (insertError) {
           console.error("[verification/complete] insert secured_accounts:", insertError.message);
+          if (sessionId) {
+            await db()
+              .from("verification_sessions")
+              .update({ status: "failed" })
+              .eq("id", sessionId);
+          }
+          return Response.json(
+            { error: `Failed to store secured account: ${insertError.message}` },
+            { status: 500 },
+          );
         }
 
         if (sessionId) {

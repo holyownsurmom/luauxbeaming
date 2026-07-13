@@ -40,6 +40,9 @@ export function siteOrigin(request?: Request): string {
   return "";
 }
 
+/** Session lifetime: 90 days so signed-in users stay logged in across visits */
+const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 90;
+
 export const sessionConfig = () => {
   const secret = envStr("SESSION_SECRET");
   if (!secret) {
@@ -50,12 +53,13 @@ export const sessionConfig = () => {
   return {
     password: secret || "dev-only-session-secret-change-me-32b",
     name: "luaux_session",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: SESSION_MAX_AGE_SEC,
     cookie: {
       httpOnly: true,
       secure: true,
       sameSite: "lax" as const,
       path: "/",
+      maxAge: SESSION_MAX_AGE_SEC,
     },
   };
 };

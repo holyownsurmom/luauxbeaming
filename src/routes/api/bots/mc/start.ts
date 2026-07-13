@@ -20,18 +20,21 @@ export const Route = createFileRoute("/api/bots/mc/start")({
             .eq("discord_id", user.id)
             .maybeSingle();
 
-          const active =
+          const { profileHasMcAccess } = await import("@/lib/plan-grant.server");
+          hoursRemaining = Number(profile?.bot_hours_remaining ?? 0);
+          const planActive =
             !!profile?.active_plan_id &&
             !!profile?.plan_expires_at &&
             new Date(profile.plan_expires_at).getTime() > Date.now();
 
-          if (!active) return forbidden("No active plan — purchase a plan to run MC bots");
-          hoursRemaining = Number(profile?.bot_hours_remaining ?? 0);
+          if (!profileHasMcAccess(profile)) {
+            return forbidden("No active plan or bot hours — purchase a plan or hours pack");
+          }
           if (hoursRemaining <= 0) {
             return forbidden("No bot hours remaining — top up or buy a plan");
           }
 
-          if (profile?.active_plan_id) {
+          if (planActive && profile?.active_plan_id) {
             const { data: plan } = await db
               .from("plans")
               .select("max_bots")
@@ -39,6 +42,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
               .maybeSingle();
             maxBots = Math.max(1, Number(plan?.max_bots ?? 1));
           } else {
+            // Hours-only access: 1 concurrent bot
             maxBots = 1;
           }
 

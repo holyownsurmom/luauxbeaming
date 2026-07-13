@@ -83,20 +83,28 @@ function PurchasePage() {
     });
   }, [fetchPlans, fetchProfile]);
 
-  // Poll payment status
+  // Poll payment until fulfilled (not just "confirmed" on-chain)
   useEffect(() => {
     if (!payment) return;
     const t = setInterval(async () => {
       try {
-        const p = (await getPay({ data: { id: payment.id } })) as typeof payment;
+        const p = (await getPay({ data: { id: payment.id } })) as typeof payment & {
+          fulfilled_at?: string | null;
+        };
         setPayment(p);
-        if (p.status === "finished" || p.status === "confirmed") clearInterval(t);
+        if (p.fulfilled_at || p.status === "finished") {
+          clearInterval(t);
+          fetchProfile().then((d) => {
+            const prof = (d as { profile?: { bot_hours_remaining?: number } })?.profile;
+            setBotHours(Number(prof?.bot_hours_remaining ?? 0));
+          });
+        }
       } catch {
         /* ignore polling errors */
       }
     }, 8000);
     return () => clearInterval(t);
-  }, [payment, getPay]);
+  }, [payment, getPay, fetchProfile]);
 
   const [adminActivated, setAdminActivated] = useState(false);
   const [cartTick, setCartTick] = useState(0);
@@ -431,11 +439,18 @@ function PaymentView({
     status: string;
     confirmations: number;
     required_confirmations: number;
+    fulfilled_at?: string | null;
   };
   onBack: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const done = payment.status === "finished" || payment.status === "confirmed";
+  // Only "activated" when fulfillment ran — not merely on-chain confirmed
+  const done = !!payment.fulfilled_at || payment.status === "finished";
+  const confirming =
+    !done &&
+    (payment.status === "confirmed" ||
+      payment.status === "confirming" ||
+      payment.status === "sending");
   const copy = () => {
     navigator.clipboard.writeText(payment.pay_address);
     setCopied(true);
@@ -485,7 +500,12 @@ function PaymentView({
               {done ? (
                 <>
                   <Check className="h-4 w-4 text-primary" />
-                  <span className="text-primary font-semibold">Paid</span>
+                  <span className="text-primary font-semibold">Activated</span>
+                </>
+              ) : confirming ? (
+                <>
+                  <Clock className="h-4 w-4 animate-pulse text-primary" />
+                  <span className="text-primary">Confirming…</span>
                 </>
               ) : (
                 <>
@@ -505,13 +525,19 @@ function PaymentView({
           </div>
         </div>
 
+        {confirming && !done && (
+          <div className="rounded-lg bg-secondary/40 brutal-border px-4 py-3 text-sm text-muted-foreground">
+            Payment seen on-chain. Unlocking access…
+          </div>
+        )}
+
         {done && (
           <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-            Plan activated. Head to{" "}
+            Purchase unlocked. Open{" "}
             <a href="/dashboard/bots" className="underline">
               Bots
             </a>{" "}
-            to deploy.
+            (MC) or your plugin page — access is saved to your Discord account permanently.
           </div>
         )}
       </div>

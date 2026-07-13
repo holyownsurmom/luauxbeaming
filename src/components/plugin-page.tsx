@@ -23,6 +23,7 @@ type Payment = {
   status: string;
   confirmations: number;
   required_confirmations: number;
+  fulfilled_at?: string | null;
 };
 
 const CURRENCIES = [
@@ -91,7 +92,7 @@ export function PluginPage({
       try {
         const p = (await getPay({ data: { id: payment.id } })) as Payment;
         setPayment(p);
-        if (p.status === "finished" || p.status === "confirmed") {
+        if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
           fetchKeys({ data: { plugin_id: pluginId } }).then((d) => setKeys(d as KeyRow[]));
         }
@@ -137,7 +138,7 @@ export function PluginPage({
   };
 
   if (payment) {
-    const done = payment.status === "finished" || payment.status === "confirmed";
+    const done = !!payment.fulfilled_at || payment.status === "finished";
     return (
       <div className="space-y-6 max-w-xl mx-auto">
         <button

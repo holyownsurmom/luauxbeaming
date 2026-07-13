@@ -624,10 +624,10 @@ function BotsPage() {
         </header>
         <div className="rounded-2xl brutal-border bg-card p-10 text-center">
           <Lock className="h-8 w-8 mx-auto text-destructive" />
-          <h2 className="mt-4 font-display text-2xl font-semibold">No active plan</h2>
+          <h2 className="mt-4 font-display text-2xl font-semibold">No plan or hours</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
-            You need an active plan before you can deploy bots. Purchase one with crypto -- access
-            unlocks after 2 confirmations.
+            Buy a plan or bot hours with crypto. Access unlocks after payment is confirmed and
+            fulfilled (usually 1–2 minutes).
           </p>
           <Link
             to="/dashboard/purchase"

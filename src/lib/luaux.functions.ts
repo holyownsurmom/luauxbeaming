@@ -22,10 +22,9 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
       .maybeSingle();
     plan = p;
   }
-  const active =
-    !!profile?.active_plan_id &&
-    !!profile?.plan_expires_at &&
-    new Date(profile.plan_expires_at).getTime() > Date.now();
+  const { profileHasMcAccess } = await import("./plan-grant.server");
+  // Paid hours OR unexpired plan count as access (hours packs no longer look "forgotten")
+  const active = profileHasMcAccess(profile);
   const { isAdminSession } = await import("./luaux-server.server");
   const isAdmin = await isAdminSession();
   // Admin UI bypass only — never invent a paid plan for display
@@ -395,7 +394,9 @@ export const getPayment = createServerFn({ method: "GET" })
     const user = await requireUser();
     const { data: row } = await admin()
       .from("payments")
-      .select("*")
+      .select(
+        "id,plan_id,pay_currency,pay_amount,pay_address,price_amount,status,confirmations,required_confirmations,fulfilled_at,created_at",
+      )
       .eq("id", data.id)
       .eq("discord_id", user.id)
       .maybeSingle();

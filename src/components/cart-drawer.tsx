@@ -25,6 +25,7 @@ type Payment = {
   status: string;
   confirmations: number;
   required_confirmations: number;
+  fulfilled_at?: string | null;
 };
 
 export function CartButton({ onOpen }: { onOpen: () => void }) {
@@ -84,7 +85,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       try {
         const p = (await getPay({ data: { id: payment.id } })) as Payment;
         setPayment(p);
-        if (p.status === "finished" || p.status === "confirmed") {
+        if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
           if (payingPlanId) removeFromCart(payingPlanId);
           setPayingPlanId(null);
@@ -100,7 +101,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 
   const total = getCartTotalUsd();
   const done =
-    payment && (payment.status === "finished" || payment.status === "confirmed");
+    payment && (!!payment.fulfilled_at || payment.status === "finished");
 
   const startPay = async (item: CartItem) => {
     setError(null);

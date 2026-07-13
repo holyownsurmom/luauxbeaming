@@ -1,7 +1,7 @@
 /** Shared payment fulfillment + Discord purchase webhook (server-only). */
 
 import { envStr } from "./luaux-server.server";
-import { grantMcPlanAccess } from "./plan-grant.server";
+import { grantMcPlanAccess, isPluginPlanId } from "./plan-grant.server";
 
 type Db = {
   from: (table: string) => any;
@@ -279,8 +279,14 @@ export async function fulfillPayment(
   const { data: plan } = await db.from("plans").select("*").eq("id", pmt.plan_id).maybeSingle();
   if (!plan) throw new Error("Plan missing");
 
-  const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
-  const isPlugin = plan.kind === "plugin" && grantPluginIds.length > 0;
+  // Detect plugins by kind OR known plan ids (mis-tagged kind still grants keys)
+  let grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
+  if (grantPluginIds.length === 0 && (plan.kind === "plugin" || isPluginPlanId(plan.id))) {
+    // single-plugin fallback by id
+    if (PLUGIN_META[plan.id]) grantPluginIds = [plan.id];
+  }
+  const isPlugin =
+    grantPluginIds.length > 0 && (plan.kind === "plugin" || isPluginPlanId(plan.id));
 
   // Plugins: keys are idempotent via (source_payment_id, plugin_id) unique.
   // Issue keys first so IPN retries always deliver even if claim already happened.
@@ -313,18 +319,41 @@ export async function fulfillPayment(
     return { ok: true, already: true };
   }
 
-  // MC / hour plans: claim first (prevents double hours), then grant
-  if (pmt.fulfilled_at) return { ok: true, already: true };
+  // MC / hour plans: GRANT FIRST, then claim.
+  // If we claimed first and grant failed, IPN retries saw fulfilled_at and skipped forever.
+  // Ledger: skip re-grant only when this payment was already claimed AND profile shows access.
+  if (pmt.fulfilled_at) {
+    const { data: profile } = await db
+      .from("profiles")
+      .select("bot_hours_remaining, active_plan_id, plan_expires_at")
+      .eq("discord_id", pmt.discord_id)
+      .maybeSingle();
+    const hours = Number(profile?.bot_hours_remaining ?? 0);
+    const planOk =
+      !!profile?.active_plan_id &&
+      !!profile?.plan_expires_at &&
+      new Date(profile.plan_expires_at).getTime() > Date.now();
+    // Repair: finished payment but user still has no hours and no active plan
+    if (hours <= 0 && !planOk) {
+      console.warn(
+        "[fulfillPayment] repairing missed MC grant for payment",
+        pmt.id,
+        "user",
+        pmt.discord_id,
+      );
+      await grantMcPlanAccess(db, pmt.discord_id, plan);
+      return { ok: true, already: false };
+    }
+    return { ok: true, already: true };
+  }
+
+  // Fresh payment: grant access first (idempotent enough for rare double-IPN before claim)
+  await grantMcPlanAccess(db, pmt.discord_id, plan);
 
   const won = await claimPayment(db, pmt, opts);
-  if (!won) return { ok: true, already: true };
-
-  try {
-    await grantMcPlanAccess(db, pmt.discord_id, plan);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[fulfillPayment] profile grant failed after claim", msg, "payment", pmt.id);
-    throw new Error(msg);
+  if (!won) {
+    // Another worker claimed after our grant — OK, access already applied
+    return { ok: true, already: true };
   }
 
   await sendPurchaseWebhook({

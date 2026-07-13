@@ -21,13 +21,14 @@ export const Route = createFileRoute("/api/discord/login")({
         await session.update({ ...session.data, oauth_state: state });
 
         const redirectUri = `${origin}/api/discord/callback`;
+        // No prompt=consent — Discord remembers prior authorization so users
+        // only approve once; site session cookie keeps them signed in (90d).
         const params = new URLSearchParams({
           client_id: clientId,
           redirect_uri: redirectUri,
           response_type: "code",
           scope: "identify email guilds.join",
           state,
-          prompt: "consent",
         });
         return new Response(null, {
           status: 302,

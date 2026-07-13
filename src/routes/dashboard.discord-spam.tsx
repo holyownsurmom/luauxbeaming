@@ -53,6 +53,7 @@ type Payment = {
   status: string;
   confirmations: number;
   required_confirmations: number;
+  fulfilled_at?: string | null;
 };
 
 const CURRENCIES = [
@@ -127,7 +128,7 @@ function DiscordSpamPage() {
       try {
         const p = (await getPay({ data: { id: payment.id } })) as Payment;
         setPayment(p);
-        if (p.status === "finished" || p.status === "confirmed") {
+        if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
           fetchKeys({ data: { plugin_id: "discord-spam" } }).then((d) => setKeys(d as KeyRow[]));
         }
@@ -289,7 +290,7 @@ function DiscordSpamPage() {
 
   // Checkout flow (shown if no key or user clicks purchase)
   if (payment) {
-    const done = payment.status === "finished" || payment.status === "confirmed";
+    const done = !!payment.fulfilled_at || payment.status === "finished";
     return (
       <div className="space-y-6 max-w-xl mx-auto">
         <button

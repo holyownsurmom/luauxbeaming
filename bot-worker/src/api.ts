@@ -106,8 +106,20 @@ async function flushLogs() {
 
 export function createLogger(jobId: string, discordId: string) {
   return async (level: string, message: string, immediate = false) => {
+    // Always mirror to worker terminal (helps debug when site log pipeline fails)
+    const short = jobId.slice(0, 8);
+    console.log(`[job ${short}] [${level}] ${message}`);
+
     logBuffer.push({ job_id: jobId, discord_id: discordId, level, message });
-    if (immediate || message.startsWith("MS_AUTH_REQUIRED|")) {
+    const forceFlush =
+      immediate ||
+      message.startsWith("MS_AUTH_REQUIRED|") ||
+      level === "error" ||
+      level === "system" ||
+      level === "bot" ||
+      /logged in|spawned|connecting|ssid|waiting \d+s before first/i.test(message);
+
+    if (forceFlush) {
       if (flushTimer) {
         clearTimeout(flushTimer);
         flushTimer = null;

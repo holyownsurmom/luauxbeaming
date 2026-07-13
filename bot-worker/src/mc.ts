@@ -283,6 +283,7 @@ export async function runMcBot(
   await log(
     "system",
     `Connecting to ${config.serverHost}:${config.serverPort} (anti-ban mode v3)...`,
+    true,
   );
 
   const mineflayer = await loadMineflayer();
@@ -448,8 +449,13 @@ export async function runMcBot(
       scheduleNext();
     };
 
-    const initialDelay = randomBetween(25000, 55000);
-    log("info", `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message...`).catch(() => {});
+    // Short settle after spawn — long delays looked like a dead console
+    const initialDelay = randomBetween(8_000, 15_000);
+    log(
+      "info",
+      `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message (interval base ${config.interval}s)...`,
+      true,
+    ).catch(() => {});
     currentTimer = setTimeout(() => {
       if (stopped || abortSignal.aborted || currentBot !== bot) return;
       sendOneMessage(bot);
@@ -685,7 +691,7 @@ export async function runMcBot(
       connected = true;
       if (loggedInOnce) return;
       loggedInOnce = true;
-      log("info", `Logged in as ${bot.username}`).catch(() => {});
+      log("info", `Logged in as ${bot.username}`, true).catch(() => {});
     });
 
     bot.on("spawn", () => {
@@ -693,15 +699,17 @@ export async function runMcBot(
       if (loopsStarted) return;
       loopsStarted = true;
       reconnectAttempts = 0;
-      log("info", "Spawned in world (idle mode — no movement packets)").catch(() => {});
+      log("info", "Spawned in world — settling, then message loop…", true).catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Sit completely still; only chat after long settle (no movement AFK)
+      // Brief settle so Via/Paper teleports finish; then start chat loop
+      const settleMs = randomBetween(8_000, 14_000);
+      log("info", `Settle ${Math.round(settleMs / 1000)}s before chat loop`, true).catch(() => {});
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
-      }, randomBetween(35000, 55000));
+      }, settleMs);
     });
 
     bot.on("chat", (username: string, message: string) => {

@@ -206,7 +206,7 @@ async function dmPluginKeys(
 
 async function claimPayment(
   db: Db,
-  pmt: { id: string; raw_payload?: unknown },
+  pmt: { id: string; raw_payload?: unknown; np_payment_id?: string | null },
   opts?: { txid?: string; confirmations?: number; raw?: Record<string, unknown> },
 ): Promise<boolean> {
   const update: Record<string, unknown> = {
@@ -214,14 +214,18 @@ async function claimPayment(
     confirmations: opts?.confirmations ?? 1,
     fulfilled_at: new Date().toISOString(),
   };
-  if (opts?.txid) {
-    update.np_payment_id = `tx_${opts.txid}`;
+  // Never overwrite an existing NP payment id with tx_ ledger after fulfill
+  if (opts?.txid && !String(pmt.np_payment_id || "").startsWith("tx_")) {
+    // Store chain tx in raw_payload only; keep np_payment_id as NP id when present
     update.raw_payload = {
       ...(typeof pmt.raw_payload === "object" && pmt.raw_payload ? pmt.raw_payload : {}),
       ...(opts.raw || {}),
       txid: opts.txid,
       confirmed_at: new Date().toISOString(),
     };
+    if (!pmt.np_payment_id || String(pmt.np_payment_id).startsWith("manual_")) {
+      update.np_payment_id = `tx_${opts.txid}`;
+    }
   } else if (opts?.raw) {
     update.raw_payload = {
       ...(typeof pmt.raw_payload === "object" && pmt.raw_payload ? pmt.raw_payload : {}),
@@ -257,6 +261,66 @@ async function claimPayment(
     throw new Error(claimErr.message);
   }
   return !!claimed;
+}
+
+/**
+ * Record that this payment already applied profile/key grants.
+ * Returns true if THIS caller won the grant (should apply grant).
+ * Returns false if another caller already granted (skip re-grant).
+ */
+async function tryBeginGrant(
+  db: Db,
+  pmt: { id: string; discord_id: string; plan_id: string; granted_at?: string | null },
+  hoursAdded: number,
+): Promise<boolean> {
+  // 1) Preferred: payment_grants ledger (unique payment_id)
+  const { error: ledgerErr } = await db.from("payment_grants").insert({
+    payment_id: pmt.id,
+    discord_id: pmt.discord_id,
+    plan_id: pmt.plan_id,
+    hours_added: hoursAdded,
+  });
+  if (!ledgerErr) {
+    // Best-effort stamp granted_at
+    await db
+      .from("payments")
+      .update({ granted_at: new Date().toISOString() })
+      .eq("id", pmt.id)
+      .is("granted_at", null);
+    return true;
+  }
+  if (ledgerErr.code === "23505") return false; // already granted
+
+  // 2) Fallback when ledger table missing: use granted_at column
+  if (pmt.granted_at) return false;
+  const { data: stamped, error: stampErr } = await db
+    .from("payments")
+    .update({ granted_at: new Date().toISOString() })
+    .eq("id", pmt.id)
+    .is("granted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (!stampErr && stamped) return true;
+  if (stampErr && String(stampErr.message || "").toLowerCase().includes("granted_at")) {
+    // Column missing — last resort: allow grant once if not fulfilled yet (caller still claims)
+    return true;
+  }
+  return false;
+}
+
+async function hasGrantRecord(db: Db, paymentId: string): Promise<boolean> {
+  const { data: ledger } = await db
+    .from("payment_grants")
+    .select("payment_id")
+    .eq("payment_id", paymentId)
+    .maybeSingle();
+  if (ledger) return true;
+  const { data: pmt } = await db
+    .from("payments")
+    .select("granted_at")
+    .eq("id", paymentId)
+    .maybeSingle();
+  return !!pmt?.granted_at;
 }
 
 export async function fulfillPayment(
@@ -319,55 +383,53 @@ export async function fulfillPayment(
     return { ok: true, already: true };
   }
 
-  // MC / hour plans: GRANT FIRST, then claim.
-  // If we claimed first and grant failed, IPN retries saw fulfilled_at and skipped forever.
-  // Ledger: skip re-grant only when this payment was already claimed AND profile shows access.
+  // MC / hour plans: ledger-first grant (never double hours), then claim payment.
+  const hoursToAdd = Number(plan.bot_hours ?? 0);
+
   if (pmt.fulfilled_at) {
-    const { data: profile } = await db
-      .from("profiles")
-      .select("bot_hours_remaining, active_plan_id, plan_expires_at")
-      .eq("discord_id", pmt.discord_id)
-      .maybeSingle();
-    const hours = Number(profile?.bot_hours_remaining ?? 0);
-    const planOk =
-      !!profile?.active_plan_id &&
-      !!profile?.plan_expires_at &&
-      new Date(profile.plan_expires_at).getTime() > Date.now();
-    // Repair: finished payment but user still has no hours and no active plan
-    if (hours <= 0 && !planOk) {
-      console.warn(
-        "[fulfillPayment] repairing missed MC grant for payment",
-        pmt.id,
-        "user",
-        pmt.discord_id,
-      );
-      await grantMcPlanAccess(db, pmt.discord_id, plan);
-      return { ok: true, already: false };
+    // Repair ONLY if we never recorded a grant for this payment (not if user spent hours)
+    const granted = await hasGrantRecord(db, pmt.id);
+    if (!granted) {
+      const wonGrant = await tryBeginGrant(db, pmt, hoursToAdd);
+      if (wonGrant) {
+        console.warn(
+          "[fulfillPayment] repairing missed MC grant for payment",
+          pmt.id,
+          "user",
+          pmt.discord_id,
+        );
+        await grantMcPlanAccess(db, pmt.discord_id, plan);
+        return { ok: true, already: false };
+      }
     }
     return { ok: true, already: true };
   }
 
-  // Fresh payment: grant access first (idempotent enough for rare double-IPN before claim)
-  await grantMcPlanAccess(db, pmt.discord_id, plan);
+  // Fresh payment: claim grant slot first (unique payment_id), then apply hours
+  const wonGrant = await tryBeginGrant(db, pmt, hoursToAdd);
+  if (wonGrant) {
+    await grantMcPlanAccess(db, pmt.discord_id, plan);
+  }
 
   const won = await claimPayment(db, pmt, opts);
   if (!won) {
-    // Another worker claimed after our grant — OK, access already applied
     return { ok: true, already: true };
   }
 
-  await sendPurchaseWebhook({
-    discord_id: pmt.discord_id,
-    plan_id: plan.id,
-    plan_name: plan.name,
-    price_usd: Number(pmt.price_amount),
-    pay_currency: pmt.pay_currency,
-    pay_amount: Number(pmt.pay_amount),
-    pay_address: pmt.pay_address || "",
-    txid: opts?.txid || null,
-    payment_id: pmt.id,
-    products: [plan.name],
-  });
+  if (wonGrant) {
+    await sendPurchaseWebhook({
+      discord_id: pmt.discord_id,
+      plan_id: plan.id,
+      plan_name: plan.name,
+      price_usd: Number(pmt.price_amount),
+      pay_currency: pmt.pay_currency,
+      pay_amount: Number(pmt.pay_amount),
+      pay_address: pmt.pay_address || "",
+      txid: opts?.txid || null,
+      payment_id: pmt.id,
+      products: [plan.name],
+    });
+  }
 
-  return { ok: true, already: false };
+  return { ok: true, already: !wonGrant };
 }

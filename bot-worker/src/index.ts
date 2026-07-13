@@ -174,7 +174,13 @@ async function checkRunningJobs() {
       setJobPaused(id, true);
     } else if (status === "running" || status === "pending") {
       setJobPaused(id, false);
-    } else if (status === "stopping" || status === "stopped") {
+    } else if (
+      status === "stopping" ||
+      status === "stopped" ||
+      status === "completed" ||
+      status === "error"
+    ) {
+      // completed/error also abort — clear-all / nuke may skip stopping window
       clearJobPaused(id);
       console.log(`[worker] job ${id} marked ${status} in DB, aborting`);
       const controller = runningJobs.get(id);

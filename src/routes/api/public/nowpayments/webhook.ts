@@ -83,10 +83,6 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           return new Response("Unknown order", { status: 404 });
         }
 
-        if (pmt.fulfilled_at) {
-          return new Response("ok");
-        }
-
         const required = Number(pmt.required_confirmations ?? 1);
         const isPaid =
           status === "finished" ||
@@ -96,6 +92,7 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           return new Response("ok");
         }
 
+        // Always call fulfillPayment (idempotent) so missed grants can repair via ledger
         try {
           await fulfillPayment(db, pmt.id, {
             confirmations: confirmations || Number(pmt.confirmations) || 1,

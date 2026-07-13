@@ -26,6 +26,7 @@ import { Route as DashboardDiscordAutoReplyRouteImport } from './routes/dashboar
 import { Route as DashboardBotsRouteImport } from './routes/dashboard.bots'
 import { Route as DashboardBillingRouteImport } from './routes/dashboard.billing'
 import { Route as ApiMeRouteImport } from './routes/api/me'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiVerificationSessionStatusRouteImport } from './routes/api/verification/session-status'
 import { Route as ApiVerificationCompleteRouteImport } from './routes/api/verification/complete'
 import { Route as ApiKeysRevokeRouteImport } from './routes/api/keys/revoke'
@@ -147,6 +148,11 @@ const DashboardBillingRoute = DashboardBillingRouteImport.update({
 const ApiMeRoute = ApiMeRouteImport.update({
   id: '/api/me',
   path: '/api/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiVerificationSessionStatusRoute =
@@ -339,6 +345,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vpn-blocked': typeof VpnBlockedRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -392,6 +399,7 @@ export interface FileRoutesByTo {
   '/account-banned': typeof AccountBannedRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vpn-blocked': typeof VpnBlockedRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -447,6 +455,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/vpn-blocked': typeof VpnBlockedRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
@@ -503,6 +512,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/sitemap.xml'
     | '/vpn-blocked'
+    | '/api/health'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -556,6 +566,7 @@ export interface FileRouteTypes {
     | '/account-banned'
     | '/sitemap.xml'
     | '/vpn-blocked'
+    | '/api/health'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -610,6 +621,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/sitemap.xml'
     | '/vpn-blocked'
+    | '/api/health'
     | '/api/me'
     | '/dashboard/billing'
     | '/dashboard/bots'
@@ -665,6 +677,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   VpnBlockedRoute: typeof VpnBlockedRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiMeRoute: typeof ApiMeRoute
   ApiAdminBlacklistRoute: typeof ApiAdminBlacklistRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
@@ -822,6 +835,13 @@ declare module '@tanstack/react-router' {
       path: '/api/me'
       fullPath: '/api/me'
       preLoaderRoute: typeof ApiMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/verification/session-status': {
@@ -1110,6 +1130,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   VpnBlockedRoute: VpnBlockedRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiMeRoute: ApiMeRoute,
   ApiAdminBlacklistRoute: ApiAdminBlacklistRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
@@ -1150,13 +1171,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -202,7 +202,7 @@ const FAQS: FAQItem[] = [
   // Account & Billing
   {
     q: "How do I check my remaining bot hours?",
-    a: "Go to Overview or Settings to see your remaining bot hours. They're deducted while any bot (MC or Discord) is running.",
+    a: "Go to Overview or Settings to see remaining bot hours. Each MC bot launch spends 1 hour from your balance. Discord plugins use license keys, not MC hours.",
     category: "Account & Billing",
     icon: Clock,
   },
@@ -214,19 +214,19 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "How do I add another Minecraft account?",
-    a: "Go to MC Auto-Message > Add Account. Choose Microsoft (device code) or offline, enter a label and username/email. You can add multiple accounts and create separate bots for each.",
+    a: "Go to MC Auto-Message → Add Account. Use SSID (Minecraft services access_token) for premium accounts, or offline for cracked. Device-code login is not available on the bot server.",
     category: "Account & Billing",
     icon: Bot,
   },
   {
     q: "My bot hours ran out. What happens?",
-    a: "Running bots are stopped automatically when your hours reach zero. Top up by purchasing another plan in the Purchase tab.",
+    a: "You cannot launch new MC bots until you top up hours or buy a plan. Already-running bots keep going until you stop them. Purchase more hours under Purchase.",
     category: "Account & Billing",
     icon: Clock,
   },
   {
     q: "Do bot hours pause when no bot is running?",
-    a: "Yes. Hours are only consumed while a bot is actively running. If all bots are stopped, your hours are preserved.",
+    a: "Yes. Hours are only spent when you launch an MC bot (1 hour per launch). Stopped bots do not consume hours.",
     category: "Account & Billing",
     icon: Clock,
   },

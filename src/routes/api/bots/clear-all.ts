@@ -56,19 +56,27 @@ export const Route = createFileRoute("/api/bots/clear-all")({
         const liveStatuses = new Set(["pending", "running", "stopping", "paused"]);
         const activeIds = filtered.filter((j) => liveStatuses.has(j.status)).map((j) => j.id);
 
-        // 1) Signal workers to abort live jobs
+        // Signal workers to abort. Use "stopped" (not completed) so worker status
+        // poll aborts in-memory jobs. Terminal completed hides from active lists.
         for (let i = 0; i < activeIds.length; i += 80) {
           const chunk = activeIds.slice(i, i + 80);
           await db
             .from("bot_jobs")
-            .update({ status: "stopping", error: "Nuked by user" })
+            .update({
+              status: "stopped",
+              error: "Nuked by user",
+              stopped_at: new Date().toISOString(),
+            })
             .eq("discord_id", user.id)
             .in("id", chunk);
         }
 
-        // 2) Mark ALL matched jobs completed so they leave Active lists
-        for (let i = 0; i < ids.length; i += 80) {
-          const chunk = ids.slice(i, i + 80);
+        // Mark non-live history rows completed so they leave Active lists
+        const historyIds = filtered
+          .filter((j) => !liveStatuses.has(j.status))
+          .map((j) => j.id);
+        for (let i = 0; i < historyIds.length; i += 80) {
+          const chunk = historyIds.slice(i, i + 80);
           await db
             .from("bot_jobs")
             .update({ status: "completed", error: "Nuked by user" })

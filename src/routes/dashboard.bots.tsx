@@ -172,11 +172,24 @@ function BotsPage() {
       active: boolean;
       isAdmin?: boolean;
       plan: { max_bots: number } | null;
+      profile?: {
+        bot_hours_remaining?: number;
+        active_plan_id?: string | null;
+        plan_expires_at?: string | null;
+      } | null;
     };
     setIsAdmin(p.isAdmin ?? false);
     const bypass = adminBypassesPaywall(!!p.isAdmin);
     setActive(bypass ? true : p.active);
-    setMaxBots(bypass ? 999 : (p.plan?.max_bots ?? 0));
+    const hours = Number(p.profile?.bot_hours_remaining ?? 0);
+    const planActive =
+      !!p.profile?.active_plan_id &&
+      !!p.profile?.plan_expires_at &&
+      new Date(p.profile.plan_expires_at).getTime() > Date.now();
+    // Hours-only access: 1 concurrent bot (matches /api/bots/mc/start)
+    setMaxBots(
+      bypass ? 999 : planActive ? Math.max(1, Number(p.plan?.max_bots ?? 1)) : hours > 0 ? 1 : 0,
+    );
     const a = (await fetchAccounts()) as Account[];
     setAccounts(a);
   };

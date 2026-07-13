@@ -93,8 +93,18 @@ function Overview() {
   const profile = data?.profile;
   const plan = data?.plan;
   const displayName = profile?.global_name || profile?.username || "friend";
-  const maxBots = plan?.max_bots ?? (isAdmin ? 999 : 0);
   const botHours = Number(profile?.bot_hours_remaining ?? 0);
+  const planActive =
+    !!profile?.active_plan_id &&
+    !!profile?.plan_expires_at &&
+    new Date(profile.plan_expires_at).getTime() > Date.now();
+  const maxBots = isAdmin
+    ? 999
+    : planActive
+      ? Math.max(1, Number(plan?.max_bots ?? 1))
+      : botHours > 0
+        ? 1
+        : 0;
   const daysLeft =
     profile?.plan_expires_at
       ? Math.max(

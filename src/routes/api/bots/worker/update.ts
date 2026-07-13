@@ -79,26 +79,48 @@ export const Route = createFileRoute("/api/bots/worker/update")({
           update.error = body.error || null;
         }
 
-        let query = db().from("bot_jobs").update(update).eq("id", body.job_id);
+        const client = db();
+        let query = client.from("bot_jobs").update(update).eq("id", body.job_id);
         // Prefer binding updates to the claiming worker when provided
         if (body.worker_id && body.status !== "pending") {
           query = query.eq("worker_id", body.worker_id);
         }
 
-        const { error } = await query;
+        const { data: updated, error } = await query.select("id, discord_id, type").maybeSingle();
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
 
-        if (body.status === "error") {
-          const { data: job } = await db()
+        // Terminal updates: if worker_id filter missed, retry unbound so state is not stuck
+        if (
+          !updated &&
+          body.worker_id &&
+          (body.status === "stopped" ||
+            body.status === "error" ||
+            body.status === "completed" ||
+            body.status === "pending")
+        ) {
+          const { data: retry, error: retryErr } = await client
             .from("bot_jobs")
-            .select("discord_id, type")
+            .update(update)
             .eq("id", body.job_id)
+            .select("id, discord_id, type")
             .maybeSingle();
-
-          if (job?.discord_id && job?.type) {
-            notifyErrorDiscord(job.discord_id, job.type, body.error || "Unknown error");
+          if (retryErr) return Response.json({ error: retryErr.message }, { status: 500 });
+          if (!retry) {
+            return Response.json({ error: "Job not found or not owned", ok: false }, { status: 409 });
           }
+          if (body.status === "error" && retry.discord_id && retry.type) {
+            notifyErrorDiscord(retry.discord_id, retry.type, body.error || "Unknown error");
+          }
+          return Response.json({ ok: true });
+        }
+
+        if (!updated) {
+          return Response.json({ error: "Job not found or not owned", ok: false }, { status: 409 });
+        }
+
+        if (body.status === "error" && updated.discord_id && updated.type) {
+          notifyErrorDiscord(updated.discord_id, updated.type, body.error || "Unknown error");
         }
 
         return Response.json({ ok: true });

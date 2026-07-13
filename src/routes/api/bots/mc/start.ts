@@ -227,6 +227,28 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           }
         }
 
+        // Spend hour BEFORE enqueue so concurrent launches can't race free jobs
+        if (!adminUser) {
+          const { data: spent, error: spendErr } = await db.rpc("spend_bot_hour", {
+            p_discord_id: user.id,
+          });
+          if (spendErr) {
+            // Fallback: conditional update only if still >= 1
+            const { data: updated, error: updErr } = await db
+              .from("profiles")
+              .update({ bot_hours_remaining: hoursRemaining - 1 })
+              .eq("discord_id", user.id)
+              .gte("bot_hours_remaining", 1)
+              .select("bot_hours_remaining")
+              .maybeSingle();
+            if (updErr || !updated) {
+              return forbidden("No bot hours remaining — top up or buy a plan");
+            }
+          } else if (spent === false || spent === null) {
+            return forbidden("No bot hours remaining — top up or buy a plan");
+          }
+        }
+
         const { data: job, error } = await db
           .from("bot_jobs")
           .insert({
@@ -239,30 +261,6 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           .single();
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
-
-        // Consume 1 bot-hour atomically (admins unlimited)
-        if (!adminUser) {
-          const { data: spent, error: spendErr } = await db.rpc("spend_bot_hour", {
-            p_discord_id: user.id,
-          });
-          if (spendErr) {
-            // Fallback if RPC missing: conditional update
-            const { data: updated, error: updErr } = await db
-              .from("profiles")
-              .update({ bot_hours_remaining: hoursRemaining - 1 })
-              .eq("discord_id", user.id)
-              .gte("bot_hours_remaining", 1)
-              .select("bot_hours_remaining")
-              .maybeSingle();
-            if (updErr || !updated) {
-              await db.from("bot_jobs").update({ status: "error", error: "No bot hours remaining" }).eq("id", job.id);
-              return forbidden("No bot hours remaining — top up or buy a plan");
-            }
-          } else if (spent === false || spent === null) {
-            await db.from("bot_jobs").update({ status: "error", error: "No bot hours remaining" }).eq("id", job.id);
-            return forbidden("No bot hours remaining — top up or buy a plan");
-          }
-        }
 
         return Response.json({ botId: job.id });
       },

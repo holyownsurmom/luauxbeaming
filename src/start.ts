@@ -30,7 +30,7 @@ const EXEMPT_PREFIXES = [
 ];
 
 function isExemptPath(pathname: string): boolean {
-  if (EXEMPT_EXACT.has(pathname)) return true;
+  if (EXEMPT_EXACT.has(pathname) || pathname === "/api/health") return true;
   if (EXEMPT_PREFIXES.some((p) => pathname.startsWith(p))) return true;
   if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|avif)$/.test(pathname))
     return true;

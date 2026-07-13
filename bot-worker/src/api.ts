@@ -87,12 +87,20 @@ async function flushLogs() {
   if (logBuffer.length === 0) return;
   const batch = logBuffer.splice(0, 50);
   try {
-    await fetchWithRetry(`${SITE_URL}/api/bots/worker/log`, {
+    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/log`, {
       method: "POST",
       headers,
       body: JSON.stringify(batch),
     });
-    flushFailures = 0;
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[worker] log flush HTTP ${res.status}: ${text.slice(0, 200)}`);
+      logBuffer.unshift(...batch);
+      while (logBuffer.length > MAX_LOG_BUFFER) logBuffer.shift();
+      flushFailures++;
+    } else {
+      flushFailures = 0;
+    }
   } catch (e) {
     console.error("[worker] log flush failed:", e);
     logBuffer.unshift(...batch);

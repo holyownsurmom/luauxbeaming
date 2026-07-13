@@ -245,12 +245,65 @@ function BotsPage() {
     };
   }, [handleMsAuthMessage]);
 
-  // Backup poll for MS auth codes (SSE can lag or miss)
+  // When switching bots, load recent logs immediately (don't wait for SSE)
+  useEffect(() => {
+    if (!selectedBotId) return;
+    selectedBotIdRef.current = selectedBotId;
+    logPollSinceRef.current = Date.now() - 10 * 60_000; // last 10 min
+    let cancelled = false;
+    (async () => {
+      try {
+        const qs = new URLSearchParams({
+          botId: selectedBotId,
+          since: String(logPollSinceRef.current),
+          limit: "200",
+        });
+        const res = await fetch(`/api/bots/logs?${qs.toString()}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const logs = (data.logs || []) as Array<{
+          ts: number;
+          msg: string;
+          botId?: string;
+          level?: string;
+        }>;
+        if (cancelled) return;
+        const entries: ConsoleEntry[] = [];
+        for (const row of logs) {
+          if (row.ts > logPollSinceRef.current) logPollSinceRef.current = row.ts;
+          if (String(row.msg || "").startsWith("MS_AUTH_REQUIRED|")) {
+            handleMsAuthMessage(String(row.msg || ""), row.botId);
+            continue;
+          }
+          entries.push({
+            ts: row.ts,
+            level: (row.level as ConsoleEntry["level"]) || "info",
+            msg: row.msg,
+          });
+        }
+        if (entries.length) setConsoleEntries(entries.slice(-500));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBotId, handleMsAuthMessage]);
+
+  // Backup poll for console logs (SSE can lag/miss on Vercel)
   useEffect(() => {
     const poll = async () => {
       try {
+        const botId = selectedBotIdRef.current;
+        if (!botId) return;
         const since = logPollSinceRef.current;
-        const res = await fetch(`/api/bots/logs?since=${since}&limit=50`);
+        const qs = new URLSearchParams({
+          since: String(since),
+          limit: "100",
+          botId,
+        });
+        const res = await fetch(`/api/bots/logs?${qs.toString()}`);
         if (!res.ok) return;
         const data = await res.json();
         const logs = (data.logs || []) as Array<{
@@ -284,7 +337,7 @@ function BotsPage() {
     const id = setInterval(poll, 1500);
     poll();
     return () => clearInterval(id);
-  }, [handleMsAuthMessage]);
+  }, [handleMsAuthMessage, selectedBotId]);
 
   useEffect(() => {
     const interval = setInterval(refreshBots, 5000);
@@ -456,8 +509,14 @@ function BotsPage() {
       toast.success(`Launched ${account.label}`);
       setSelectedBotId(data.botId);
       selectedBotIdRef.current = data.botId;
-      setConsoleEntries([]);
-      logPollSinceRef.current = Date.now() - 5000;
+      setConsoleEntries([
+        {
+          ts: Date.now(),
+          level: "system",
+          msg: `Job ${String(data.botId).slice(0, 8)}… queued — waiting for worker…`,
+        },
+      ]);
+      logPollSinceRef.current = Date.now() - 60_000;
       msAuthCodeRef.current = null;
       if (account.auth_type === "microsoft") {
         setMsAuthWaiting(true);

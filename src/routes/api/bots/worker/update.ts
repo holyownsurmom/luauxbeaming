@@ -1,19 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createClient } from "@supabase/supabase-js";
+import { authWorker, workerDb } from "@/lib/worker-auth.server";
+import { envStr } from "@/lib/luaux-server.server";
 
-function authWorker(request: Request): boolean {
-  const token = request.headers.get("x-worker-secret");
-  return token === process.env.WORKER_SECRET;
-}
-
-function db() {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const db = workerDb;
 
 async function notifyErrorDiscord(userId: string, jobType: string, errorMsg: string) {
-  const token = process.env.DISCORD_BOT_TOKEN;
+  const token = envStr("DISCORD_BOT_TOKEN");
   if (!token) return;
 
   const typeLabel =
@@ -22,7 +14,7 @@ async function notifyErrorDiscord(userId: string, jobType: string, errorMsg: str
     jobType === "secure" ? "Verification Bot" :
     "Bot";
 
-  const site = (process.env.SITE_URL || "https://luaux.wtf").replace(/\/$/, "");
+  const site = envStr("SITE_URL", "https://luaux.wtf").replace(/\/$/, "");
   const message = `⚠️ **${typeLabel}** crashed or errored.\n\n**Error:** \`${errorMsg.slice(0, 500)}\`\n\nCheck your logs at ${site}/dashboard/logs`;
 
   try {

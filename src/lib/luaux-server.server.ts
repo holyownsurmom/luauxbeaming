@@ -40,17 +40,25 @@ export function siteOrigin(request?: Request): string {
   return "";
 }
 
-export const sessionConfig = () => ({
-  password: envStr("SESSION_SECRET") || "dev-only-session-secret-change-me-32b",
-  name: "luaux_session",
-  maxAge: 60 * 60 * 24 * 7, // 7 days
-  cookie: {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax" as const,
-    path: "/",
-  },
-});
+export const sessionConfig = () => {
+  const secret = envStr("SESSION_SECRET");
+  if (!secret) {
+    if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+      throw new Error("SESSION_SECRET is required in production");
+    }
+  }
+  return {
+    password: secret || "dev-only-session-secret-change-me-32b",
+    name: "luaux_session",
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+    cookie: {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax" as const,
+      path: "/",
+    },
+  };
+};
 
 export async function getSessionUser(): Promise<LuauxSessionUser | null> {
   const session = await useSession<SessionData>(sessionConfig());
@@ -107,7 +115,7 @@ export function redactJobConfig(config: unknown): Record<string, unknown> {
 }
 
 export function admin() {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  return createClient(envStr("SUPABASE_URL"), envStr("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }

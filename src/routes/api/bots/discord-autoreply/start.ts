@@ -11,6 +11,7 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
         const db = admin();
         const adminUser = await isAdminSession();
 
+        // Plugin license only — Auto-Reply does not require an MC plan
         if (!adminUser) {
           const { data: keys } = await db
             .from("verification_keys")
@@ -18,25 +19,12 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
             .eq("discord_id", user.id)
             .eq("plugin_id", "discord-autoreply")
             .order("created_at", { ascending: false })
-            .limit(1);
+            .limit(5);
 
           const activeKey = keys?.find((k) => new Date(k.expires_at).getTime() > Date.now());
           if (!activeKey) {
             return forbidden("No active Discord Auto-Reply license");
           }
-
-          const { data: profile } = await db
-            .from("profiles")
-            .select("active_plan_id, plan_expires_at")
-            .eq("discord_id", user.id)
-            .maybeSingle();
-
-          const active =
-            !!profile?.active_plan_id &&
-            !!profile?.plan_expires_at &&
-            new Date(profile.plan_expires_at).getTime() > Date.now();
-
-          if (!active) return forbidden("No active plan");
         }
 
         let body;

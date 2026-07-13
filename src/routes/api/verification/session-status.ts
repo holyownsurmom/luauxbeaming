@@ -1,26 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createClient } from "@supabase/supabase-js";
-import { timingSafeEqual } from "node:crypto";
+import { authWorker, workerDb } from "@/lib/worker-auth.server";
 
-function db() {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-function authWorker(request: Request): boolean {
-  const secret = process.env.WORKER_SECRET;
-  if (!secret) return false;
-  const token = request.headers.get("x-worker-secret") || "";
-  try {
-    const a = Buffer.from(token);
-    const b = Buffer.from(secret);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
-}
+const db = workerDb;
 
 const ALLOWED = new Set(["failed", "otp_sent", "secured"]);
 

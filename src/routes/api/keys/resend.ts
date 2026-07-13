@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, unauthorized } from "@/lib/api-helpers";
+import { envStr } from "@/lib/luaux-server.server";
 
 export const Route = createFileRoute("/api/keys/resend")({
   server: {
@@ -45,7 +46,7 @@ export const Route = createFileRoute("/api/keys/resend")({
           const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
             method: "POST",
             headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              Authorization: `Bot ${envStr("DISCORD_BOT_TOKEN")}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ recipient_id: user.id }),
@@ -65,7 +66,7 @@ export const Route = createFileRoute("/api/keys/resend")({
           await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
             method: "POST",
             headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              Authorization: `Bot ${envStr("DISCORD_BOT_TOKEN")}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({

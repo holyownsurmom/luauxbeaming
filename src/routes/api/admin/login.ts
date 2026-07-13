@@ -4,12 +4,21 @@ import {
   sessionConfig,
   timingSafeEqualStrings,
   admin as adminDb,
+  envStr,
 } from "@/lib/luaux-server.server";
 
 type SessionData = {
   user?: { id: string; username: string; global_name: string | null; avatar: string | null };
   isAdmin?: boolean;
 };
+
+/** Comma-separated Discord user IDs allowed to unlock admin with ADMIN_PASSWORD */
+function adminAllowlist(): string[] {
+  return envStr("ADMIN_DISCORD_IDS")
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export const Route = createFileRoute("/api/admin/login")({
   server: {
@@ -20,19 +29,16 @@ export const Route = createFileRoute("/api/admin/login")({
           return Response.json({ error: "Not logged in" }, { status: 401 });
         }
 
-        let body;
+        let body: { password?: string };
         try {
           body = await request.json();
         } catch {
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        const password = process.env.ADMIN_PASSWORD || "";
+        const password = envStr("ADMIN_PASSWORD");
         if (!password || password.length < 8) {
-          return Response.json(
-            { error: "Admin login is not configured" },
-            { status: 503 },
-          );
+          return Response.json({ error: "Admin login is not configured" }, { status: 503 });
         }
         if (!body.password || !timingSafeEqualStrings(String(body.password), password)) {
           return Response.json({ error: "Wrong password" }, { status: 403 });
@@ -40,19 +46,37 @@ export const Route = createFileRoute("/api/admin/login")({
 
         const db = adminDb();
         const discordId = session.data.user.id;
+        const allow = adminAllowlist();
 
-        // Correct password → register this Discord account as admin (upsert).
-        // Session isAdmin alone is not enough; isAdminSession() always re-checks admins table.
-        // OAuth login clears isAdmin so alts never inherit admin without the password.
-        const { error: upsertErr } = await db.from("admins").upsert(
-          { discord_id: discordId },
-          { onConflict: "discord_id" },
-        );
-        if (upsertErr) {
+        const { data: existing } = await db
+          .from("admins")
+          .select("discord_id")
+          .eq("discord_id", discordId)
+          .maybeSingle();
+
+        // Password alone must NOT promote random Discord accounts.
+        // Allow if already in admins table OR listed in ADMIN_DISCORD_IDS.
+        if (!existing && (allow.length === 0 || !allow.includes(discordId))) {
           return Response.json(
-            { error: `Failed to register admin: ${upsertErr.message}` },
-            { status: 500 },
+            {
+              error:
+                "This Discord account is not an authorized admin. Set ADMIN_DISCORD_IDS or seed public.admins.",
+            },
+            { status: 403 },
           );
+        }
+
+        if (!existing && allow.includes(discordId)) {
+          const { error: upsertErr } = await db.from("admins").upsert(
+            { discord_id: discordId, note: "allowlist" },
+            { onConflict: "discord_id" },
+          );
+          if (upsertErr) {
+            return Response.json(
+              { error: `Failed to register admin: ${upsertErr.message}` },
+              { status: 500 },
+            );
+          }
         }
 
         await session.update({ ...session.data, isAdmin: true });

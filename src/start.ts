@@ -20,18 +20,20 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// Exact public paths + API prefixes that must work for workers / OAuth / IPN
+const EXEMPT_EXACT = new Set(["/", "/vpn-blocked", "/account-banned", "/api/me"]);
 const EXEMPT_PREFIXES = [
-  "/",
-  "/vpn-blocked",
-  "/account-banned",
   "/api/discord/",
-  "/api/bots/",
-  "/api/me",
+  "/api/bots/worker/",
+  "/api/public/",
+  "/api/verification/",
 ];
 
 function isExemptPath(pathname: string): boolean {
-  if (EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))) return true;
-  if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|avif)$/.test(pathname)) return true;
+  if (EXEMPT_EXACT.has(pathname)) return true;
+  if (EXEMPT_PREFIXES.some((p) => pathname.startsWith(p))) return true;
+  if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|map|webp|avif)$/.test(pathname))
+    return true;
   return false;
 }
 

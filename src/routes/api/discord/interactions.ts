@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { CookieJar, sendAuth, detectAuthMethod, sendOtt } from "@/lib/microsoft-auth";
+import { envStr } from "@/lib/luaux-server.server";
 import nacl from "tweetnacl";
 
 function normalizePublicKey(clientPublicKey: string): string {
@@ -57,7 +58,7 @@ function getModalField(
 }
 
 function db() {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  return createClient(envStr("SUPABASE_URL"), envStr("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -139,8 +140,8 @@ async function resolveBotCredentials(
 
   // 3) Central env key last
   push(
-    process.env.DISCORD_PUBLIC_KEY || process.env.DISCORD_CLIENT_PUBLIC_KEY || "",
-    process.env.DISCORD_BOT_TOKEN || null,
+    envStr("DISCORD_PUBLIC_KEY") || envStr("DISCORD_CLIENT_PUBLIC_KEY"),
+    envStr("DISCORD_BOT_TOKEN") || null,
   );
 
   for (const c of candidates) {

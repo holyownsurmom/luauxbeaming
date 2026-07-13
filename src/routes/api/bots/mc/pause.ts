@@ -39,8 +39,8 @@ export const Route = createFileRoute("/api/bots/mc/pause")({
           return Response.json({ ok: true, status: "paused" });
         }
 
-        // resume
-        if (job.status === "paused" || job.status === "stopping") {
+        // resume only from paused (never revive a stopping job)
+        if (job.status === "paused") {
           await db.from("bot_jobs").update({ status: "running" }).eq("id", botId);
           return Response.json({ ok: true, status: "running" });
         }

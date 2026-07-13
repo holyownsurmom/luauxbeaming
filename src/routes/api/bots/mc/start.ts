@@ -118,12 +118,29 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           config.uuid = account.uuid || body.uuid || "";
           config.label = account.label || body.label;
 
-          if (dbAuth === "ssid") {
+          if (dbAuth === "microsoft") {
+            // Headless VPS cannot complete interactive device-code login.
+            // Prefer stored SSID if present; otherwise require SSID conversion.
+            const rawSsid = typeof account.ssid === "string" ? account.ssid : "";
+            if (!rawSsid.trim()) {
+              return Response.json(
+                {
+                  error:
+                    "Microsoft device-code login is not available on the bot server. Add this account as SSID (access_token) or paste a token via Refresh Token.",
+                },
+                { status: 400 },
+              );
+            }
+            // Fall through as SSID
+            config.authType = "ssid";
+          }
+
+          if (config.authType === "ssid" || dbAuth === "ssid") {
             const { normalizeMcAccessToken, validateMinecraftSsid } = await import(
               "@/lib/mc-ssid.server"
             );
             const ssid = normalizeMcAccessToken(
-              typeof account.ssid === "string" ? account.ssid : "",
+              typeof account.ssid === "string" ? account.ssid : String(config.ssid || ""),
             );
             if (!ssid) {
               return Response.json(
@@ -151,6 +168,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
               );
             }
 
+            config.authType = "ssid";
             config.ssid = check.token;
             config.username = check.profile.name;
             config.uuid = check.uuidDashed;
@@ -162,6 +180,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
                 username: check.profile.name,
                 uuid: check.uuidDashed,
                 status: "idle",
+                auth_type: "ssid",
               })
               .eq("id", body.accountId)
               .eq("discord_id", user.id);
@@ -217,12 +236,28 @@ export const Route = createFileRoute("/api/bots/mc/start")({
 
         if (error) return Response.json({ error: error.message }, { status: 500 });
 
-        // Consume 1 bot-hour per launch (admins unlimited)
-        if (!adminUser && hoursRemaining > 0) {
-          await db
-            .from("profiles")
-            .update({ bot_hours_remaining: Math.max(0, hoursRemaining - 1) })
-            .eq("discord_id", user.id);
+        // Consume 1 bot-hour atomically (admins unlimited)
+        if (!adminUser) {
+          const { data: spent, error: spendErr } = await db.rpc("spend_bot_hour", {
+            p_discord_id: user.id,
+          });
+          if (spendErr) {
+            // Fallback if RPC missing: conditional update
+            const { data: updated, error: updErr } = await db
+              .from("profiles")
+              .update({ bot_hours_remaining: hoursRemaining - 1 })
+              .eq("discord_id", user.id)
+              .gte("bot_hours_remaining", 1)
+              .select("bot_hours_remaining")
+              .maybeSingle();
+            if (updErr || !updated) {
+              await db.from("bot_jobs").update({ status: "error", error: "No bot hours remaining" }).eq("id", job.id);
+              return forbidden("No bot hours remaining — top up or buy a plan");
+            }
+          } else if (spent === false || spent === null) {
+            await db.from("bot_jobs").update({ status: "error", error: "No bot hours remaining" }).eq("id", job.id);
+            return forbidden("No bot hours remaining — top up or buy a plan");
+          }
         }
 
         return Response.json({ botId: job.id });

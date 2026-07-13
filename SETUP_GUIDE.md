@@ -100,9 +100,9 @@ Add every variable in this table. **Do not skip any.**
 
 | Variable                 | Value                                                              | Notes                                                                              |
 | ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `SESSION_SECRET`         | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Encrypts session cookies. Never change after first deploy.                         |
-| `ADMIN_PASSWORD`         | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Password to unlock admin mode in the dashboard.                                    |
-| `WORKER_SECRET`          | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Shared secret between site and bot worker. Must match exactly.                     |
+| `SESSION_SECRET`         | `YOUR_SESSION_SECRET` | Encrypts session cookies. Never change after first deploy.                         |
+| `ADMIN_PASSWORD`         | `YOUR_ADMIN_PASSWORD`                                 | Password to unlock admin mode in the dashboard.                                    |
+| `WORKER_SECRET`          | `YOUR_WORKER_SECRET` | Shared secret between site and bot worker. Must match exactly.                     |
 | `IPN_CALLBACK_URL`       | `https://luaux.wtf/api/public/nowpayments/webhook`  | NOWPayments sends payment confirmations here.                                      |
 | `DISCORD_CLIENT_ID`      | Your Discord app client ID                                         | From Discord Developer Portal â†’ OAuth2 â†’ Client Information                        |
 | `DISCORD_CLIENT_SECRET`  | Your Discord app client secret                                     | From Discord Developer Portal â†’ OAuth2 â†’ Client Information                        |
@@ -420,7 +420,7 @@ Create a file called `.env` (no extension, just `.env`) in the `bot-worker/` fol
 
 ```
 SITE_URL=https://luaux.wtf
-WORKER_SECRET=f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78
+WORKER_SECRET=YOUR_WORKER_SECRET
 WORKER_ID=worker-1
 POLL_INTERVAL_MS=3000
 ```
@@ -498,7 +498,7 @@ pm2 restart luaux-worker
 
 1. Go to the **MC Auto-Message** page in the dashboard
 2. Click the **Settings** tab â†’ **Admin** sub-tab
-3. Enter the admin password: `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`
+3. Enter the admin password: `YOUR_ADMIN_PASSWORD`
 4. You should see "ADMIN" badge appear
 5. Go back to **MC Auto-Message**
 6. Add a Minecraft account:
@@ -862,8 +862,9 @@ luauxbeaming/
 
 | Credential     | Value                                                              | Where it's used                            |
 | -------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| Admin password | `7C9Y6Oopg4HpECdqhGjKfqADpvL0A2Nk`                                 | Dashboard Settings â†’ Admin tab             |
-| Worker secret  | `f6d7da1bb74034fb43fd7ca45dface8e4cf49438cf29e39c0f7138abd5aeac78` | Vercel env vars + bot-worker `.env`       |
-| Session secret | `ea48972d125b46a0fb90d0f7aa4005a0093039550656dbb24e3c46fd33ca879a` | Vercel env vars only                      |
+| Admin password | `YOUR_ADMIN_PASSWORD`                                 | Dashboard Settings â†’ Admin tab             |
+| Worker secret  | `YOUR_WORKER_SECRET` | Vercel env vars + bot-worker `.env`       |
+| Session secret | `YOUR_SESSION_SECRET` | Vercel env vars only                      |
 | Site URL       | `https://luaux.wtf`                                 | bot-worker `.env` + Discord OAuth redirect |
+
 

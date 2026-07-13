@@ -91,25 +91,29 @@ export const addMcAccount = createServerFn({ method: "POST" })
     let uuid = data.uuid?.trim() || null;
     let ssid: string | null = null;
 
-    if (data.auth_type === "ssid") {
+    let authType = data.auth_type;
+
+    if (data.auth_type === "ssid" || (data.auth_type === "microsoft" && data.ssid?.trim())) {
       const { validateMinecraftSsid } = await import("./mc-ssid.server");
       const result = await validateMinecraftSsid(data.ssid || "");
       if (!result.ok) throw new Error(result.error);
       ssid = result.token;
       username = result.profile.name;
       uuid = result.uuidDashed;
+      authType = "ssid";
+    } else if (data.auth_type === "microsoft") {
+      throw new Error(
+        "Microsoft device-code login is not available on the bot server. Use SSID (Minecraft access_token) instead.",
+      );
     }
 
-    if (data.auth_type === "microsoft" && !username) {
-      throw new Error("Username/email required for Microsoft accounts");
-    }
-    if (data.auth_type === "offline" && !username) {
+    if (authType === "offline" && !username) {
       throw new Error("Username required for offline accounts");
     }
 
     // Prefer label from IGN for SSID if user left generic label
     const label =
-      data.auth_type === "ssid" && (!data.label || data.label === "alt-1")
+      authType === "ssid" && (!data.label || data.label === "alt-1")
         ? username || data.label
         : data.label;
 
@@ -118,7 +122,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
       .insert({
         discord_id: user.id,
         label,
-        auth_type: data.auth_type,
+        auth_type: authType,
         username,
         uuid,
         ssid,
@@ -210,7 +214,8 @@ async function createNowPaymentsInvoice(opts: {
   payCurrency: string;
   status: string;
 }> {
-  const apiKey = process.env.NOWPAYMENTS_API_KEY?.trim();
+  const { envStr } = await import("./luaux-server.server");
+  const apiKey = envStr("NOWPAYMENTS_API_KEY");
   if (!apiKey) {
     throw new Error(
       "NOWPAYMENTS_API_KEY is not set. Add it in Vercel env / .env to create invoices.",
@@ -219,15 +224,13 @@ async function createNowPaymentsInvoice(opts: {
 
   // Prefer explicit IPN URL, then SITE_URL / VERCEL_URL (custom domain / Vercel)
   const siteBase =
-    process.env.SITE_URL?.replace(/\/$/, "") ||
+    envStr("SITE_URL").replace(/\/$/, "") ||
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/^https?:\/\//, "")}`
+      ? `https://${String(process.env.VERCEL_PROJECT_PRODUCTION_URL).replace(/^https?:\/\//, "")}`
       : "") ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
     "https://luaux.wtf";
-  const ipn =
-    process.env.IPN_CALLBACK_URL?.trim() ||
-    `${siteBase}/api/public/nowpayments/webhook`;
+  const ipn = envStr("IPN_CALLBACK_URL") || `${siteBase}/api/public/nowpayments/webhook`;
 
   const res = await fetch("https://api.nowpayments.io/v1/payment", {
     method: "POST",
@@ -303,9 +306,9 @@ export const createInvoice = createServerFn({ method: "POST" })
 
     const order_id = `luaux_${user.id}_${Date.now()}`;
 
-    // Admin bypass: instantly activate without external payment
+    // Admin bypass: insert payment then shared fulfill (keys / hours / webhooks)
     if (isAdm) {
-      const { data: row } = await db
+      const { data: row, error: adminPayErr } = await db
         .from("payments")
         .insert({
           discord_id: user.id,
@@ -322,70 +325,16 @@ export const createInvoice = createServerFn({ method: "POST" })
         })
         .select("id")
         .single();
+      if (adminPayErr || !row) throw new Error(adminPayErr?.message || "Admin payment insert failed");
 
-      // Activate plan + add hours
-      const { data: profile } = await db
-        .from("profiles")
-        .select("plan_expires_at, bot_hours_remaining")
-        .eq("discord_id", user.id)
-        .maybeSingle();
-
-      const now = Date.now();
-      const existingExpiry = profile?.plan_expires_at
-        ? new Date(profile.plan_expires_at).getTime()
-        : 0;
-      const base = Math.max(existingExpiry, now);
-      const expiryDays = plan.duration_days || 90;
-
-      // MC plans only — plugins grant keys, not profile plan slots
-      if (plan.kind !== "plugin") {
-        const planUpdate: Record<string, unknown> = {
-          active_plan_id: plan.id,
-          plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
-          bot_hours_remaining: Number(profile?.bot_hours_remaining ?? 0) + Number(plan.bot_hours),
-        };
-        await db.from("profiles").update(planUpdate).eq("discord_id", user.id);
-      }
-
-      // For plugin plans, generate key(s) instantly (bundle grants both spam + autoreply)
-      const PLUGIN_META: Record<string, { prefix: string; label: string }> = {
-        verification: { prefix: "LX-VB", label: "Verification Bot" },
-        "discord-spam": { prefix: "LX-DS", label: "Discord Spam" },
-        "discord-autoreply": { prefix: "LX-AR", label: "Discord Auto-Reply" },
-      };
-      const PLUGIN_GRANTS: Record<string, string[]> = {
-        verification: ["verification"],
-        "discord-spam": ["discord-spam"],
-        "discord-autoreply": ["discord-autoreply"],
-        "discord-bundle": ["discord-spam", "discord-autoreply"],
-      };
-      const grantPluginIds = PLUGIN_GRANTS[plan.id] ?? [];
-      if (plan.kind === "plugin" && grantPluginIds.length > 0 && row) {
-        const rand = (n: number) => {
-          const bytes = new Uint8Array(n);
-          crypto.getRandomValues(bytes);
-          return Array.from(bytes, (b) => b.toString(16).padStart(2, "0"))
-            .join("")
-            .toUpperCase();
-        };
-        const expires = new Date(now + plan.duration_days * 24 * 60 * 60 * 1000).toISOString();
-        for (const pluginId of grantPluginIds) {
-          const meta = PLUGIN_META[pluginId];
-          if (!meta) continue;
-          const key = `${meta.prefix}-${rand(4)}-${rand(4)}-${rand(4)}`;
-          await db.from("verification_keys").insert({
-            discord_id: user.id,
-            key,
-            expires_at: expires,
-            source_payment_id: row.id,
-            plugin_id: pluginId,
-            delivered: true,
-          });
-        }
-      }
+      const { fulfillPayment } = await import("./payment-fulfill.server");
+      await fulfillPayment(db, row.id, {
+        confirmations: 999,
+        raw: { source: "admin_invoice" },
+      });
 
       return {
-        id: row!.id,
+        id: row.id,
         pay_address: "admin",
         pay_amount: 0,
         pay_currency: "admin",
@@ -554,7 +503,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
     }
 
     // Central LuauX bot only — no user token/public key required
-    const botTokenToUse = process.env.DISCORD_BOT_TOKEN;
+    const { envStr } = await import("./luaux-server.server");
+    const botTokenToUse = envStr("DISCORD_BOT_TOKEN");
     if (!botTokenToUse) {
       throw new Error("Server missing DISCORD_BOT_TOKEN — contact support");
     }
@@ -647,7 +597,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
 
 /** Public invite URL for the central LuauX verification bot */
 export const getVerificationBotInvite = createServerFn({ method: "GET" }).handler(async () => {
-  const clientId = process.env.DISCORD_CLIENT_ID || "";
+  const { envStr } = await import("./luaux-server.server");
+  const clientId = envStr("DISCORD_CLIENT_ID");
   // Manage Roles, View Channels, Send Messages, Embed Links, Use App Commands, Read Message History
   const permissions = "268561408";
   const invite = clientId
@@ -656,7 +607,7 @@ export const getVerificationBotInvite = createServerFn({ method: "GET" }).handle
   return {
     invite,
     clientId,
-    hasCentralBot: !!(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_PUBLIC_KEY),
+    hasCentralBot: !!(envStr("DISCORD_BOT_TOKEN") && envStr("DISCORD_PUBLIC_KEY")),
   };
 });
 
@@ -686,11 +637,14 @@ export const resendKey = createServerFn({ method: "POST" })
       "discord-autoreply": "Discord Auto-Reply",
     };
     const label = LABELS[keyRow.plugin_id] ?? keyRow.plugin_id;
+    const { envStr } = await import("./luaux-server.server");
+    const botToken = envStr("DISCORD_BOT_TOKEN");
+    if (!botToken) throw new Error("Discord bot is not configured");
 
     const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
       method: "POST",
       headers: {
-        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        Authorization: `Bot ${botToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ recipient_id: user.id }),
@@ -706,7 +660,7 @@ export const resendKey = createServerFn({ method: "POST" })
     await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
       method: "POST",
       headers: {
-        Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+        Authorization: `Bot ${botToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -768,18 +722,34 @@ export const redeemLicenseKey = createServerFn({ method: "POST" })
 
     const normalized = data.key.trim().toUpperCase().replace(/\s+/g, "");
 
-    // Load recent keys and match case-insensitively (avoids filter injection / case issues)
-    const { data: all, error: listErr } = await db
+    // Exact match first (keys stored uppercase), then case-insensitive fallback
+    let keyRow: {
+      id: string;
+      key: string;
+      discord_id: string;
+      plugin_id: string;
+      expires_at: string;
+    } | null = null;
+
+    const { data: exact } = await db
       .from("verification_keys")
       .select("id, key, discord_id, plugin_id, expires_at")
-      .order("created_at", { ascending: false })
-      .limit(2000);
+      .eq("key", normalized)
+      .maybeSingle();
+    keyRow = exact;
 
-    if (listErr) throw new Error(listErr.message);
-
-    const keyRow = (all || []).find(
-      (k) => String(k.key).toUpperCase().replace(/\s+/g, "") === normalized,
-    );
+    if (!keyRow) {
+      const { data: recent, error: listErr } = await db
+        .from("verification_keys")
+        .select("id, key, discord_id, plugin_id, expires_at")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (listErr) throw new Error(listErr.message);
+      keyRow =
+        (recent || []).find(
+          (k) => String(k.key).toUpperCase().replace(/\s+/g, "") === normalized,
+        ) ?? null;
+    }
 
     if (!keyRow) throw new Error("Invalid key — check and try again");
 
@@ -810,19 +780,17 @@ export const redeemLicenseKey = createServerFn({ method: "POST" })
       );
     }
 
+    // Atomic claim: only if still unassigned
     const { data: claimed, error: claimErr } = await db
       .from("verification_keys")
       .update({ discord_id: user.id, delivered: true })
       .eq("id", keyRow.id)
+      .in("discord_id", [UNASSIGNED_OWNER, "PENDING", "0", ""])
       .select("id, key, plugin_id, expires_at, discord_id")
-      .single();
+      .maybeSingle();
 
-    if (claimErr || !claimed) {
-      throw new Error(claimErr?.message || "Failed to redeem key");
-    }
-
-    // Ensure we won the claim (no concurrent redeem to another user)
-    if (claimed.discord_id !== user.id) {
+    if (claimErr) throw new Error(claimErr.message || "Failed to redeem key");
+    if (!claimed || claimed.discord_id !== user.id) {
       throw new Error("Key was claimed by someone else. Contact support.");
     }
 
@@ -891,10 +859,13 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
 
     if (!makeUnassigned && data.dm_user !== false) {
       try {
+        const { envStr } = await import("./luaux-server.server");
+        const botToken = envStr("DISCORD_BOT_TOKEN");
+        if (!botToken) throw new Error("no bot token");
         const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
           method: "POST",
           headers: {
-            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            Authorization: `Bot ${botToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ recipient_id: ownerId }),
@@ -905,7 +876,7 @@ export const createAdminLicenseKey = createServerFn({ method: "POST" })
           await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
             method: "POST",
             headers: {
-              Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+              Authorization: `Bot ${botToken}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
@@ -993,35 +964,22 @@ export const grantAdminPlanAccess = createServerFn({ method: "POST" })
 
     const { data: plan } = await db.from("plans").select("*").eq("id", data.plan_id).maybeSingle();
     if (!plan) throw new Error("Plan not found");
+    if (plan.kind === "plugin") {
+      throw new Error("Use createAdminLicenseKey for plugin licenses");
+    }
 
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_expires_at, bot_hours_remaining")
-      .eq("discord_id", data.discord_id.trim())
-      .maybeSingle();
-
-    const now = Date.now();
-    const existingExpiry = profile?.plan_expires_at
-      ? new Date(profile.plan_expires_at).getTime()
-      : 0;
-    const base = Math.max(existingExpiry, now);
-    const expiryDays = plan.duration_days || 90;
-    const hours =
-      Number(profile?.bot_hours_remaining ?? 0) +
-      Number(plan.bot_hours ?? 0) +
-      Number(data.extra_hours ?? 0);
-
-    const { error } = await db
-      .from("profiles")
-      .update({
-        active_plan_id: plan.id,
-        plan_expires_at: new Date(base + expiryDays * 24 * 60 * 60 * 1000).toISOString(),
-        bot_hours_remaining: hours,
-      })
-      .eq("discord_id", data.discord_id.trim());
-
-    if (error) throw new Error(error.message);
-    return { ok: true, bot_hours_remaining: hours, plan_id: plan.id };
+    const { grantMcPlanAccess } = await import("./plan-grant.server");
+    const granted = await grantMcPlanAccess(
+      db,
+      data.discord_id.trim(),
+      plan,
+      Number(data.extra_hours ?? 0),
+    );
+    return {
+      ok: true,
+      bot_hours_remaining: granted.bot_hours_remaining,
+      plan_id: granted.active_plan_id || plan.id,
+    };
   });
 
 export const resetMyAccess = createServerFn({ method: "POST" }).handler(async () => {

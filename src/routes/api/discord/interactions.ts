@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { CookieJar, sendAuth, detectAuthMethod, sendOtt } from "@/lib/microsoft-auth";
+import { waitUntil } from "@vercel/functions";
+import { sendAuth, detectAuthMethod } from "@/lib/microsoft-auth";
 import { envStr } from "@/lib/luaux-server.server";
 import nacl from "tweetnacl";
 
@@ -118,27 +119,7 @@ async function resolveBotCredentials(
     candidates.push({ key: n, token: token || null });
   };
 
-  // 1) Guild-specific first
-  if (guildId) {
-    const { data: settings } = await db()
-      .from("verification_settings")
-      .select("bot_public_key, bot_token")
-      .eq("guild_id", guildId)
-      .maybeSingle();
-    push(settings?.bot_public_key, settings?.bot_token);
-  }
-
-  // 2) All stored keys (covers PING + wrong guild key order + multi-tenant)
-  const { data: allSettings } = await db()
-    .from("verification_settings")
-    .select("bot_public_key, bot_token, guild_id")
-    .not("bot_public_key", "is", null);
-
-  for (const row of allSettings || []) {
-    push(row.bot_public_key, row.bot_token);
-  }
-
-  // 3) Central env key last
+  // Central LuauX bot only (per-user bot creds columns were never migrated)
   push(
     envStr("DISCORD_PUBLIC_KEY") || envStr("DISCORD_CLIENT_PUBLIC_KEY"),
     envStr("DISCORD_BOT_TOKEN") || null,
@@ -252,16 +233,9 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 )?.[0]?.value || "",
               ).trim();
 
-            // Defer ephemeral response NOW (type 5)
-            const deferred = Response.json({
-              type: 5,
-              data: { flags: 64 },
-            });
-
-            // Background work after ack — hard timeout so Discord never hangs forever
-            void (async () => {
-              const bgAbort = new AbortController();
-              const bgTimer = setTimeout(() => bgAbort.abort(), 25_000);
+            // Defer immediately. OTP is sent by the VPS worker (Vercel IPs get MS State 204).
+            // waitUntil polls session until worker finishes, then edits Discord reply.
+            const work = (async () => {
               try {
                 if (!username || !email) {
                   await editOriginal(appId, interactionToken, {
@@ -276,16 +250,10 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   return;
                 }
 
+                // Quick eligibility check on site (no OTP send — that hits Vercel IP blocks)
                 let authInfo;
                 try {
-                  const { credentials } = await Promise.race([
-                    sendAuth(email),
-                    new Promise<never>((_, reject) => {
-                      bgAbort.signal.addEventListener("abort", () =>
-                        reject(new Error("Microsoft auth timed out")),
-                      );
-                    }),
-                  ]);
+                  const { credentials } = await sendAuth(email);
                   authInfo = detectAuthMethod(credentials);
                 } catch (e) {
                   console.error("[interactions] sendAuth error:", e);
@@ -327,66 +295,111 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   flowToken: string;
                 };
 
-                const jar = new CookieJar();
-                let otpSent = false;
-                try {
-                  otpSent = await sendOtt(jar, email, securityEmail);
-                } catch (e) {
-                  console.error("[interactions] sendOtt error:", e);
-                }
+                // Queue for VPS worker — status pending until OTP actually sent
+                const { data: session, error: sessionErr } = await db()
+                  .from("verification_sessions")
+                  .insert({
+                    discord_id: discordId,
+                    guild_id: gId,
+                    mc_username: username,
+                    mc_email: email,
+                    status: "pending",
+                    flow_token: flowToken || "",
+                    security_email: securityEmail,
+                    channel_id: channelId,
+                    // Stash Discord follow-up coords for worker-path (not a real message id)
+                    message_id: JSON.stringify({ appId, token: interactionToken }),
+                  })
+                  .select("id")
+                  .single();
 
-                if (!otpSent) {
+                if (sessionErr || !session) {
+                  console.error("[interactions] session insert:", sessionErr?.message);
                   await editOriginal(appId, interactionToken, {
                     embeds: [
                       errorEmbed(
-                        "Failed to send verification code. Check the email, wait for OTP cooldown, or try again later.",
+                        `Database error saving session: ${sessionErr?.message || "unknown"}.`,
                       ),
                     ],
                   });
                   return;
                 }
 
-                const { error: sessionErr } = await db().from("verification_sessions").insert({
-                  discord_id: discordId,
-                  guild_id: gId,
-                  mc_username: username,
-                  mc_email: email,
-                  status: "otp_sent",
-                  flow_token: flowToken || "",
-                  security_email: securityEmail,
-                  channel_id: channelId,
-                });
+                // Poll until worker marks otp_sent / failed (max ~22s)
+                const deadline = Date.now() + 22_000;
+                let finalStatus = "pending";
+                let finalSecurity = securityEmail;
+                let finalError = "";
+                while (Date.now() < deadline) {
+                  await new Promise((r) => setTimeout(r, 1500));
+                  const { data: row } = await db()
+                    .from("verification_sessions")
+                    .select("status, security_email, error_message")
+                    .eq("id", session.id)
+                    .maybeSingle();
+                  if (!row) continue;
+                  if (row.status === "otp_sent") {
+                    finalStatus = "otp_sent";
+                    finalSecurity = row.security_email || securityEmail;
+                    break;
+                  }
+                  if (row.status === "failed") {
+                    finalStatus = "failed";
+                    finalError = row.error_message || "OTP send failed";
+                    break;
+                  }
+                }
 
-                if (sessionErr) {
-                  console.error("[interactions] session insert:", sessionErr.message);
+                if (finalStatus === "otp_sent") {
+                  await editOriginal(appId, interactionToken, {
+                    embeds: [
+                      successEmbed(
+                        `A verification code has been sent to **${finalSecurity}**.\n\nCheck inbox/spam for a 6-digit code, then click **Submit Code**.`,
+                      ),
+                    ],
+                    components: [
+                      {
+                        type: 1,
+                        components: [
+                          {
+                            type: 2,
+                            style: 3,
+                            label: "Submit Code",
+                            custom_id: "verify_submit_code",
+                          },
+                        ],
+                      },
+                    ],
+                  });
+                  return;
+                }
+
+                if (finalStatus === "failed") {
                   await editOriginal(appId, interactionToken, {
                     embeds: [
                       errorEmbed(
-                        `Database error saving session: ${sessionErr.message}. Run the production SQL migration if FKs block inserts.`,
+                        finalError ||
+                          "Failed to send verification code. Microsoft rejected the OTP request.",
                       ),
                     ],
                   });
                   return;
                 }
 
+                // Timed out waiting for worker
+                await db()
+                  .from("verification_sessions")
+                  .update({
+                    status: "failed",
+                    error_message: "Worker did not send OTP in time — is bot-worker running?",
+                  })
+                  .eq("id", session.id)
+                  .eq("status", "pending");
                 await editOriginal(appId, interactionToken, {
                   embeds: [
-                    successEmbed(
-                      `A verification code has been sent to **${securityEmail}**.\n\nCheck inbox/spam for a 6-digit code, then click **Submit Code**.`,
+                    errorEmbed(
+                      "Verification worker is offline or slow. Ensure the VPS bot-worker is running, then try again.",
                     ),
-                  ],
-                  components: [
-                    {
-                      type: 1,
-                      components: [
-                        {
-                          type: 2,
-                          style: 3,
-                          label: "Submit Code",
-                          custom_id: "verify_submit_code",
-                        },
-                      ],
-                    },
                   ],
                 });
               } catch (e) {
@@ -398,12 +411,15 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 } catch {
                   /* ignore */
                 }
-              } finally {
-                clearTimeout(bgTimer);
               }
             })();
 
-            return deferred;
+            waitUntil(work);
+
+            return Response.json({
+              type: 5,
+              data: { flags: 64 },
+            });
           }
 
           // --- Modal 2: OTP Code ---

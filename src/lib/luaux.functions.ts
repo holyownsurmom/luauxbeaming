@@ -726,9 +726,6 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: data.message_title,
         message_description: data.message_description,
         button_text: data.button_text,
-        // Clear per-user bot creds — always use central LuauX bot
-        bot_token: null,
-        bot_public_key: null,
       },
       { onConflict: "discord_id" },
     );

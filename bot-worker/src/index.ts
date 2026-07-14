@@ -8,11 +8,14 @@ import {
   postVerificationResult,
   fetchPresenceTokens,
   markVerificationSession,
+  pollOtpPending,
+  reportOtpResult,
   WORKER_ID as API_WORKER_ID,
 } from "./api.js";
 import { runMcBot, type McJobConfig, type JobRunResult } from "./mc.js";
 import { runDiscordBot, type DiscordJobConfig } from "./discord.js";
 import { runSecureBot, type SecureJobConfig } from "./secure.js";
+import { sendOtpFromWorker } from "./otp-send.js";
 import { syncPresenceBots, stopAllPresence } from "./verification-presence.js";
 import { setJobPaused, clearJobPaused } from "./pause-state.js";
 import { scanPendingPayments } from "./payment-watch.js";
@@ -165,9 +168,33 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
   }
 }
 
+async function processOtpQueue() {
+  try {
+    const sessions = await pollOtpPending(WORKER_ID, 3);
+    for (const s of sessions) {
+      console.log(`[otp] sending for session ${s.id.slice(0, 8)}… (${s.mc_email.slice(0, 3)}***)`);
+      const result = await sendOtpFromWorker(s.mc_email);
+      const ok = await reportOtpResult({
+        session_id: s.id,
+        ok: result.ok,
+        security_email: result.securityEmail || s.security_email || undefined,
+        proof_id: result.proofId || s.flow_token || undefined,
+        error: result.error,
+      });
+      console.log(
+        `[otp] session ${s.id.slice(0, 8)}… result ok=${result.ok} reported=${ok}${result.error ? ` err=${result.error}` : ""}`,
+      );
+    }
+  } catch (e) {
+    console.error("[otp] queue error:", e);
+  }
+}
+
 async function poll() {
   try {
     await flushPendingTerminalUpdates();
+    // OTP sends first — verification UX is latency-sensitive
+    await processOtpQueue();
     const free = MAX_CONCURRENT_JOBS - runningJobs.size;
     if (free <= 0) return;
     const jobs = await pollJobs(WORKER_ID, free);

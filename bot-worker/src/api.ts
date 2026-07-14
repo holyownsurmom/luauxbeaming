@@ -46,6 +46,46 @@ export async function pollJobs(workerId: string, limit?: number): Promise<Job[]>
   return data.jobs ?? [];
 }
 
+export interface OtpPendingSession {
+  id: string;
+  discord_id: string;
+  guild_id: string;
+  mc_username: string;
+  mc_email: string;
+  flow_token: string | null;
+  security_email: string | null;
+  channel_id: string | null;
+}
+
+export async function pollOtpPending(
+  workerId: string,
+  limit = 3,
+): Promise<OtpPendingSession[]> {
+  const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/otp-pending`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ worker_id: workerId, limit }),
+  });
+  if (!res.ok) throw new Error(`otp-pending failed: ${res.status}`);
+  const data = await res.json();
+  return data.sessions ?? [];
+}
+
+export async function reportOtpResult(input: {
+  session_id: string;
+  ok: boolean;
+  security_email?: string;
+  proof_id?: string;
+  error?: string;
+}): Promise<boolean> {
+  const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/otp-result`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(input),
+  });
+  return res.ok;
+}
+
 export async function fetchPresenceTokens(): Promise<
   Array<{ bot_token: string; guild_id: string; label?: string }>
 > {

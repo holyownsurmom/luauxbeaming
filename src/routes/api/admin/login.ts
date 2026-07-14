@@ -6,6 +6,7 @@ import {
   admin as adminDb,
   envStr,
 } from "@/lib/luaux-server.server";
+import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit.server";
 
 type SessionData = {
   user?: { id: string; username: string; global_name: string | null; avatar: string | null };
@@ -27,6 +28,13 @@ export const Route = createFileRoute("/api/admin/login")({
         const session = await useSession<SessionData>(sessionConfig());
         if (!session.data.user) {
           return Response.json({ error: "Not logged in" }, { status: 401 });
+        }
+
+        const ip = clientIp(request);
+        const uid = session.data.user.id;
+        const rl = rateLimit(`admin-login:${ip}:${uid}`, 5, 15 * 60_000);
+        if (!rl.ok) {
+          return rateLimitResponse(rl.retryAfterSec, "Too many admin login attempts");
         }
 
         let body: { password?: string };

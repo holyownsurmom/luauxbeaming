@@ -217,20 +217,20 @@ export function PluginPage({
   }
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 animate-page-in">
       <header>
-        <h1 className="font-display text-5xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-2 text-muted-foreground">{tagline}</p>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">{title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground max-w-2xl leading-relaxed">{tagline}</p>
       </header>
 
       {adminActivated && (
-        <div className="rounded-2xl bg-primary/10 brutal-border p-6 animate-fade-in-scale flex items-start gap-4 max-w-xl mx-auto">
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-5 flex items-start gap-4 max-w-xl mx-auto">
           <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
             <Check className="h-5 w-5 text-primary" />
           </div>
           <div>
             <div className="font-semibold text-sm text-primary">License activated instantly</div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               Admin mode — payment bypassed. Your key is active and ready to use.
             </p>
           </div>
@@ -238,9 +238,9 @@ export function PluginPage({
       )}
 
       <div className="flex justify-center">
-        <div className="w-full max-w-xl rounded-2xl brutal-border bg-card p-7 space-y-6">
+        <div className="w-full max-w-xl rounded-2xl border border-border/50 bg-card/70 p-6 md:p-7 space-y-6">
           <div className="flex items-start gap-4">
-            <div className="h-12 w-12 shrink-0 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center">
+            <div className="h-12 w-12 shrink-0 rounded-xl border border-primary/20 bg-primary/15 text-primary flex items-center justify-center">
               <Icon className="h-6 w-6" />
             </div>
             <div className="min-w-0">

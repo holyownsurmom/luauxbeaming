@@ -29,12 +29,16 @@ function LogsPage() {
   const refreshBots = useCallback(async () => {
     try {
       const res = await fetch("/api/bots/all-status");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || `Status ${res.status}`);
+      }
       const data = await res.json();
       if (data.bots) {
         setBots(data.bots);
       }
-    } catch {
-      /* ignore fetch errors */
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load bot status");
     } finally {
       setLoading(false);
     }
@@ -112,63 +116,70 @@ function LogsPage() {
 
   return (
     <div className="space-y-6 animate-page-in">
-      <header className="flex items-end justify-between">
-        <div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight">Logs</h1>
-          <p className="mt-2 text-muted-foreground">
-            Live console output from every active bot.
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">Logs</h1>
+          <p className="mt-2 text-sm text-muted-foreground max-w-xl leading-relaxed">
+            Live console output from every active bot — filter by bot or level.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-2 flex-wrap sm:justify-end">
           <button
+            type="button"
             onClick={() => {
               refreshBots();
             }}
-            className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-3 py-1.5 text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/80 hover:bg-primary/5 hover:border-primary/25 px-3.5 py-1.5 text-xs font-semibold transition-colors"
           >
             <RefreshCw className="h-3 w-3" /> Refresh
           </button>
           <button
+            type="button"
             onClick={clearConsole}
-            className="inline-flex items-center gap-1.5 rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-3 py-1.5 text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card/80 hover:bg-primary/5 hover:border-primary/25 px-3.5 py-1.5 text-xs font-semibold transition-colors"
           >
-            Clear Console
+            Clear
           </button>
           <button
+            type="button"
             onClick={removeAllBots}
             disabled={nuking || bots.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-destructive/30 bg-destructive/10 hover:bg-destructive/15 text-destructive px-3.5 py-1.5 text-xs font-semibold disabled:opacity-50 transition-colors"
           >
             <Trash2 className="h-3 w-3" />
-            {nuking ? "Removing…" : "Remove All Bots"}
+            {nuking ? "Removing…" : "Stop all"}
           </button>
         </div>
       </header>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2.5 flex-wrap rounded-2xl border border-border/50 bg-card/50 px-4 py-3">
         <div className="flex items-center gap-1.5">
           <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Bot:</span>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Bot
+          </span>
         </div>
         <button
+          type="button"
           onClick={() => setSelectedBot("all")}
           className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
             selectedBot === "all"
-              ? "bg-primary text-primary-foreground"
-              : "brutal-border bg-secondary/40 hover:bg-secondary"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "border border-border/60 bg-background/60 hover:bg-secondary"
           }`}
         >
           All ({bots.length})
         </button>
         {bots.map((b) => (
           <button
+            type="button"
             key={b.id}
             onClick={() => setSelectedBot(b.id)}
             className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
               selectedBot === b.id
-                ? "bg-primary text-primary-foreground"
-                : "brutal-border bg-secondary/40 hover:bg-secondary"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "border border-border/60 bg-background/60 hover:bg-secondary"
             }`}
           >
             {b.label}{" "}

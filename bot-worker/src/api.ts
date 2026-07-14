@@ -141,6 +141,9 @@ export function createLogger(jobId: string, discordId: string) {
 
 const TERMINAL = new Set(["error", "stopped", "completed", "pending"]);
 
+/** Failed terminal writes — retried on next poll so jobs don't stay "running" forever */
+const pendingTerminal = new Map<string, { status: string; error?: string; tries: number }>();
+
 export async function updateJob(jobId: string, status: string, error?: string): Promise<boolean> {
   const body: Record<string, string> = { job_id: jobId, status, worker_id: WORKER_ID };
   if (error) body.error = error;
@@ -153,7 +156,10 @@ export async function updateJob(jobId: string, status: string, error?: string): 
         headers,
         body: JSON.stringify(body),
       });
-      if (res.ok) return true;
+      if (res.ok) {
+        pendingTerminal.delete(jobId);
+        return true;
+      }
       lastErr = `HTTP ${res.status}`;
       // Terminal updates: one more try without worker_id binding (server retries unbound on 409)
       if (res.status === 409 && TERMINAL.has(status) && i === attempts - 2) {
@@ -164,7 +170,10 @@ export async function updateJob(jobId: string, status: string, error?: string): 
           headers,
           body: JSON.stringify(loose),
         });
-        if (res2.ok) return true;
+        if (res2.ok) {
+          pendingTerminal.delete(jobId);
+          return true;
+        }
         lastErr = `HTTP ${res2.status}`;
       }
     } catch (e) {
@@ -173,7 +182,32 @@ export async function updateJob(jobId: string, status: string, error?: string): 
     if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
   }
   console.error(`[worker] update FAILED job ${jobId} → ${status}: ${lastErr}`);
+  if (TERMINAL.has(status) && status !== "pending") {
+    const prev = pendingTerminal.get(jobId);
+    pendingTerminal.set(jobId, {
+      status,
+      error,
+      tries: (prev?.tries ?? 0) + 1,
+    });
+  }
   return false;
+}
+
+/** Retry any terminal status writes that failed while the API was down */
+export async function flushPendingTerminalUpdates(): Promise<void> {
+  if (pendingTerminal.size === 0) return;
+  const entries = [...pendingTerminal.entries()];
+  for (const [jobId, entry] of entries) {
+    if (entry.tries > 40) {
+      console.error(`[worker] giving up terminal retry for ${jobId} after ${entry.tries} tries`);
+      pendingTerminal.delete(jobId);
+      continue;
+    }
+    const ok = await updateJob(jobId, entry.status, entry.error);
+    if (ok) {
+      console.log(`[worker] recovered terminal update for ${jobId} → ${entry.status}`);
+    }
+  }
 }
 
 /** Only write terminal status if the job is still running/claimed (never clobber error/stopped). */
@@ -255,5 +289,92 @@ export async function checkJobStatuses(
   } catch (e) {
     console.error("[worker] checkJobStatuses failed:", e);
     return null;
+  }
+}
+
+export type McSessionResponse =
+  | {
+      ok: true;
+      accountId: string;
+      token: string;
+      username: string;
+      uuid: string;
+      rawUuid: string;
+      label?: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      code?: string;
+      httpStatus?: number;
+    };
+
+/**
+ * Live SSID from site DB (so Refresh Token applies without relaunch).
+ * Falls back to job-config token only if caller provides it separately.
+ */
+export async function fetchMcSession(opts: {
+  jobId?: string;
+  accountId?: string;
+  discordId?: string;
+}): Promise<McSessionResponse> {
+  try {
+    const res = await fetchWithRetry(`${SITE_URL}/api/bots/worker/mc-session`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        job_id: opts.jobId,
+        account_id: opts.accountId,
+        discord_id: opts.discordId,
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: String(data.error || `HTTP ${res.status}`),
+        code: typeof data.code === "string" ? data.code : undefined,
+        httpStatus: res.status,
+      };
+    }
+    if (!data.token || !data.username) {
+      return { ok: false, error: "Session response missing token/username" };
+    }
+    return {
+      ok: true,
+      accountId: String(data.accountId || opts.accountId || ""),
+      token: String(data.token),
+      username: String(data.username),
+      uuid: String(data.uuid || ""),
+      rawUuid: String(data.rawUuid || ""),
+      label: data.label != null ? String(data.label) : undefined,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      code: "network",
+    };
+  }
+}
+
+/** Mark mc_accounts.status = token_expired after runtime auth failure */
+export async function markMcAccountExpired(
+  accountId: string | undefined,
+  discordId?: string,
+): Promise<void> {
+  if (!accountId) return;
+  try {
+    await fetchWithRetry(`${SITE_URL}/api/bots/worker/mc-session`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        account_id: accountId,
+        discord_id: discordId,
+        mark_expired: true,
+      }),
+    });
+  } catch (e) {
+    console.error("[worker] markMcAccountExpired failed:", e);
   }
 }

@@ -1,12 +1,10 @@
-import { createLogger, updateJob } from "./api.js";
+import { createLogger, fetchMcSession, markMcAccountExpired, updateJob } from "./api.js";
 import { isJobPaused } from "./pause-state.js";
 import {
   accountLockKey,
+  certsNeedRefresh,
   createPremiumAuthInjector,
   fetchMinecraftCertificates,
-  fetchMinecraftProfile,
-  formatUuidDashed,
-  formatUuidUndashed,
   resolveSsidSession,
   type PremiumSession,
 } from "./mc-auth.js";
@@ -132,137 +130,144 @@ export async function runMcBot(
 
   if (config.interval < 5) config.interval = 5;
 
-  // Premium session resolved ONCE per job (reused on every reconnect)
+  // Premium session — revalidated from site DB so Refresh Token applies mid-job
   let premiumSession: PremiumSession | null = null;
+  let lastSessionRefreshAt = 0;
+  const SESSION_REFRESH_MS = 30 * 60_000;
+  const accountId = config.accountId || "";
 
-  if (config.authType === "ssid") {
-    await log("info", "SSID auth — validating token + loading certificates...");
-    const resolved = await resolveSsidSession(config.ssid || "", log);
+  const failAuth = async (msg: string, markExpired = false): Promise<JobRunResult> => {
+    await log("error", msg, true);
+    if (markExpired) await markMcAccountExpired(accountId, discordId);
+    await updateJob(jobId, "error", msg);
+    return { status: "error", error: msg };
+  };
+
+  /**
+   * Resolve SSID + chat certs.
+   * 1) Prefer live token from site (mc_accounts) via worker API
+   * 2) Fallback to job-config ssid (legacy / offline site)
+   */
+  const refreshPremiumSession = async (force = false): Promise<boolean> => {
+    if (config.authType !== "ssid" && config.authType !== "microsoft") return true;
+
+    const needsCerts = certsNeedRefresh(premiumSession);
+    if (
+      !force &&
+      premiumSession &&
+      !needsCerts &&
+      Date.now() - lastSessionRefreshAt < SESSION_REFRESH_MS
+    ) {
+      return true;
+    }
+
+    await log(
+      "info",
+      force || !premiumSession
+        ? "SSID auth — loading live token + certificates..."
+        : needsCerts
+          ? "Refreshing chat-signing certificates..."
+          : "Re-validating SSID session...",
+      true,
+    );
+
+    // Live fetch from DB (user may have refreshed token while bot was running)
+    let token = "";
+    if (accountId || jobId) {
+      const live = await fetchMcSession({
+        jobId,
+        accountId: accountId || undefined,
+        discordId,
+      });
+      if (live.ok) {
+        token = live.token;
+        config.username = live.username;
+        config.uuid = live.uuid;
+        config.ssid = live.token;
+        config.authType = "ssid";
+      } else if (live.code === "token_expired" || live.httpStatus === 401) {
+        await log("error", live.error, true);
+        await markMcAccountExpired(accountId, discordId);
+        return false;
+      } else if (live.code === "no_ssid") {
+        await log("error", live.error, true);
+        return false;
+      } else {
+        await log(
+          "warn",
+          `Live session fetch failed (${live.error}) — trying job-config token`,
+          true,
+        );
+      }
+    }
+
+    if (!token) {
+      token = config.ssid || "";
+    }
+    if (!token) {
+      await log(
+        "error",
+        "No SSID available. Open account → Refresh Token and paste a fresh access_token.",
+        true,
+      );
+      return false;
+    }
+
+    // If only certs expired but same token, refresh certs only
+    if (
+      !force &&
+      premiumSession &&
+      premiumSession.accessToken === token &&
+      needsCerts
+    ) {
+      const keys = await fetchMinecraftCertificates(token);
+      if (keys) {
+        premiumSession = {
+          ...premiumSession,
+          profileKeys: keys,
+          certsExpiresOn:
+            keys.expiresOn instanceof Date ? keys.expiresOn.getTime() : null,
+          certsRefreshAfter:
+            keys.refreshAfter instanceof Date ? keys.refreshAfter.getTime() : null,
+        };
+        lastSessionRefreshAt = Date.now();
+        await log("info", "Chat certificates refreshed", true);
+        return true;
+      }
+      await log("warn", "Cert refresh failed — full re-validate", true);
+    }
+
+    const resolved = await resolveSsidSession(token, log);
     if ("error" in resolved) {
-      await updateJob(jobId, "error", resolved.error);
-      return { status: "error", error: resolved.error };
+      const expired =
+        resolved.code === "invalid" || /expired|invalid|rejected/i.test(resolved.error);
+      if (expired) await markMcAccountExpired(accountId, discordId);
+      return false;
     }
     premiumSession = resolved.session;
-  }
+    lastSessionRefreshAt = Date.now();
+    config.authType = "ssid";
+    config.ssid = resolved.session.accessToken;
+    config.username = resolved.session.name;
+    config.uuid = resolved.session.idDashed;
+    return true;
+  };
 
-  if (config.authType === "microsoft") {
-    try {
-      const prismarineAuth = await import("prismarine-auth");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Authflow =
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (prismarineAuth as any).Authflow ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (prismarineAuth as any).default?.Authflow;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Titles =
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (prismarineAuth as any).Titles ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (prismarineAuth as any).default?.Titles ||
-        {};
-
-      // Device-code works with live + Nintendo Switch title (official prismarine-auth example).
-      const authTitle = Titles.MinecraftNintendoSwitch || "00000000441cc96b";
-      const cacheDir = `./prismarine-cache/${(config.label || "default").replace(/[^\w.-]/g, "_")}`;
-      const msAccountKey = config.username || config.label || "mc-user";
-
-      await log("info", "Starting Microsoft device code authentication...");
-      await log(
-        "system",
-        "Waiting for Microsoft login — a popup should appear with the link and code.",
+  if (config.authType === "ssid" || config.authType === "microsoft") {
+    // microsoft without SSID is not supported on headless worker
+    if (config.authType === "microsoft" && !config.ssid && !accountId) {
+      return failAuth(
+        "Microsoft device-code is not available on the bot server. Use SSID (access_token).",
+        false,
       );
-
-      const authflow = new Authflow(
-        msAccountKey,
-        cacheDir,
-        { authTitle, deviceType: "Nintendo", flow: "live" },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (info: any) => {
-          const code = info?.user_code || info?.userCode || info?.code || "";
-          const uri =
-            info?.verification_uri ||
-            info?.verificationUri ||
-            info?.verification_url ||
-            "https://www.microsoft.com/link";
-          const expires =
-            info?.expires_in || info?.expiresIn || info?.expires_on || 900;
-          const mins = Math.max(1, Math.round(Number(expires) / 60) || 15);
-
-          if (!code) {
-            console.log("[ms-auth] device code payload:", JSON.stringify(info));
-            log(
-              "warn",
-              `Microsoft auth callback missing code. Raw: ${JSON.stringify(info).slice(0, 300)}`,
-            ).catch(() => {});
-            return;
-          }
-
-          log("system", `MS_AUTH_REQUIRED|${uri}|${code}|${mins}`, true).catch(() => {});
-          log(
-            "info",
-            `Microsoft login required — open ${uri} and enter code ${code} (expires in ${mins} min)`,
-            true,
-          ).catch(() => {});
-          console.log(`[ms-auth] Open ${uri} and enter code: ${code}`);
-        },
+    }
+    config.authType = "ssid";
+    const ok = await refreshPremiumSession(true);
+    if (!ok) {
+      return failAuth(
+        "SSID validation failed — paste a fresh Minecraft access_token via Refresh Token.",
+        false,
       );
-
-      const mcToken = await authflow.getMinecraftJavaToken({
-        fetchProfile: true,
-        fetchCertificates: true,
-      });
-
-      if (!mcToken?.token) {
-        await log("error", "Microsoft auth failed: no token returned");
-        await updateJob(jobId, "error", "Microsoft auth failed");
-        return { status: "error", error: "Microsoft auth failed" };
-      }
-
-      let name = mcToken.profile?.name as string | undefined;
-      let id = mcToken.profile?.id as string | undefined;
-
-      if (!name || !id) {
-        const profile = await fetchMinecraftProfile(mcToken.token);
-        if (profile) {
-          name = profile.name;
-          id = profile.id;
-        }
-      }
-
-      if (!name || !id) {
-        await log("error", "Microsoft auth failed: no Minecraft profile");
-        await updateJob(jobId, "error", "Microsoft auth failed: no profile");
-        return { status: "error", error: "Microsoft auth failed: no profile" };
-      }
-
-      // Prefer certificates from prismarine-auth; fallback to direct Mojang API
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let profileKeys = (mcToken as any).certificates?.profileKeys || null;
-      if (profileKeys) {
-        await log("info", "Chat certificates loaded (prismarine-auth)");
-      } else {
-        await log("info", "Fetching chat-signing certificates...");
-        profileKeys = await fetchMinecraftCertificates(mcToken.token);
-        if (profileKeys) await log("info", "Chat certificates loaded");
-        else await log("warn", "Could not load chat certificates");
-      }
-
-      premiumSession = {
-        accessToken: mcToken.token,
-        name,
-        id,
-        idUndashed: formatUuidUndashed(id),
-        idDashed: formatUuidDashed(id),
-        profileKeys,
-        source: "microsoft",
-      };
-      await log("info", `Authenticated as ${name} (${formatUuidDashed(id)})`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      await log("error", `Microsoft auth failed: ${msg}`);
-      await updateJob(jobId, "error", `Microsoft auth failed: ${msg}`);
-      return { status: "error", error: `Microsoft auth failed: ${msg}` };
     }
   }
 
@@ -305,6 +310,9 @@ export async function runMcBot(
 
   const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
 
+  let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
   const cleanup = () => {
     if (currentTimer) {
       clearTimeout(currentTimer);
@@ -318,17 +326,35 @@ export async function runMcBot(
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    if (connectionTimeout) {
+      clearTimeout(connectionTimeout);
+      connectionTimeout = null;
+    }
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = null;
+    }
   };
 
   const disconnectBot = () => {
+    cleanup();
     if (currentBot) {
-      try {
-        currentBot.removeAllListeners();
-        currentBot.end();
-      } catch {
-        /* ignore disconnect errors */
-      }
+      const bot = currentBot;
       currentBot = null;
+      try {
+        bot.quit("stop");
+      } catch {
+        try {
+          bot.end("stop");
+        } catch {
+          /* ignore disconnect errors */
+        }
+      }
+      try {
+        bot.removeAllListeners();
+      } catch {
+        /* ignore */
+      }
     }
   };
 
@@ -512,7 +538,7 @@ export async function runMcBot(
     if (lower.includes("not logged into")) return false;
     if (lower.includes("invalid session")) return false;
     if (lower.includes("whitelist")) return false;
-    if (lower.includes("full")) return false;
+    // Server full is temporary — allow reconnect with backoff
     if (lower.includes("logged in from another")) return false;
     if (lower.includes("already connected")) return false;
     if (lower.includes("already logged in")) return false;
@@ -533,19 +559,39 @@ export async function runMcBot(
     connecting = true;
     reconnectScheduled = false;
 
+    // Refresh SSID/certs on reconnect (live DB token + cert expiry)
+    if (config.authType === "ssid" || premiumSession) {
+      const ok = await refreshPremiumSession(reconnectAttempts > 0);
+      if (!ok) {
+        connecting = false;
+        const msg =
+          "SSID expired or invalid — open the account → Refresh Token, then launch again.";
+        await updateJob(jobId, "error", msg);
+        authFailed = true;
+        stopped = true;
+        terminal = { status: "error", error: msg };
+        return;
+      }
+    }
+
     // Always tear down any previous bot before opening a new socket
     if (currentBot) {
+      const prev = currentBot;
+      currentBot = null;
       try {
-        currentBot.removeAllListeners();
-        currentBot.quit("reconnect");
+        prev.quit("reconnect");
       } catch {
         try {
-          currentBot.end("reconnect");
+          prev.end("reconnect");
         } catch {
           /* ignore */
         }
       }
-      currentBot = null;
+      try {
+        prev.removeAllListeners();
+      } catch {
+        /* ignore */
+      }
       await new Promise((r) => setTimeout(r, 2000));
     }
 
@@ -595,22 +641,23 @@ export async function runMcBot(
       reconnectScheduled = true;
       connecting = false;
       cleanup();
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
       if (currentBot) {
+        const prev = currentBot;
+        currentBot = null;
         try {
-          currentBot.removeAllListeners();
-          currentBot.quit("reconnect");
+          prev.quit("reconnect");
         } catch {
           try {
-            currentBot?.end("reconnect");
+            prev.end("reconnect");
           } catch {
             /* ignore */
           }
         }
-        currentBot = null;
+        try {
+          prev.removeAllListeners();
+        } catch {
+          /* ignore */
+        }
       }
 
       if (stopped || abortSignal.aborted || authFailed) return;
@@ -633,12 +680,18 @@ export async function runMcBot(
 
       const doReconnect = shouldReconnect(reasonText);
       if (!doReconnect) {
-        const msg = lower.includes("authenticat") || lower.includes("not logged into")
-          ? `Authentication failed: ${reasonText}. Your token may be expired — re-login and get a new token.`
+        const isAuth =
+          lower.includes("authenticat") ||
+          lower.includes("not logged into") ||
+          lower.includes("invalid session") ||
+          lower.includes("not authenticated");
+        const msg = isAuth
+          ? `Authentication failed: ${reasonText}. Token may be expired — open account → Refresh Token.`
           : lower.includes("banned") || lower.includes("blocked") || lower.includes("suspicious")
             ? `Account blocked/banned: ${reasonText}`
             : `Not reconnecting: ${reasonText}`;
         log("error", msg, true).catch(() => {});
+        if (isAuth) await markMcAccountExpired(accountId, discordId);
         await updateJob(jobId, "error", msg);
         authFailed = true;
         stopped = true;
@@ -734,7 +787,9 @@ export async function runMcBot(
       // Brief settle so Via/Paper teleports finish; then start chat loop
       const settleMs = randomBetween(8_000, 14_000);
       log("info", `Settle ${Math.round(settleMs / 1000)}s before chat loop`, true).catch(() => {});
-      setTimeout(() => {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         startAntiAfk(bot);
         startMessageLoop(bot);
@@ -780,8 +835,13 @@ export async function runMcBot(
     });
 
     bot.on("end", async (reason: unknown) => {
-      clearTimeout(connectionTimeout);
-      if (currentBot !== bot && handlingDisconnect) return;
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+        connectionTimeout = null;
+      }
+      // Ignore end events from bots that were already replaced
+      if (currentBot !== bot && currentBot !== null) return;
+      if (handlingDisconnect) return;
       const reasonText = formatKickReason(reason) || "connection closed";
       await scheduleReconnect(reasonText, false);
     });
@@ -790,8 +850,10 @@ export async function runMcBot(
       log("warn", "Bot died, respawning...").catch(() => {});
     });
 
-    const connectionTimeout = setTimeout(() => {
-      if (!connected && !stopped && !handlingDisconnect) {
+    if (connectionTimeout) clearTimeout(connectionTimeout);
+    connectionTimeout = setTimeout(() => {
+      connectionTimeout = null;
+      if (!connected && !stopped && !handlingDisconnect && currentBot === bot) {
         log("error", "Connection timed out").catch(() => {});
         void scheduleReconnect("Connection timed out", false);
       }

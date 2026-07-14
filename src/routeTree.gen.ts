@@ -20,6 +20,7 @@ import { Route as DashboardSupportRouteImport } from './routes/dashboard.support
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardPurchaseRouteImport } from './routes/dashboard.purchase'
 import { Route as DashboardLogsRouteImport } from './routes/dashboard.logs'
+import { Route as DashboardLeaderboardRouteImport } from './routes/dashboard.leaderboard'
 import { Route as DashboardDiscordSpamRouteImport } from './routes/dashboard.discord-spam'
 import { Route as DashboardDiscordBotRouteImport } from './routes/dashboard.discord-bot'
 import { Route as DashboardDiscordAutoReplyRouteImport } from './routes/dashboard.discord-auto-reply'
@@ -49,6 +50,7 @@ import { Route as ApiBotsWorkerPresenceTokensRouteImport } from './routes/api/bo
 import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerPaymentsPendingRouteImport } from './routes/api/bots/worker/payments-pending'
 import { Route as ApiBotsWorkerPaymentsConfirmRouteImport } from './routes/api/bots/worker/payments-confirm'
+import { Route as ApiBotsWorkerMcSessionRouteImport } from './routes/api/bots/worker/mc-session'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
 import { Route as ApiBotsMcStatusRouteImport } from './routes/api/bots/mc/status'
@@ -117,6 +119,11 @@ const DashboardPurchaseRoute = DashboardPurchaseRouteImport.update({
 const DashboardLogsRoute = DashboardLogsRouteImport.update({
   id: '/logs',
   path: '/logs',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardLeaderboardRoute = DashboardLeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardDiscordSpamRoute = DashboardDiscordSpamRouteImport.update({
@@ -270,6 +277,11 @@ const ApiBotsWorkerPaymentsConfirmRoute =
     path: '/api/bots/worker/payments-confirm',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiBotsWorkerMcSessionRoute = ApiBotsWorkerMcSessionRouteImport.update({
+  id: '/api/bots/worker/mc-session',
+  path: '/api/bots/worker/mc-session',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBotsWorkerLogRoute = ApiBotsWorkerLogRouteImport.update({
   id: '/api/bots/worker/log',
   path: '/api/bots/worker/log',
@@ -352,6 +364,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
   '/dashboard/discord-bot': typeof DashboardDiscordBotRoute
   '/dashboard/discord-spam': typeof DashboardDiscordSpamRoute
+  '/dashboard/leaderboard': typeof DashboardLeaderboardRoute
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
@@ -386,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
@@ -406,6 +420,7 @@ export interface FileRoutesByTo {
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
   '/dashboard/discord-bot': typeof DashboardDiscordBotRoute
   '/dashboard/discord-spam': typeof DashboardDiscordSpamRoute
+  '/dashboard/leaderboard': typeof DashboardLeaderboardRoute
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
@@ -440,6 +455,7 @@ export interface FileRoutesByTo {
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
@@ -462,6 +478,7 @@ export interface FileRoutesById {
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
   '/dashboard/discord-bot': typeof DashboardDiscordBotRoute
   '/dashboard/discord-spam': typeof DashboardDiscordSpamRoute
+  '/dashboard/leaderboard': typeof DashboardLeaderboardRoute
   '/dashboard/logs': typeof DashboardLogsRoute
   '/dashboard/purchase': typeof DashboardPurchaseRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
@@ -496,6 +513,7 @@ export interface FileRoutesById {
   '/api/bots/mc/status': typeof ApiBotsMcStatusRoute
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
+  '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
@@ -519,6 +537,7 @@ export interface FileRouteTypes {
     | '/dashboard/discord-auto-reply'
     | '/dashboard/discord-bot'
     | '/dashboard/discord-spam'
+    | '/dashboard/leaderboard'
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
@@ -553,6 +572,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/mc-session'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
@@ -573,6 +593,7 @@ export interface FileRouteTypes {
     | '/dashboard/discord-auto-reply'
     | '/dashboard/discord-bot'
     | '/dashboard/discord-spam'
+    | '/dashboard/leaderboard'
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
@@ -607,6 +628,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/mc-session'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
@@ -628,6 +650,7 @@ export interface FileRouteTypes {
     | '/dashboard/discord-auto-reply'
     | '/dashboard/discord-bot'
     | '/dashboard/discord-spam'
+    | '/dashboard/leaderboard'
     | '/dashboard/logs'
     | '/dashboard/purchase'
     | '/dashboard/settings'
@@ -662,6 +685,7 @@ export interface FileRouteTypes {
     | '/api/bots/mc/status'
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
+    | '/api/bots/worker/mc-session'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
@@ -707,6 +731,7 @@ export interface RootRouteChildren {
   ApiBotsMcStatusRoute: typeof ApiBotsMcStatusRoute
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
+  ApiBotsWorkerMcSessionRoute: typeof ApiBotsWorkerMcSessionRoute
   ApiBotsWorkerPaymentsConfirmRoute: typeof ApiBotsWorkerPaymentsConfirmRoute
   ApiBotsWorkerPaymentsPendingRoute: typeof ApiBotsWorkerPaymentsPendingRoute
   ApiBotsWorkerPollRoute: typeof ApiBotsWorkerPollRoute
@@ -793,6 +818,13 @@ declare module '@tanstack/react-router' {
       path: '/logs'
       fullPath: '/dashboard/logs'
       preLoaderRoute: typeof DashboardLogsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/leaderboard': {
+      id: '/dashboard/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/dashboard/leaderboard'
+      preLoaderRoute: typeof DashboardLeaderboardRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/discord-spam': {
@@ -998,6 +1030,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBotsWorkerPaymentsConfirmRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/mc-session': {
+      id: '/api/bots/worker/mc-session'
+      path: '/api/bots/worker/mc-session'
+      fullPath: '/api/bots/worker/mc-session'
+      preLoaderRoute: typeof ApiBotsWorkerMcSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/worker/log': {
       id: '/api/bots/worker/log'
       path: '/api/bots/worker/log'
@@ -1098,6 +1137,7 @@ interface DashboardRouteChildren {
   DashboardDiscordAutoReplyRoute: typeof DashboardDiscordAutoReplyRoute
   DashboardDiscordBotRoute: typeof DashboardDiscordBotRoute
   DashboardDiscordSpamRoute: typeof DashboardDiscordSpamRoute
+  DashboardLeaderboardRoute: typeof DashboardLeaderboardRoute
   DashboardLogsRoute: typeof DashboardLogsRoute
   DashboardPurchaseRoute: typeof DashboardPurchaseRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
@@ -1112,6 +1152,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardDiscordAutoReplyRoute: DashboardDiscordAutoReplyRoute,
   DashboardDiscordBotRoute: DashboardDiscordBotRoute,
   DashboardDiscordSpamRoute: DashboardDiscordSpamRoute,
+  DashboardLeaderboardRoute: DashboardLeaderboardRoute,
   DashboardLogsRoute: DashboardLogsRoute,
   DashboardPurchaseRoute: DashboardPurchaseRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
@@ -1160,6 +1201,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcStatusRoute: ApiBotsMcStatusRoute,
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
+  ApiBotsWorkerMcSessionRoute: ApiBotsWorkerMcSessionRoute,
   ApiBotsWorkerPaymentsConfirmRoute: ApiBotsWorkerPaymentsConfirmRoute,
   ApiBotsWorkerPaymentsPendingRoute: ApiBotsWorkerPaymentsPendingRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,

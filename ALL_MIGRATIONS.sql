@@ -635,3 +635,136 @@ DROP POLICY IF EXISTS "service role only" ON public.payment_grants;
 CREATE POLICY "service role only" ON public.payment_grants FOR ALL TO service_role USING (true) WITH CHECK (true);
 REVOKE ALL ON public.payment_grants FROM anon, authenticated;
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS granted_at TIMESTAMPTZ;
+
+-- Orphan job sweeper (worker crash / network partition)
+CREATE OR REPLACE FUNCTION public.reclaim_stale_bot_jobs(
+  p_stale_minutes INT DEFAULT 45
+)
+RETURNS INT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  n INT;
+  mins INT := GREATEST(5, LEAST(COALESCE(p_stale_minutes, 45), 1440));
+BEGIN
+  WITH doomed AS (
+    UPDATE public.bot_jobs
+    SET
+      status = 'error',
+      error = COALESCE(
+        NULLIF(error, ''),
+        'Worker lost contact — job reclaimed as stale'
+      ) || ' (stale reclaim)',
+      stopped_at = NOW(),
+      worker_id = NULL
+    WHERE status IN ('running', 'stopping', 'paused')
+      AND COALESCE(updated_at, started_at, created_at) < NOW() - (mins || ' minutes')::INTERVAL
+    RETURNING id
+  )
+  SELECT COUNT(*)::INT INTO n FROM doomed;
+  RETURN COALESCE(n, 0);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.reclaim_stale_bot_jobs(INT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reclaim_stale_bot_jobs(INT) TO service_role;
+
+CREATE INDEX IF NOT EXISTS bot_jobs_stale_reclaim_idx
+  ON public.bot_jobs (status, updated_at)
+  WHERE status IN ('running', 'stopping', 'paused');
+
+CREATE OR REPLACE FUNCTION public.refund_bot_hour(p_discord_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  updated_id TEXT;
+BEGIN
+  UPDATE public.profiles
+  SET bot_hours_remaining = bot_hours_remaining + 1
+  WHERE discord_id = p_discord_id
+  RETURNING discord_id INTO updated_id;
+  RETURN updated_id IS NOT NULL;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.refund_bot_hour(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refund_bot_hour(TEXT) TO service_role;
+
+-- Optional MSA refresh_token + global leaderboard
+ALTER TABLE public.mc_accounts
+  ADD COLUMN IF NOT EXISTS refresh_token TEXT,
+  ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS last_refreshed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS public.leaderboard_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  discord_id TEXT NOT NULL,
+  username TEXT NOT NULL DEFAULT '',
+  event_type TEXT NOT NULL DEFAULT 'secured'
+    CHECK (event_type IN ('secured')),
+  source_id UUID,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS leaderboard_events_created_idx ON public.leaderboard_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS leaderboard_events_discord_created_idx ON public.leaderboard_events (discord_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS leaderboard_events_source_unique ON public.leaderboard_events (source_id) WHERE source_id IS NOT NULL;
+GRANT ALL ON public.leaderboard_events TO service_role;
+ALTER TABLE public.leaderboard_events ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service role only" ON public.leaderboard_events;
+CREATE POLICY "service role only" ON public.leaderboard_events FOR ALL TO service_role USING (true) WITH CHECK (true);
+REVOKE ALL ON public.leaderboard_events FROM anon, authenticated;
+
+CREATE TABLE IF NOT EXISTS public.leaderboard_daily_totals (
+  day DATE PRIMARY KEY,
+  total INT NOT NULL DEFAULT 0
+);
+GRANT ALL ON public.leaderboard_daily_totals TO service_role;
+ALTER TABLE public.leaderboard_daily_totals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service role only" ON public.leaderboard_daily_totals;
+CREATE POLICY "service role only" ON public.leaderboard_daily_totals FOR ALL TO service_role USING (true) WITH CHECK (true);
+REVOKE ALL ON public.leaderboard_daily_totals FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.record_leaderboard_event(
+  p_discord_id TEXT,
+  p_username TEXT,
+  p_source_id UUID DEFAULT NULL,
+  p_event_type TEXT DEFAULT 'secured'
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  new_id UUID;
+  d DATE := (timezone('utc', now()))::DATE;
+BEGIN
+  IF p_discord_id IS NULL OR length(trim(p_discord_id)) = 0 THEN
+    RETURN false;
+  END IF;
+  IF p_source_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.leaderboard_events WHERE source_id = p_source_id
+  ) THEN
+    RETURN false;
+  END IF;
+  INSERT INTO public.leaderboard_events (discord_id, username, event_type, source_id)
+  VALUES (
+    p_discord_id,
+    COALESCE(NULLIF(trim(p_username), ''), 'Unknown'),
+    COALESCE(NULLIF(p_event_type, ''), 'secured'),
+    p_source_id
+  )
+  RETURNING id INTO new_id;
+  INSERT INTO public.leaderboard_daily_totals (day, total)
+  VALUES (d, 1)
+  ON CONFLICT (day) DO UPDATE SET total = public.leaderboard_daily_totals.total + 1;
+  RETURN new_id IS NOT NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.record_leaderboard_event(TEXT, TEXT, UUID, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.record_leaderboard_event(TEXT, TEXT, UUID, TEXT) TO service_role;

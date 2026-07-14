@@ -56,6 +56,7 @@ type Account = {
   status: string;
   created_at: string;
   has_ssid?: boolean;
+  has_refresh_token?: boolean;
 };
 
 type McBotStatus = {
@@ -88,6 +89,7 @@ function BotsPage() {
     username: "",
     uuid: "",
     ssid: "",
+    refresh_token: "",
   });
   const [ssidPreview, setSsidPreview] = useState<{
     username: string;
@@ -96,6 +98,7 @@ function BotsPage() {
   const [ssidChecking, setSsidChecking] = useState(false);
   const [refreshTarget, setRefreshTarget] = useState<Account | null>(null);
   const [refreshToken, setRefreshToken] = useState("");
+  const [refreshMsaToken, setRefreshMsaToken] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -418,26 +421,30 @@ function BotsPage() {
     e.preventDefault();
     setError(null);
     if (!form.label.trim()) return setError("Label required");
-    if (form.auth_type === "ssid" && !form.ssid.trim())
-      return setError("Minecraft access token (SSID) required");
-    if (form.auth_type === "microsoft" && !form.username.trim())
-      return setError("Username/email required");
+    if (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim())
+      return setError("Minecraft access token (SSID) or MSA refresh_token required");
     if (form.auth_type === "offline" && !form.username.trim()) return setError("Username required");
     setSaving(true);
     try {
       await addAcc({
         data: {
           label: form.label.trim(),
-          auth_type: form.auth_type as "microsoft" | "ssid" | "offline",
+          auth_type: form.auth_type === "offline" ? "offline" : "ssid",
           username: form.username.trim() || undefined,
           uuid: form.uuid.trim() || undefined,
-          ssid: form.auth_type === "ssid" ? form.ssid.trim() : undefined,
+          ssid: form.auth_type === "ssid" ? form.ssid.trim() || undefined : undefined,
+          refresh_token:
+            form.auth_type === "ssid" ? form.refresh_token.trim() || undefined : undefined,
         },
       });
       toast.success(
-        form.auth_type === "ssid" ? "SSID validated and account saved" : "Account added",
+        form.auth_type === "ssid"
+          ? form.refresh_token.trim()
+            ? "SSID saved — auto-refresh enabled"
+            : "SSID validated and account saved"
+          : "Account added",
       );
-      setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "" });
+      setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "", refresh_token: "" });
       setSsidPreview(null);
       setShowForm(false);
       await reload();
@@ -451,18 +458,27 @@ function BotsPage() {
   const submitRefreshSsid = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!refreshTarget) return;
-    if (!refreshToken.trim()) {
-      toast.error("Paste a fresh access token");
+    if (!refreshToken.trim() && !refreshMsaToken.trim()) {
+      toast.error("Paste a fresh access_token and/or MSA refresh_token");
       return;
     }
     setRefreshing(true);
     try {
       const row = await refreshSsid({
-        data: { id: refreshTarget.id, ssid: refreshToken.trim() },
+        data: {
+          id: refreshTarget.id,
+          ssid: refreshToken.trim() || undefined,
+          refresh_token: refreshMsaToken.trim() || undefined,
+        },
       });
-      toast.success(`Token refreshed — ${row.username || row.label}`);
+      toast.success(
+        refreshMsaToken.trim()
+          ? `Session updated — auto-refresh on · ${row.username || row.label}`
+          : `Token refreshed — ${row.username || row.label}`,
+      );
       setRefreshTarget(null);
       setRefreshToken("");
+      setRefreshMsaToken("");
       await reload();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Refresh failed");
@@ -568,17 +584,17 @@ function BotsPage() {
       ]);
       logPollSinceRef.current = Date.now() - 60_000;
       msAuthCodeRef.current = null;
-      if (account.auth_type === "microsoft") {
-        setMsAuthWaiting(true);
-        toast.message("Waiting for Microsoft code…", {
-          description: "A login popup will open when the code is ready",
-          duration: 15000,
-        });
-      }
+      setMsAuthWaiting(false);
       await refreshBots();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Launch failed");
+      const msg = e instanceof Error ? e.message : "Launch failed";
+      setError(msg);
       setMsAuthWaiting(false);
+      if (/token|ssid|expired|refresh/i.test(msg)) {
+        toast.error(msg, {
+          description: "Open the account → Refresh Token and paste a fresh access_token",
+        });
+      }
     } finally {
       setLaunching(false);
     }
@@ -647,23 +663,27 @@ function BotsPage() {
 
   if (!active) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 animate-page-in">
         <header>
-          <h1 className="font-display text-4xl font-semibold tracking-tight">MC Auto-Message</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+            MC Auto-Message
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground max-w-xl leading-relaxed">
             Deploy Minecraft bots that auto-message in any server.
           </p>
         </header>
-        <div className="rounded-2xl brutal-border bg-card p-10 text-center">
-          <Lock className="h-8 w-8 mx-auto text-destructive" />
-          <h2 className="mt-4 font-display text-2xl font-semibold">No plan or hours</h2>
-          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto">
+        <div className="rounded-2xl border border-border/50 bg-card/70 px-6 py-12 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/10 text-destructive">
+            <Lock className="h-5 w-5" />
+          </div>
+          <h2 className="font-display text-xl font-semibold tracking-tight">No plan or hours</h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
             Buy a plan or bot hours with crypto. Access unlocks after payment is confirmed and
             fulfilled (usually 1–2 minutes).
           </p>
           <Link
             to="/dashboard/purchase"
-            className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold"
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold shadow-sm hover:bg-primary/90 transition-colors"
           >
             <ShoppingCart className="h-4 w-4" /> Choose a plan
           </Link>
@@ -677,12 +697,12 @@ function BotsPage() {
 
   return (
     <div className="space-y-6 animate-page-in">
-      <header className="flex items-end justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
             MC Auto-Message
             {isAdmin && (
-              <span className="ml-3 inline-flex items-center rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-semibold brutal-border">
+              <span className="ml-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/15 text-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest">
                 ADMIN
               </span>
             )}
@@ -700,10 +720,11 @@ function BotsPage() {
       </header>
 
       {/* Server Config Panel */}
-      <div className="rounded-2xl animated-border bg-card/60 noise-texture">
+      <div className="rounded-2xl border border-border/50 bg-card/70 overflow-hidden">
         <button
+          type="button"
           onClick={() => setShowMCPanel(!showMCPanel)}
-          className="w-full flex items-center justify-between p-5"
+          className="w-full flex items-center justify-between p-5 hover:bg-primary/[0.02] transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -731,7 +752,7 @@ function BotsPage() {
                   Server IP
                 </span>
                 <input
-                  className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                  className="w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:border-primary/40"
                   value={mcConfig.serverHost}
                   onChange={(e) => setMcConfig({ ...mcConfig, serverHost: e.target.value })}
                   placeholder="mc.hypixel.net"
@@ -879,15 +900,14 @@ function BotsPage() {
                   </span>
                   <select
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-                    value={form.auth_type}
+                    value={form.auth_type === "microsoft" ? "ssid" : form.auth_type}
                     onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                   >
                     <option value="ssid">SSID / access token (premium)</option>
-                    <option value="microsoft">Microsoft account (device code)</option>
                     <option value="offline">Offline / Cracked (username only)</option>
                   </select>
                 </label>
-                {form.auth_type === "ssid" ? (
+                {form.auth_type === "ssid" || form.auth_type === "microsoft" ? (
                   <div className="md:col-span-2 space-y-2">
                     <label className="text-xs space-y-1 block">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
@@ -898,7 +918,7 @@ function BotsPage() {
                         value={form.ssid}
                         onChange={(e) => {
                           setSsidPreview(null);
-                          setForm({ ...form, ssid: e.target.value });
+                          setForm({ ...form, ssid: e.target.value, auth_type: "ssid" });
                         }}
                         placeholder="Paste full Minecraft services access_token (eyJ… or long token)"
                         autoComplete="off"
@@ -921,28 +941,36 @@ function BotsPage() {
                         </span>
                       )}
                     </div>
+                    <label className="text-xs space-y-1 block">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        MSA refresh token (optional)
+                      </span>
+                      <textarea
+                        className="w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono min-h-[72px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                        value={form.refresh_token}
+                        onChange={(e) => setForm({ ...form, refresh_token: e.target.value })}
+                        placeholder="Optional — Microsoft refresh_token for automatic session keep-alive"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                    </label>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      We call Minecraft services to confirm the token, then store IGN + UUID.
-                      Token is never shown in the bot console or account list.
+                      SSID alone works as before. If you also paste an MSA refresh_token, LuauX can
+                      renew the access token automatically when it expires. Secrets never appear in
+                      the console.
                     </p>
                   </div>
                 ) : (
                   <label className="text-xs space-y-1 md:col-span-2">
                     <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      {form.auth_type === "offline" ? "Username" : "Username / email"}
+                      Username
                     </span>
                     <input
                       className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                       value={form.username}
                       onChange={(e) => setForm({ ...form, username: e.target.value })}
-                      placeholder={form.auth_type === "offline" ? "Steve" : "you@example.com"}
+                      placeholder="Steve"
                     />
-                    {form.auth_type === "microsoft" && (
-                      <span className="text-[10px] text-muted-foreground">
-                        On launch, a Microsoft device-code popup appears — open the link and enter
-                        the code.
-                      </span>
-                    )}
                   </label>
                 )}
               </div>
@@ -979,8 +1007,9 @@ function BotsPage() {
           <ul className="divide-y divide-border/60">
             {accounts.map((a) => {
               const botForAccount = runningBots.find((b) => b.config?.accountId === a.id);
-              const isRunning =
-                botForAccount?.status === "running" || botForAccount?.status === "pending";
+              const isRunning = ["running", "pending", "paused", "stopping"].includes(
+                botForAccount?.status || "",
+              );
               return (
                 <li key={a.id} className="p-4 flex items-center gap-4">
                   <div
@@ -999,6 +1028,7 @@ function BotsPage() {
                       {a.auth_type === "ssid" && (
                         <span className="text-muted-foreground/80">
                           {a.has_ssid ? " · token saved" : " · no token"}
+                          {a.has_refresh_token ? " · auto-refresh" : ""}
                         </span>
                       )}{" "}
                       · {a.username || "hidden"}
@@ -1317,31 +1347,56 @@ function BotsPage() {
             >
               <div className="space-y-1">
                 <h2 id="ssid-refresh-title" className="text-lg font-semibold tracking-tight">
-                  Refresh SSID token
+                  Refresh session tokens
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Paste a fresh Minecraft access token for{" "}
+                  Update tokens for{" "}
                   <span className="font-mono text-foreground">
                     {refreshTarget.username || refreshTarget.label}
                   </span>
-                  . Profile is re-validated before save.
+                  . Access token is required unless you only update the optional MSA refresh token
+                  (and one is already stored).
+                  {refreshTarget.has_refresh_token ? (
+                    <span className="block mt-1 text-primary/90 text-xs">
+                      Auto-refresh is currently enabled on this account.
+                    </span>
+                  ) : null}
                 </p>
               </div>
-              <textarea
-                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono min-h-[96px]"
-                value={refreshToken}
-                onChange={(e) => setRefreshToken(e.target.value)}
-                placeholder="Paste full Minecraft services access_token"
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus
-              />
+              <div className="space-y-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Access token (SSID)
+                </span>
+                <textarea
+                  className="w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono min-h-[88px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                  value={refreshToken}
+                  onChange={(e) => setRefreshToken(e.target.value)}
+                  placeholder="Minecraft services access_token (optional if refresh_token can mint one)"
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  MSA refresh token (optional)
+                </span>
+                <textarea
+                  className="w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono min-h-[72px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                  value={refreshMsaToken}
+                  onChange={(e) => setRefreshMsaToken(e.target.value)}
+                  placeholder="Microsoft refresh_token — enables automatic renewals"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setRefreshTarget(null);
                     setRefreshToken("");
+                    setRefreshMsaToken("");
                   }}
                   className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                 >
@@ -1349,10 +1404,10 @@ function BotsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={refreshing || !refreshToken.trim()}
+                  disabled={refreshing || (!refreshToken.trim() && !refreshMsaToken.trim())}
                   className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold disabled:opacity-50"
                 >
-                  {refreshing ? "Validating…" : "Save token"}
+                  {refreshing ? "Validating…" : "Save tokens"}
                 </button>
               </div>
             </form>

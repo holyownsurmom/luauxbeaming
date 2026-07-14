@@ -25,15 +25,12 @@ export const Route = createFileRoute("/api/health")({
           db = "error";
         }
 
-        const checks = {
-          site_url: !!envStr("SITE_URL"),
-          session_secret: !!envStr("SESSION_SECRET"),
-          worker_secret: !!envStr("WORKER_SECRET"),
-          supabase: !!(url && key),
-          discord_bot: !!envStr("DISCORD_BOT_TOKEN"),
-          discord_public_key: !!envStr("DISCORD_PUBLIC_KEY"),
-        };
-        const envOk = checks.site_url && checks.session_secret && checks.worker_secret && checks.supabase;
+        // Do not expose which secrets are configured (recon aid)
+        const envOk =
+          !!envStr("SITE_URL") &&
+          !!envStr("SESSION_SECRET") &&
+          !!envStr("WORKER_SECRET") &&
+          !!(url && key);
         const ok = db === "ok" && envOk;
 
         return Response.json(
@@ -42,8 +39,6 @@ export const Route = createFileRoute("/api/health")({
             ts: new Date().toISOString(),
             ms: Date.now() - started,
             db,
-            site: envStr("SITE_URL") || null,
-            env: checks,
           },
           { status: ok ? 200 : 503 },
         );

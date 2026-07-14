@@ -79,18 +79,25 @@ function typingDuration(msg: string): number {
   return Math.max(2000, Math.min(base + randomBetween(-500, 1500), 14000));
 }
 
+type SendResult =
+  | { ok: true; status: number; body: string }
+  | { ok: false; status: number; body: string; rateLimited?: boolean }
+  | null;
+
 async function sendWithRetry(
   url: string,
   options: RequestInit,
   maxRetries = 2,
   signal?: AbortSignal,
-): Promise<Response | null> {
+): Promise<SendResult> {
+  let last429: { status: number; body: string } | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (signal?.aborted) return null;
     try {
       const res = await fetch(url, options);
       if (res.status === 429) {
         const body = await res.text();
+        last429 = { status: 429, body };
         let retryAfter = 30000;
         try {
           const parsed = JSON.parse(body);
@@ -101,12 +108,15 @@ async function sendWithRetry(
         await sleep(retryAfter, signal);
         continue;
       }
-      return res;
+      const body = await res.text();
+      if (res.ok) return { ok: true, status: res.status, body };
+      return { ok: false, status: res.status, body };
     } catch {
       if (attempt === maxRetries) return null;
       await sleep(2000 * (attempt + 1), signal);
     }
   }
+  if (last429) return { ok: false, status: 429, body: last429.body, rateLimited: true };
   return null;
 }
 
@@ -145,16 +155,47 @@ export async function runDiscordBot(
 
   // ROOT CAUSE OF BANS: Discord USER TOKENS (self-bots) violate ToS.
   // Anti-ban v4: longer warmup, browser-like headers, min 15–45 min gaps, session caps.
-  if (config.minDelay < 900) {
-    config.minDelay = 900;
-    config.maxDelay = Math.max(config.maxDelay, 1800);
-  }
+  // Defensive defaults — never allow NaN timers from missing config fields
+  const minDelaySec = (() => {
+    const n = Number(config.minDelay);
+    if (!Number.isFinite(n) || n < 900) return 900;
+    return Math.min(86_400, Math.floor(n));
+  })();
+  const maxDelaySec = (() => {
+    const n = Number(config.maxDelay);
+    const floor = minDelaySec + 300;
+    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 1800);
+    return Math.min(86_400, Math.floor(n));
+  })();
+  const intervalSec = (() => {
+    const n = Number(config.interval);
+    if (!Number.isFinite(n) || n < 300) return 300;
+    return Math.min(86_400, Math.floor(n));
+  })();
+  const humanize = config.humanize !== false;
+  config.minDelay = minDelaySec;
+  config.maxDelay = maxDelaySec;
+  config.interval = intervalSec;
+  config.humanize = humanize;
 
   const startedAt = Date.now();
   await log("system", "Initializing Discord user-token client (anti-ban mode v4)...");
   await updateJob(jobId, "running");
 
   let stopped = false;
+  let terminalWritten = false;
+  const markError = async (msg: string) => {
+    if (terminalWritten) return;
+    terminalWritten = true;
+    await updateJob(jobId, "error", msg);
+    stopped = true;
+  };
+  const markCompleted = async () => {
+    if (terminalWritten) return;
+    terminalWritten = true;
+    await updateJob(jobId, "completed");
+    stopped = true;
+  };
   const SESSION_MSG_CAP = randomBetween(8, 18); // stop session after this many msgs
   const chromeBuild = pickRandom(["131.0.0.0", "132.0.0.0", "133.0.0.0", "134.0.0.0"]);
   const userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeBuild} Safari/537.36`;
@@ -304,8 +345,7 @@ export async function runDiscordBot(
         "system",
         `Session message cap reached (${SESSION_MSG_CAP}). Stopping to reduce ban risk. Restart later for another short session.`,
       );
-      await updateJob(jobId, "completed");
-      stopped = true;
+      await markCompleted();
       return;
     }
 
@@ -336,16 +376,15 @@ export async function runDiscordBot(
         }
       } else {
         failCount++;
-        const body = await res.text();
-        await log("error", `Send failed (${res.status}): ${body}`);
+        await log("error", `Send failed (${res.status}): ${res.body.slice(0, 300)}`);
 
-        if (res.status === 429) {
+        if (res.status === 429 || res.rateLimited) {
           consecutiveRateLimits++;
           failCount = Math.max(0, failCount - 3);
 
           let retryAfter = (90 + consecutiveRateLimits * 60 + randomBetween(0, 60)) * 1000;
           try {
-            const parsed = JSON.parse(body);
+            const parsed = JSON.parse(res.body);
             if (parsed.retry_after) {
               retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(30_000, 90_000);
             }
@@ -355,15 +394,14 @@ export async function runDiscordBot(
 
           await log(
             "warn",
-            `Rate limited (#${consecutiveRateLimits}). Waiting ${(retryAfter / 1000).toFixed(0)}s`,
+            `Rate limited (#${consecutiveRateLimits}). Cool-down ${(retryAfter / 1000).toFixed(0)}s`,
           );
           await sleep(retryAfter, abortSignal);
-
-          if (consecutiveRateLimits >= 1) {
+          if (consecutiveRateLimits >= 2) {
             const longPause = randomBetween(1800, 3600) * 1000;
             await log(
               "warn",
-              `Rate limit hit. Cool-down: ${(longPause / 1000).toFixed(0)}s then continue carefully`,
+              `Repeated rate limits. Extra cool-down: ${(longPause / 1000).toFixed(0)}s`,
             );
             await sleep(longPause, abortSignal);
             consecutiveRateLimits = 0;
@@ -372,15 +410,13 @@ export async function runDiscordBot(
 
         if (res.status === 401 || res.status === 403) {
           await log("error", "Token revoked or access denied. Stopping.");
-          await updateJob(jobId, "error", "Token invalid or banned");
-          stopped = true;
+          await markError("Token invalid or banned");
           return;
         }
 
         if (failCount > 5) {
           await log("error", "Too many failures, stopping to protect account");
-          await updateJob(jobId, "error", "Too many send failures");
-          stopped = true;
+          await markError("Too many send failures");
           return;
         }
       }
@@ -391,9 +427,9 @@ export async function runDiscordBot(
 
     if (stopped) return;
 
-    const runtime = config.humanize
-      ? calculateDelay(config.minDelay, config.maxDelay, sentCount, rt)
-      : config.interval * 1000 + randomBetween(0, 5000);
+    const runtime = humanize
+      ? calculateDelay(minDelaySec, maxDelaySec, sentCount, rt)
+      : intervalSec * 1000 + randomBetween(0, 5000);
 
     await log("info", `Next message in ${(runtime / 1000).toFixed(1)}s | runtime ${rt.toFixed(0)}min | sent ${sentCount}`);
 

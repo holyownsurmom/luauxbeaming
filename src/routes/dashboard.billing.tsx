@@ -1,9 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Receipt } from "lucide-react";
+import { Receipt, ShoppingCart } from "lucide-react";
 import { listPayments } from "@/lib/luaux.functions";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DashButton,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  Surface,
+} from "@/components/dashboard-ui";
 
 export const Route = createFileRoute("/dashboard/billing")({
   head: () => ({ meta: [{ title: "Billing — LuauX" }] }),
@@ -23,78 +32,113 @@ type Payment = {
 };
 
 function BillingPage() {
-  const fetch = useServerFn(listPayments);
+  const fetchPayments = useServerFn(listPayments);
   const [items, setItems] = useState<Payment[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    fetchPayments()
+      .then((d) => setItems(d as Payment[]))
+      .catch((e) => {
+        setItems(null);
+        setError(e instanceof Error ? e.message : "Failed to load payments");
+      })
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    fetch().then((d) => setItems(d as Payment[]));
-  }, [fetch]);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchPayments]);
 
   return (
-    <div className="space-y-6 animate-page-in">
-      <header>
-        <h1 className="font-display text-4xl font-semibold tracking-tight">Billing</h1>
-        <p className="mt-2 text-muted-foreground">Every crypto payment on your account.</p>
-      </header>
+    <PageShell>
+      <PageHeader
+        title="Billing"
+        description="Every crypto payment on your account — invoices, confirms, and status."
+        actions={
+          <DashButton href="/dashboard/purchase" variant="secondary" size="sm">
+            <ShoppingCart className="h-3.5 w-3.5" />
+            Buy plan
+          </DashButton>
+        }
+      />
 
-      <div className="rounded-2xl animated-border bg-card/60 overflow-hidden noise-texture">
-        {!items ? (
-          <div className="p-6 space-y-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+      <Surface className="overflow-hidden">
+        {error ? (
+          <ErrorState title="Could not load billing" message={error} onRetry={load} />
+        ) : loading || !items ? (
+          <div className="p-6 space-y-3">
+            <Skeleton className="h-11 w-full rounded-xl" />
+            <Skeleton className="h-11 w-full rounded-xl" />
+            <Skeleton className="h-11 w-full rounded-xl" />
           </div>
         ) : items.length === 0 ? (
-          <div className="p-10 text-center">
-            <Receipt className="h-8 w-8 mx-auto text-muted-foreground" />
-            <p className="mt-3 text-sm text-muted-foreground">No payments yet.</p>
-          </div>
+          <EmptyState
+            icon={Receipt}
+            title="No payments yet"
+            description="Purchase a plan or hours pack and your invoices will show up here with live confirmation status."
+            action={
+              <DashButton href="/dashboard/purchase" size="sm">
+                <ShoppingCart className="h-3.5 w-3.5" />
+                Browse plans
+              </DashButton>
+            }
+          />
         ) : (
           <>
-            {/* Desktop table */}
-            <table className="w-full text-sm hidden md:table">
-              <thead className="text-[10px] uppercase tracking-widest text-muted-foreground bg-secondary/30">
-                <tr>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Plan</th>
-                  <th className="text-left px-4 py-3">Amount</th>
-                  <th className="text-left px-4 py-3">Currency</th>
-                  <th className="text-left px-4 py-3">Confirms</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {items.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {new Date(p.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 capitalize">{p.plan_id}</td>
-                    <td className="px-4 py-3 font-mono">${Number(p.price_amount).toFixed(2)}</td>
-                    <td className="px-4 py-3 uppercase font-mono text-xs">{p.pay_currency}</td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {p.confirmations}/{p.required_confirmations}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusPill status={p.status} />
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm hidden md:table">
+                <thead className="text-[10px] uppercase tracking-widest text-muted-foreground bg-secondary/40 sticky top-0">
+                  <tr>
+                    <th className="text-left px-5 py-3.5 font-semibold">Date</th>
+                    <th className="text-left px-5 py-3.5 font-semibold">Plan</th>
+                    <th className="text-left px-5 py-3.5 font-semibold">Amount</th>
+                    <th className="text-left px-5 py-3.5 font-semibold">Currency</th>
+                    <th className="text-left px-5 py-3.5 font-semibold">Confirms</th>
+                    <th className="text-left px-5 py-3.5 font-semibold">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {items.map((p) => (
+                    <tr
+                      key={p.id}
+                      className="transition-colors hover:bg-primary/[0.03]"
+                    >
+                      <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">
+                        {new Date(p.created_at).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-3.5 capitalize font-medium">{p.plan_id}</td>
+                      <td className="px-5 py-3.5 font-mono">${Number(p.price_amount).toFixed(2)}</td>
+                      <td className="px-5 py-3.5 uppercase font-mono text-xs text-muted-foreground">
+                        {p.pay_currency}
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-xs">
+                        {p.confirmations}/{p.required_confirmations}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <StatusBadge status={p.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-            {/* Mobile cards */}
-            <div className="md:hidden divide-y divide-border/60">
+            <div className="md:hidden divide-y divide-border/50">
               {items.map((p) => (
-                <div key={p.id} className="p-4 space-y-2">
-                  <div className="flex items-center justify-between">
+                <div key={p.id} className="p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground">
                       {new Date(p.created_at).toLocaleDateString()}
                     </span>
-                    <StatusPill status={p.status} />
+                    <StatusBadge status={p.status} />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="capitalize text-sm">{p.plan_id}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="capitalize text-sm font-medium">{p.plan_id}</span>
                     <span className="font-mono text-sm">${Number(p.price_amount).toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -108,24 +152,7 @@ function BillingPage() {
             </div>
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  const finished = status === "finished" || status === "confirmed";
-  const failed = status === "failed" || status === "expired" || status === "refunded";
-  const cls = finished
-    ? "bg-primary/15 text-primary"
-    : failed
-      ? "bg-destructive/15 text-destructive"
-      : "bg-secondary/60 text-muted-foreground";
-  return (
-    <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] uppercase tracking-widest ${cls}`}
-    >
-      {status}
-    </span>
+      </Surface>
+    </PageShell>
   );
 }

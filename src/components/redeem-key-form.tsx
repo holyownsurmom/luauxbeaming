@@ -32,7 +32,7 @@ export function RedeemKeyForm({
       </div>
       <div className={`flex gap-2 ${compact ? "flex-col sm:flex-row" : "flex-col"}`}>
         <input
-          className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+          className="flex-1 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:border-primary/40"
           value={key}
           onChange={(e) => {
             setKey(e.target.value);
@@ -40,6 +40,9 @@ export function RedeemKeyForm({
             setMsg(null);
           }}
           placeholder="LX-VB-XXXX-XXXX-XXXX"
+          aria-label="License key"
+          autoComplete="off"
+          spellCheck={false}
         />
         <button
           type="button"
@@ -73,7 +76,7 @@ export function RedeemKeyForm({
               setBusy(false);
             }
           }}
-          className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold disabled:opacity-50 shrink-0"
+          className="rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold disabled:opacity-50 shrink-0 shadow-sm hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {busy ? "…" : "Redeem"}
         </button>

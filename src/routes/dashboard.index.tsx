@@ -132,7 +132,7 @@ function Overview() {
 
   if (loading && !data) {
     return (
-      <div className="space-y-6 md:space-y-8 animate-pulse">
+      <div className="space-y-6 md:space-y-8 animate-page-in animate-pulse">
         <div className="h-40 rounded-3xl border border-border/50 bg-card/60" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
@@ -145,24 +145,26 @@ function Overview() {
 
   if (loadError && !data) {
     return (
-      <div className="rounded-2xl border border-destructive/30 bg-card p-8 text-center space-y-4">
-        <p className="text-sm text-destructive font-medium">Could not load your workspace</p>
-        <p className="text-xs text-muted-foreground max-w-md mx-auto">{loadError}</p>
-        <button
-          type="button"
-          onClick={load}
-          className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold"
-        >
-          Retry
-        </button>
+      <div className="animate-page-in">
+        <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-5 py-10 text-center space-y-3">
+          <p className="text-sm font-medium text-destructive">Could not load your workspace</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold shadow-sm hover:bg-primary/90 transition-colors"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-6 md:space-y-8 animate-page-in">
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive flex items-center justify-between gap-3">
+        <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-xs text-destructive flex items-center justify-between gap-3">
           <span>Refresh failed: {loadError}</span>
           <button type="button" onClick={load} className="underline font-semibold shrink-0">
             Retry
@@ -170,7 +172,7 @@ function Overview() {
         </div>
       )}
       {/* Hero header */}
-      <header className="relative overflow-hidden rounded-3xl border border-border/50 bg-card p-6 md:p-10">
+      <header className="relative overflow-hidden rounded-3xl border border-border/50 bg-card/80 p-6 md:p-10 shadow-[0_1px_0_0_oklch(1_0_0_/_0.04)_inset]">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/4 pointer-events-none" />
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 

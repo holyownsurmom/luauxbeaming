@@ -1,5 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, isAdminSession, unauthorized, forbidden } from "@/lib/api-helpers";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit.server";
+import {
+  MAX_CONCURRENT_DISCORD_AUTOREPLY,
+  validateDiscordAutoreplyBody,
+} from "@/lib/bot-job-validate.server";
 
 export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
   server: {
@@ -7,6 +12,9 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
       POST: async ({ request }) => {
         const user = await getSessionUser();
         if (!user) return unauthorized();
+
+        const rl = rateLimit(`discord-ar-start:${user.id}`, 15, 60_000);
+        if (!rl.ok) return rateLimitResponse(rl.retryAfterSec, "Too many start attempts");
 
         const db = admin();
         const adminUser = await isAdminSession();
@@ -25,25 +33,38 @@ export const Route = createFileRoute("/api/bots/discord-autoreply/start")({
           if (!activeKey) {
             return forbidden("No active Discord Auto-Reply license");
           }
+
+          const { data: liveJobs } = await db
+            .from("bot_jobs")
+            .select("id, config")
+            .eq("discord_id", user.id)
+            .eq("type", "discord")
+            .in("status", ["pending", "running", "stopping", "paused"]);
+          const arLive = (liveJobs || []).filter((j) => {
+            const st = (j.config as { subType?: string } | null)?.subType;
+            return st === "autoreply";
+          }).length;
+          if (arLive >= MAX_CONCURRENT_DISCORD_AUTOREPLY) {
+            return forbidden(
+              `Max ${MAX_CONCURRENT_DISCORD_AUTOREPLY} concurrent Auto-Reply bots. Stop one first.`,
+            );
+          }
         }
 
-        let body;
+        let body: Record<string, unknown>;
         try {
           body = await request.json();
         } catch {
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        if (!body.token || !body.messages?.length) {
-          return Response.json(
-            { error: "Missing required fields: token, messages" },
-            { status: 400 },
-          );
+        const parsed = validateDiscordAutoreplyBody(body);
+        if (!parsed.ok) {
+          return Response.json({ error: parsed.error }, { status: 400 });
         }
 
-        // Add subType 'autoreply' to the configuration
         const config = {
-          ...body,
+          ...parsed.config,
           subType: "autoreply",
         };
 

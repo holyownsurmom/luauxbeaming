@@ -117,8 +117,9 @@ html[data-theme="blue"] {
   --secondary-foreground: oklch(0.9 0 0);
   --muted: oklch(0.1 0 0);
   --muted-foreground: oklch(0.5 0 0);
-  --accent: oklch(0.1 0 0);
-  --accent-foreground: oklch(0.9 0 0);
+  /* Accent tracks primary so ghost/outline hovers stay on-brand */
+  --accent: oklch(0.14 0.03 85);
+  --accent-foreground: oklch(0.92 0.04 85);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.95 0 0);
   --border: oklch(0.15 0 0);
@@ -144,8 +145,8 @@ html[data-theme="blue"] {
 .dark[data-theme="blue"] {
   --primary: oklch(0.68 0.18 250);
   --primary-foreground: oklch(0.1 0 0);
-  --accent: oklch(0.68 0.18 250);
-  --accent-foreground: oklch(0.1 0 0);
+  --accent: oklch(0.14 0.04 250);
+  --accent-foreground: oklch(0.9 0.04 250);
   --ring: oklch(0.68 0.18 250);
   --gold: oklch(0.68 0.18 250);
   --sidebar-primary: oklch(0.68 0.18 250);

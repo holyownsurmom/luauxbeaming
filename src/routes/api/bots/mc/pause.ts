@@ -32,8 +32,16 @@ export const Route = createFileRoute("/api/bots/mc/pause")({
         }
 
         if (pause) {
-          if (job.status !== "running" && job.status !== "pending") {
-            return Response.json({ ok: true, status: job.status });
+          // Only pause live bots — pausing pending would leave the job unclaimable forever
+          if (job.status !== "running") {
+            return Response.json({
+              ok: true,
+              status: job.status,
+              error:
+                job.status === "pending"
+                  ? "Cannot pause a pending bot — wait until it is running"
+                  : undefined,
+            });
           }
           await db.from("bot_jobs").update({ status: "paused" }).eq("id", botId);
           return Response.json({ ok: true, status: "paused" });

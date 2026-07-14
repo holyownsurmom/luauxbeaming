@@ -1,6 +1,7 @@
 /**
- * Minecraft premium auth (SSID + Microsoft) helpers for mineflayer.
- * SSID = Minecraft Services access_token from login_with_xbox / launcher.
+ * Minecraft premium auth (SSID) helpers for mineflayer.
+ * SSID = Minecraft Services access_token (not Xbox refresh token).
+ * When SSID expires, user must paste a new one — no silent MS refresh in this product.
  */
 
 export type McProfile = {
@@ -14,20 +15,19 @@ export type PremiumSession = {
   accessToken: string;
   name: string;
   id: string;
-  /** undashed uuid for session profile */
   idUndashed: string;
-  /** dashed uuid for client.uuid */
   idDashed: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   profileKeys: any | null;
   source: "ssid" | "microsoft";
+  certsExpiresOn?: number | null;
+  certsRefreshAfter?: number | null;
 };
 
 export type AuthLog = (level: string, message: string, immediate?: boolean) => Promise<void>;
 
 export function normalizeAccessToken(raw: string): string {
   let t = (raw || "").trim();
-  // Collapse accidental whitespace/newlines from paste
   t = t.replace(/\s+/g, "");
   if (
     (t.startsWith('"') && t.endsWith('"')) ||
@@ -51,36 +51,66 @@ export function formatUuidUndashed(raw: string): string {
 
 export function looksLikeJwtOrToken(token: string): boolean {
   if (!token || token.length < 20) return false;
-  // Mojang/MC tokens are often JWTs (3 base64 segments) or long opaque strings
   if (token.includes(".") && token.split(".").length >= 2) return true;
   return token.length >= 40;
 }
 
-export async function fetchMinecraftProfile(
+export type ProfileFetchResult =
+  | { ok: true; profile: McProfile }
+  | { ok: false; code: "expired" | "http" | "network" | "no_profile"; httpStatus?: number };
+
+export async function fetchMinecraftProfileDetailed(
   accessToken: string,
-): Promise<McProfile | null> {
-  try {
-    const token = normalizeAccessToken(accessToken);
-    if (!token) return null;
-    const res = await fetch("https://api.minecraftservices.com/minecraft/profile", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as McProfile & { name?: string; id?: string };
-    if (!data?.name || !data?.id) return null;
-    return {
-      name: data.name,
-      id: data.id,
-      skins: data.skins,
-      capes: data.capes,
-    };
-  } catch {
-    return null;
+): Promise<ProfileFetchResult> {
+  const token = normalizeAccessToken(accessToken);
+  if (!token) return { ok: false, code: "expired" };
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch("https://api.minecraftservices.com/minecraft/profile", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, code: "expired", httpStatus: res.status };
+      }
+      if (!res.ok) {
+        if (res.status >= 500 && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        return { ok: false, code: "http", httpStatus: res.status };
+      }
+      const data = (await res.json()) as McProfile & { name?: string; id?: string };
+      if (!data?.name || !data?.id) {
+        return { ok: false, code: "no_profile", httpStatus: res.status };
+      }
+      return {
+        ok: true,
+        profile: {
+          name: data.name,
+          id: data.id,
+          skins: data.skins,
+          capes: data.capes,
+        },
+      };
+    } catch {
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 600));
+        continue;
+      }
+      return { ok: false, code: "network" };
+    }
   }
+  return { ok: false, code: "network" };
+}
+
+export async function fetchMinecraftProfile(accessToken: string): Promise<McProfile | null> {
+  const r = await fetchMinecraftProfileDetailed(accessToken);
+  return r.ok ? r.profile : null;
 }
 
 /** Chat-signing keypair (1.19+) — required on many modern SMPs / ViaVersion */
@@ -114,6 +144,10 @@ export async function fetchMinecraftCertificates(
     };
     const publicDER = toDer(cert.keyPair.publicKey);
     const privateDER = toDer(cert.keyPair.privateKey);
+    const expiresOn = cert.expiresAt ? new Date(cert.expiresAt) : null;
+    const refreshAfter = cert.refreshedAfter
+      ? new Date(cert.refreshedAfter)
+      : expiresOn;
     return {
       publicPEM: cert.keyPair.publicKey,
       privatePEM: cert.keyPair.privateKey,
@@ -124,8 +158,8 @@ export async function fetchMinecraftCertificates(
         cert.publicKeySignatureV2 || cert.publicKeySignature || "",
         "base64",
       ),
-      expiresOn: new Date(cert.expiresAt),
-      refreshAfter: new Date(cert.refreshedAfter || cert.expiresAt),
+      expiresOn,
+      refreshAfter,
       public: crypto.createPublicKey({ key: publicDER, format: "der", type: "spki" }),
       private: crypto.createPrivateKey({ key: privateDER, format: "der", type: "pkcs8" }),
     };
@@ -134,9 +168,34 @@ export async function fetchMinecraftCertificates(
   }
 }
 
+export function certsNeedRefresh(
+  session: PremiumSession | null,
+  skewMs = 5 * 60_000,
+): boolean {
+  if (!session?.profileKeys) return true;
+  const now = Date.now();
+  const refreshAfter =
+    session.certsRefreshAfter ??
+    (session.profileKeys.refreshAfter instanceof Date
+      ? session.profileKeys.refreshAfter.getTime()
+      : null);
+  const expiresOn =
+    session.certsExpiresOn ??
+    (session.profileKeys.expiresOn instanceof Date
+      ? session.profileKeys.expiresOn.getTime()
+      : null);
+  if (refreshAfter && now >= refreshAfter - skewMs) return true;
+  if (expiresOn && now >= expiresOn - skewMs) return true;
+  return false;
+}
+
 export type ValidateSsidResult =
   | { ok: true; profile: McProfile; token: string }
-  | { ok: false; error: string; code: "empty" | "short" | "invalid" | "no_profile" | "network" };
+  | {
+      ok: false;
+      error: string;
+      code: "empty" | "short" | "invalid" | "no_profile" | "network" | "http";
+    };
 
 export async function validateSsidToken(raw: string): Promise<ValidateSsidResult> {
   const token = normalizeAccessToken(raw);
@@ -148,52 +207,75 @@ export async function validateSsidToken(raw: string): Promise<ValidateSsidResult
       code: "short",
     };
   }
-  try {
-    const profile = await fetchMinecraftProfile(token);
-    if (!profile) {
-      return {
-        ok: false,
-        error: "SSID rejected by Minecraft (expired or invalid). Get a fresh token.",
-        code: "invalid",
-      };
-    }
-    return { ok: true, profile, token };
-  } catch {
+  const result = await fetchMinecraftProfileDetailed(token);
+  if (result.ok) return { ok: true, profile: result.profile, token };
+  if (result.code === "expired") {
+    return {
+      ok: false,
+      error: "SSID rejected by Minecraft (expired or invalid). Get a fresh token.",
+      code: "invalid",
+    };
+  }
+  if (result.code === "no_profile") {
+    return {
+      ok: false,
+      error: "Token accepted but no Minecraft Java profile on this account",
+      code: "no_profile",
+    };
+  }
+  if (result.code === "network") {
     return {
       ok: false,
       error: "Could not reach Minecraft services to validate SSID",
       code: "network",
     };
   }
+  return {
+    ok: false,
+    error: `Minecraft services error HTTP ${result.httpStatus ?? "unknown"}`,
+    code: "http",
+  };
 }
 
 /**
- * Build a full premium session from SSID once per job.
- * Reuses the same token + profileKeys on every reconnect.
+ * Build a full premium session from SSID (validate + certificates).
  */
 export async function resolveSsidSession(
   rawSsid: string,
   log: AuthLog,
-): Promise<{ session: PremiumSession } | { error: string }> {
+): Promise<{ session: PremiumSession } | { error: string; code?: string }> {
   const validated = await validateSsidToken(rawSsid);
   if (!validated.ok) {
-    await log("error", validated.error);
-    return { error: validated.error };
+    await log("error", validated.error, true);
+    return { error: validated.error, code: validated.code };
   }
 
   const { token, profile } = validated;
   const idUndashed = formatUuidUndashed(profile.id);
   const idDashed = formatUuidDashed(profile.id);
 
-  await log("info", `SSID OK — ${profile.name} (${idDashed})`);
-  await log("info", "Loading chat-signing certificates (SSID)...");
+  await log("info", `SSID OK — ${profile.name} (${idDashed})`, true);
+  await log("info", "Loading chat-signing certificates (SSID)...", true);
   const profileKeys = await fetchMinecraftCertificates(token);
+  let certsExpiresOn: number | null = null;
+  let certsRefreshAfter: number | null = null;
   if (profileKeys) {
-    await log("info", "Chat certificates loaded");
+    certsExpiresOn =
+      profileKeys.expiresOn instanceof Date ? profileKeys.expiresOn.getTime() : null;
+    certsRefreshAfter =
+      profileKeys.refreshAfter instanceof Date ? profileKeys.refreshAfter.getTime() : null;
+    await log(
+      "info",
+      certsExpiresOn
+        ? `Chat certificates loaded (expires ${new Date(certsExpiresOn).toISOString()})`
+        : "Chat certificates loaded",
+      true,
+    );
   } else {
     await log(
       "warn",
       "Chat certificates unavailable — modern servers may kick with Invalid sequence",
+      true,
     );
   }
 
@@ -206,13 +288,14 @@ export async function resolveSsidSession(
       idDashed,
       profileKeys,
       source: "ssid",
+      certsExpiresOn,
+      certsRefreshAfter,
     },
   };
 }
 
 /**
  * mineflayer custom auth injector for premium (SSID or MS token).
- * Sets session, uuid, profileKeys, then calls options.connect.
  */
 export function createPremiumAuthInjector(session: PremiumSession) {
   const { accessToken, name, idUndashed, idDashed, profileKeys } = session;

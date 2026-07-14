@@ -73,13 +73,30 @@ export async function runDiscordAutoReplyBot(
     return;
   }
 
-  if (config.minDelay < 10) config.minDelay = 10;
+  // Defensive defaults — never NaN timers from missing UI fields
+  const minDelaySec = (() => {
+    const n = Number(config.minDelay);
+    if (!Number.isFinite(n) || n < 10) return 15;
+    return Math.min(86_400, Math.floor(n));
+  })();
+  const maxDelaySec = (() => {
+    const n = Number(config.maxDelay);
+    const floor = minDelaySec + 5;
+    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 45);
+    return Math.min(86_400, Math.floor(n));
+  })();
+  config.minDelay = minDelaySec;
+  config.maxDelay = maxDelaySec;
+  config.typing = config.typing !== false;
+  config.autoAcceptFriends = !!config.autoAcceptFriends;
 
   await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v2)...");
   await updateJob(jobId, "running");
 
   let ws: WebSocket | null = null;
   let stopped = false;
+  let dmQueueDepth = 0;
+  const MAX_DM_QUEUE = 25;
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let heartbeatAcked = true;
   let selfUserId: string | null = null;
@@ -271,7 +288,13 @@ export async function runDiscordAutoReplyBot(
               const channelId = d.channel_id;
               const authorTag = `@${d.author.username}`;
               const content = d.content as string;
+              if (dmQueueDepth >= MAX_DM_QUEUE) {
+                log("warn", `DM queue full (${MAX_DM_QUEUE}) — dropping message from ${authorTag}`).catch(
+                  () => {},
+                );
+              } else {
               // Serialize DM handling to avoid parallel replies / rate limits
+              dmQueueDepth++;
               dmQueue = dmQueue
                 .then(async () => {
                   if (stopped || abortSignal.aborted) return;
@@ -298,7 +321,7 @@ export async function runDiscordAutoReplyBot(
                     config.messages[Math.floor(Math.random() * config.messages.length)],
                   );
 
-                  let delay = randomBetween(config.minDelay * 1000, config.maxDelay * 1000);
+                  let delay = randomBetween(minDelaySec * 1000, maxDelaySec * 1000);
                   if (replyCount < 3) {
                     delay = randomBetween(12000, 30000);
                   } else if (Math.random() < 0.12) {
@@ -322,7 +345,7 @@ export async function runDiscordAutoReplyBot(
                   await sleep(waitMs, abortSignal);
                   if (stopped || abortSignal.aborted) return;
 
-                  try {
+                  const sendOnce = async (): Promise<boolean> => {
                     const res = await fetch(
                       `https://discord.com/api/v9/channels/${channelId}/messages`,
                       {
@@ -338,7 +361,9 @@ export async function runDiscordAutoReplyBot(
                       replyCount++;
                       recentReplyTimes.push(Date.now());
                       await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
-                    } else if (res.status === 429) {
+                      return true;
+                    }
+                    if (res.status === 429) {
                       const body = await res.text();
                       let retryAfter = 60000;
                       try {
@@ -349,16 +374,27 @@ export async function runDiscordAutoReplyBot(
                       }
                       await log(
                         "warn",
-                        `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s`,
+                        `Rate limited on reply. Waiting ${(retryAfter / 1000).toFixed(0)}s then retry`,
                       );
                       await sleep(retryAfter, abortSignal);
-                    } else if (res.status === 401 || res.status === 403) {
+                      return false;
+                    }
+                    if (res.status === 401 || res.status === 403) {
                       await log("error", "Token revoked or access denied. Stopping.");
                       await updateJob(jobId, "error", "Token invalid or banned");
                       stopped = true;
-                    } else {
-                      const text = await res.text();
-                      await log("error", `Failed to send auto-reply: ${text}`);
+                      return true;
+                    }
+                    const text = await res.text();
+                    await log("error", `Failed to send auto-reply: ${text.slice(0, 300)}`);
+                    return true;
+                  };
+
+                  try {
+                    let done = await sendOnce();
+                    if (!done && !stopped && !abortSignal.aborted) {
+                      done = await sendOnce();
+                      if (!done) await log("warn", "Dropped reply after rate-limit retries");
                     }
                   } catch (e) {
                     await log(
@@ -367,7 +403,11 @@ export async function runDiscordAutoReplyBot(
                     );
                   }
                 })
-                .catch(() => {});
+                .catch(() => {})
+                .finally(() => {
+                  dmQueueDepth = Math.max(0, dmQueueDepth - 1);
+                });
+              }
             }
           }
 
@@ -377,93 +417,108 @@ export async function runDiscordAutoReplyBot(
               const userId = d.id as string;
               await log("info", `Received incoming friend request from ${targetUser}`);
 
-              await sleep(randomBetween(5000, 15000));
+              // Serialize friend-accept + DM on same queue as replies (rate-limit safety)
+              if (dmQueueDepth >= MAX_DM_QUEUE) {
+                await log("warn", `Friend-accept queue full — skipping ${targetUser}`);
+              } else {
+                dmQueueDepth++;
+                dmQueue = dmQueue
+                  .then(async () => {
+                    if (stopped || abortSignal.aborted) return;
+                    await sleep(randomBetween(5000, 15000), abortSignal);
+                    if (stopped || abortSignal.aborted) return;
 
-              try {
-                const acceptRes = await fetch(
-                  `https://discord.com/api/v9/users/@me/relationships/${userId}`,
-                  {
-                    method: "PUT",
-                    headers: {
-                      Authorization: config.token,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({}),
-                  },
-                );
-                if (acceptRes.ok) {
-                  await log("info", `Auto-accepted friend request from ${targetUser}`);
-
-                  // Send initial configured reply after accepting
-                  if (config.messages && config.messages.length > 0) {
                     try {
-                      // Create DM channel
-                      const dmChannelRes = await fetch("https://discord.com/api/v9/users/@me/channels", {
-                        method: "POST",
-                        headers: {
-                          Authorization: config.token,
-                          "Content-Type": "application/json",
+                      const acceptRes = await fetch(
+                        `https://discord.com/api/v9/users/@me/relationships/${userId}`,
+                        {
+                          method: "PUT",
+                          headers: {
+                            Authorization: config.token,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({}),
                         },
-                        body: JSON.stringify({ recipient_id: userId }),
-                      });
+                      );
+                      if (!acceptRes.ok) {
+                        const text = await acceptRes.text();
+                        await log("error", `Failed to accept friend request: ${text.slice(0, 200)}`);
+                        return;
+                      }
+                      await log("info", `Auto-accepted friend request from ${targetUser}`);
 
-                      if (dmChannelRes.ok) {
-                        const dmChannel = await dmChannelRes.json();
-                        const channelId = dmChannel.id;
+                      if (!config.messages?.length) return;
+                      const dmChannelRes = await fetch(
+                        "https://discord.com/api/v9/users/@me/channels",
+                        {
+                          method: "POST",
+                          headers: {
+                            Authorization: config.token,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ recipient_id: userId }),
+                        },
+                      );
+                      if (!dmChannelRes.ok) {
+                        await log("error", `Failed to open DM channel for ${targetUser}`);
+                        return;
+                      }
+                      const dmChannel = (await dmChannelRes.json()) as { id: string };
+                      await sleep(randomBetween(3000, 8000), abortSignal);
+                      if (stopped || abortSignal.aborted) return;
 
-                        // Small delay before first message
-                        await sleep(randomBetween(3000, 8000));
-
-                        const reply = variateMessage(
-                          config.messages[Math.floor(Math.random() * config.messages.length)],
-                        );
-
-                        // Optional typing
-                        if (config.typing) {
-                          try {
-                            await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
+                      const reply = variateMessage(
+                        config.messages[Math.floor(Math.random() * config.messages.length)],
+                      );
+                      if (config.typing) {
+                        try {
+                          await fetch(
+                            `https://discord.com/api/v9/channels/${dmChannel.id}/typing`,
+                            {
                               method: "POST",
                               headers: { Authorization: config.token },
-                            });
-                            const typeTime = typingDuration(reply);
-                            await sleep(typeTime);
-                          } catch { /* ignore typing */ }
-                        }
-
-                        const sendRes = await fetch(
-                          `https://discord.com/api/v9/channels/${channelId}/messages`,
-                          {
-                            method: "POST",
-                            headers: {
-                              Authorization: config.token,
-                              "Content-Type": "application/json",
                             },
-                            body: JSON.stringify({ content: reply }),
-                          },
-                        );
-
-                        if (sendRes.ok) {
-                          await log("bot", `Sent initial auto-reply to new friend ${targetUser}: "${reply}"`);
-                        } else {
-                          const txt = await sendRes.text();
-                          await log("error", `Failed to send initial reply to ${targetUser}: ${txt}`);
+                          );
+                          await sleep(typingDuration(reply), abortSignal);
+                        } catch {
+                          /* ignore typing */
                         }
-                      } else {
-                        await log("error", `Failed to open DM channel for ${targetUser}`);
                       }
-                    } catch (sendErr) {
-                      await log("error", `Error sending initial reply after friend accept: ${sendErr}`);
+                      if (stopped || abortSignal.aborted) return;
+                      const sendRes = await fetch(
+                        `https://discord.com/api/v9/channels/${dmChannel.id}/messages`,
+                        {
+                          method: "POST",
+                          headers: {
+                            Authorization: config.token,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({ content: reply }),
+                        },
+                      );
+                      if (sendRes.ok) {
+                        await log(
+                          "bot",
+                          `Sent initial auto-reply to new friend ${targetUser}: "${reply}"`,
+                        );
+                      } else {
+                        const txt = await sendRes.text();
+                        await log(
+                          "error",
+                          `Failed to send initial reply to ${targetUser}: ${txt.slice(0, 200)}`,
+                        );
+                      }
+                    } catch (e) {
+                      await log(
+                        "error",
+                        `Error accepting friend request: ${e instanceof Error ? e.message : String(e)}`,
+                      );
                     }
-                  }
-                } else {
-                  const text = await acceptRes.text();
-                  await log("error", `Failed to accept friend request: ${text}`);
-                }
-              } catch (e) {
-                await log(
-                  "error",
-                  `Error accepting friend request: ${e instanceof Error ? e.message : String(e)}`,
-                );
+                  })
+                  .catch(() => {})
+                  .finally(() => {
+                    dmQueueDepth = Math.max(0, dmQueueDepth - 1);
+                  });
               }
             }
           }

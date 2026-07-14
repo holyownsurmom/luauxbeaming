@@ -250,11 +250,17 @@ function connect(bot: PresenceBot) {
     if (bot.ws === ws) bot.ws = null;
     if (bot.stopped) return;
     const reasonText = reason?.toString() || `code ${code}`;
-    // Session may be dead after hard close codes
-    if (code === 4004 || code === 4010 || code === 4011 || code === 4013 || code === 4014) {
+    // Fatal auth / sharding codes — do not reconnect forever (bad DISCORD_BOT_TOKEN storm)
+    const fatal = code === 4004 || code === 4010 || code === 4011 || code === 4013 || code === 4014;
+    if (fatal) {
       bot.sessionId = null;
       bot.seq = null;
       bot.resumeUrl = null;
+      bot.stopped = true;
+      console.error(
+        `[presence] fatal gateway close ${bot.label} (${code}: ${reasonText}) — not reconnecting`,
+      );
+      return;
     }
     scheduleReconnect(bot, reasonText);
   });

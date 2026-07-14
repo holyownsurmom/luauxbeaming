@@ -168,20 +168,24 @@ function PurchasePage() {
   const hourTotal = selectedHours * 1.5;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 animate-page-in">
       <header>
-        <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("choose_plan")}</h1>
-        <p className="mt-2 text-muted-foreground">{s.t("choose_plan_sub")}</p>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
+          {s.t("choose_plan")}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground max-w-2xl leading-relaxed">
+          {s.t("choose_plan_sub")}
+        </p>
       </header>
 
       {adminActivated && (
-        <div className="rounded-2xl bg-primary/10 brutal-border p-6 animate-fade-in-scale flex items-start gap-4">
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-5 flex items-start gap-4">
           <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
             <Check className="h-5 w-5 text-primary" />
           </div>
           <div>
             <div className="font-semibold text-sm text-primary">Plan activated instantly</div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               Admin mode — payment bypassed. Access is live now.{" "}
               <a href="/dashboard/bots" className="underline text-primary">
                 Deploy a bot
@@ -195,7 +199,7 @@ function PurchasePage() {
         </div>
       )}
 
-      <div className="rounded-2xl brutal-border bg-card p-6 animated-border noise-texture relative overflow-hidden">
+      <div className="rounded-2xl border border-border/50 bg-card/70 p-5 md:p-6 relative overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -301,7 +305,14 @@ function PurchasePage() {
       </div>
 
       {plansLoading && (
-        <div className="text-sm text-muted-foreground">Loading plans…</div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="h-64 rounded-2xl border border-border/50 bg-card/40 animate-pulse"
+            />
+          ))}
+        </div>
       )}
       {!plansLoading &&
         plans.filter(

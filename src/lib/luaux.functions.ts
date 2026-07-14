@@ -40,17 +40,37 @@ export const getPlans = createServerFn({ method: "GET" }).handler(async () => {
 export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () => {
   const { requireUser, admin } = await import("./luaux-server.server");
   const user = await requireUser();
-  const { data } = await admin()
-    .from("mc_accounts")
-    .select("id,label,auth_type,username,uuid,status,created_at,ssid")
-    .eq("discord_id", user.id)
-    .order("created_at", { ascending: false });
-  // Never send raw ssid to the browser — only a boolean flag
-  return (data ?? []).map((row) => {
-    const { ssid, ...rest } = row as typeof row & { ssid?: string | null };
+  const db = admin();
+  let rows: Array<Record<string, unknown>> = [];
+  {
+    const { data, error } = await db
+      .from("mc_accounts")
+      .select(
+        "id,label,auth_type,username,uuid,status,created_at,ssid,refresh_token,last_refreshed_at,token_expires_at",
+      )
+      .eq("discord_id", user.id)
+      .order("created_at", { ascending: false });
+    if (error && /refresh_token|column/i.test(error.message)) {
+      const { data: legacy } = await db
+        .from("mc_accounts")
+        .select("id,label,auth_type,username,uuid,status,created_at,ssid")
+        .eq("discord_id", user.id)
+        .order("created_at", { ascending: false });
+      rows = (legacy ?? []) as Array<Record<string, unknown>>;
+    } else {
+      rows = (data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
+  // Never send raw secrets to the browser — only boolean flags
+  return rows.map((row) => {
+    const { ssid, refresh_token, ...rest } = row as typeof row & {
+      ssid?: string | null;
+      refresh_token?: string | null;
+    };
     return {
       ...rest,
       has_ssid: !!(ssid && String(ssid).trim().length > 0),
+      has_refresh_token: !!(refresh_token && String(refresh_token).trim().length > 0),
     };
   });
 });
@@ -59,7 +79,11 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
 export const previewMcSsid = createServerFn({ method: "POST" })
   .inputValidator((input) => z.object({ ssid: z.string().min(1).max(4000) }).parse(input))
   .handler(async ({ data }) => {
-    await (await import("./luaux-server.server")).requireUser();
+    const { requireUser } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const { rateLimit } = await import("./rate-limit.server");
+    const rl = rateLimit(`ssid-preview:${user.id}`, 20, 60_000);
+    if (!rl.ok) throw new Error(`Too many previews — retry in ${rl.retryAfterSec}s`);
     const { validateMinecraftSsid } = await import("./mc-ssid.server");
     const result = await validateMinecraftSsid(data.ssid);
     if (!result.ok) throw new Error(result.error);
@@ -79,31 +103,63 @@ export const addMcAccount = createServerFn({ method: "POST" })
         username: z.string().max(60).optional().nullable(),
         uuid: z.string().max(60).optional().nullable(),
         ssid: z.string().max(4000).optional().nullable(),
+        /** Optional MSA refresh_token — enables automatic session keep-alive */
+        refresh_token: z.string().max(4000).optional().nullable(),
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
+    const { rateLimit } = await import("./rate-limit.server");
+    const rl = rateLimit(`ssid-add:${user.id}`, 15, 60_000);
+    if (!rl.ok) throw new Error(`Too many account adds — retry in ${rl.retryAfterSec}s`);
 
     let username = data.username?.trim() || null;
     let uuid = data.uuid?.trim() || null;
     let ssid: string | null = null;
+    let refreshToken: string | null = null;
+    let tokenExpiresAt: string | null = null;
 
     let authType = data.auth_type;
 
-    if (data.auth_type === "ssid" || (data.auth_type === "microsoft" && data.ssid?.trim())) {
-      const { validateMinecraftSsid } = await import("./mc-ssid.server");
-      const result = await validateMinecraftSsid(data.ssid || "");
-      if (!result.ok) throw new Error(result.error);
-      ssid = result.token;
-      username = result.profile.name;
-      uuid = result.uuidDashed;
-      authType = "ssid";
-    } else if (data.auth_type === "microsoft") {
+    const { normalizeRefreshToken, looksLikeRefreshToken, ensureFreshMcAccessToken } =
+      await import("./mc-refresh.server");
+    if (data.refresh_token?.trim()) {
+      const rt = normalizeRefreshToken(data.refresh_token);
+      if (!looksLikeRefreshToken(rt)) {
+        throw new Error("refresh_token looks invalid — paste the full Microsoft refresh token");
+      }
+      refreshToken = rt;
+    }
+
+    // microsoft without SSID is not supported unless refresh_token can mint one
+    if (data.auth_type === "microsoft" && !data.ssid?.trim() && !refreshToken) {
       throw new Error(
-        "Microsoft device-code login is not available on the bot server. Use SSID (Minecraft access_token) instead.",
+        "Paste a Minecraft access_token (SSID). Optionally add an MSA refresh_token for auto-renewal.",
       );
+    }
+
+    if (
+      data.auth_type === "ssid" ||
+      data.auth_type === "microsoft" ||
+      (refreshToken && data.ssid?.trim())
+    ) {
+      if (data.ssid?.trim() || refreshToken) {
+        const ensured = await ensureFreshMcAccessToken({
+          ssid: data.ssid || null,
+          refreshToken,
+        });
+        if (!ensured.ok) throw new Error(ensured.error);
+        ssid = ensured.token;
+        username = ensured.profile.name;
+        uuid = ensured.uuidDashed;
+        authType = "ssid";
+        if (ensured.refreshToken) refreshToken = ensured.refreshToken;
+        if (ensured.expiresInSec) {
+          tokenExpiresAt = new Date(Date.now() + ensured.expiresInSec * 1000).toISOString();
+        }
+      }
     }
 
     if (authType === "offline" && !username) {
@@ -116,20 +172,47 @@ export const addMcAccount = createServerFn({ method: "POST" })
         ? username || data.label
         : data.label;
 
+    const insertRow: Record<string, unknown> = {
+      discord_id: user.id,
+      label,
+      auth_type: authType,
+      username,
+      uuid,
+      ssid,
+      status: "idle",
+    };
+    if (refreshToken) {
+      insertRow.refresh_token = refreshToken;
+      insertRow.last_refreshed_at = new Date().toISOString();
+      if (tokenExpiresAt) insertRow.token_expires_at = tokenExpiresAt;
+    }
+
     const { data: row, error } = await admin()
       .from("mc_accounts")
-      .insert({
-        discord_id: user.id,
-        label,
-        auth_type: authType,
-        username,
-        uuid,
-        ssid,
-        status: "idle",
-      })
+      .insert(insertRow)
       .select("id,label,auth_type,username,uuid,status,created_at")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (/refresh_token|column/i.test(error.message) && refreshToken) {
+        // Migration not applied yet — store SSID only
+        const { data: fallback, error: fbErr } = await admin()
+          .from("mc_accounts")
+          .insert({
+            discord_id: user.id,
+            label,
+            auth_type: authType,
+            username,
+            uuid,
+            ssid,
+            status: "idle",
+          })
+          .select("id,label,auth_type,username,uuid,status,created_at")
+          .single();
+        if (fbErr) throw new Error(fbErr.message);
+        return fallback;
+      }
+      throw new Error(error.message);
+    }
     return row;
   });
 
@@ -139,32 +222,102 @@ export const refreshMcSsid = createServerFn({ method: "POST" })
     z
       .object({
         id: z.string().uuid(),
-        ssid: z.string().min(1).max(4000),
+        ssid: z.string().max(4000).optional().nullable(),
+        /** Optional MSA refresh_token — enables automatic session keep-alive */
+        refresh_token: z.string().max(4000).optional().nullable(),
+      })
+      .refine((v) => !!(v.ssid?.trim() || v.refresh_token?.trim()), {
+        message: "Provide access_token (SSID) and/or refresh_token",
       })
       .parse(input),
   )
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
-    const { validateMinecraftSsid } = await import("./mc-ssid.server");
-    const result = await validateMinecraftSsid(data.ssid);
-    if (!result.ok) throw new Error(result.error);
+    const { rateLimit } = await import("./rate-limit.server");
+    const rl = rateLimit(`ssid-refresh:${user.id}`, 20, 60_000);
+    if (!rl.ok) throw new Error(`Too many token refreshes — retry in ${rl.retryAfterSec}s`);
+
+    const {
+      normalizeRefreshToken,
+      looksLikeRefreshToken,
+      ensureFreshMcAccessToken,
+    } = await import("./mc-refresh.server");
+
+    let refreshToken: string | null = null;
+    if (data.refresh_token?.trim()) {
+      const rt = normalizeRefreshToken(data.refresh_token);
+      if (!looksLikeRefreshToken(rt)) {
+        throw new Error("refresh_token looks invalid — paste the full Microsoft refresh token");
+      }
+      refreshToken = rt;
+    }
+
+    // Keep existing refresh_token if user only pastes a new SSID
+    if (!refreshToken) {
+      const { data: existing } = await admin()
+        .from("mc_accounts")
+        .select("refresh_token")
+        .eq("id", data.id)
+        .eq("discord_id", user.id)
+        .maybeSingle();
+      if (typeof existing?.refresh_token === "string" && existing.refresh_token.trim()) {
+        refreshToken = existing.refresh_token;
+      }
+    }
+
+    const ensured = await ensureFreshMcAccessToken({
+      accountId: data.id,
+      ssid: data.ssid || null,
+      refreshToken,
+    });
+    if (!ensured.ok) throw new Error(ensured.error);
+
+    const patch: Record<string, unknown> = {
+      auth_type: "ssid",
+      ssid: ensured.token,
+      username: ensured.profile.name,
+      uuid: ensured.uuidDashed,
+      status: "idle",
+    };
+    if (ensured.refreshed || data.refresh_token?.trim()) {
+      if (ensured.refreshToken) patch.refresh_token = ensured.refreshToken;
+      else if (refreshToken) patch.refresh_token = refreshToken;
+      patch.last_refreshed_at = new Date().toISOString();
+      if (ensured.expiresInSec) {
+        patch.token_expires_at = new Date(Date.now() + ensured.expiresInSec * 1000).toISOString();
+      }
+    }
 
     const { data: row, error } = await admin()
       .from("mc_accounts")
-      .update({
-        auth_type: "ssid",
-        ssid: result.token,
-        username: result.profile.name,
-        uuid: result.uuidDashed,
-        status: "idle",
-      })
+      .update(patch)
       .eq("id", data.id)
       .eq("discord_id", user.id)
       .select("id,label,auth_type,username,uuid,status")
       .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (/refresh_token|column/i.test(error.message)) {
+        const { data: fb, error: fbErr } = await admin()
+          .from("mc_accounts")
+          .update({
+            auth_type: "ssid",
+            ssid: ensured.token,
+            username: ensured.profile.name,
+            uuid: ensured.uuidDashed,
+            status: "idle",
+          })
+          .eq("id", data.id)
+          .eq("discord_id", user.id)
+          .select("id,label,auth_type,username,uuid,status")
+          .maybeSingle();
+        if (fbErr) throw new Error(fbErr.message);
+        if (!fb) throw new Error("Account not found");
+        return fb;
+      }
+      throw new Error(error.message);
+    }
     if (!row) throw new Error("Account not found");
     return row;
   });
@@ -174,7 +327,30 @@ export const deleteMcAccount = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { requireUser, admin } = await import("./luaux-server.server");
     const user = await requireUser();
-    const { error } = await admin()
+    const db = admin();
+
+    // Stop any live jobs for this account before delete (prevents orphan sockets)
+    const { data: liveJobs } = await db
+      .from("bot_jobs")
+      .select("id, config, status")
+      .eq("discord_id", user.id)
+      .eq("type", "mc")
+      .in("status", ["pending", "running", "stopping", "paused"]);
+    const toStop = (liveJobs || []).filter((j) => {
+      const cfg = (j.config || {}) as { accountId?: string };
+      return cfg.accountId === data.id;
+    });
+    if (toStop.length > 0) {
+      await db
+        .from("bot_jobs")
+        .update({ status: "stopped", error: "Account deleted" })
+        .in(
+          "id",
+          toStop.map((j) => j.id),
+        );
+    }
+
+    const { error } = await db
       .from("mc_accounts")
       .delete()
       .eq("id", data.id)
@@ -297,6 +473,11 @@ export const createInvoice = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { requireUser, admin, ensureProfile, isAdminSession } = await import("./luaux-server.server");
     const user = await requireUser();
+    const { rateLimit } = await import("./rate-limit.server");
+    const invRl = rateLimit(`invoice:${user.id}`, 8, 10 * 60_000);
+    if (!invRl.ok) {
+      throw new Error(`Too many invoices — retry in ${invRl.retryAfterSec}s`);
+    }
     await ensureProfile(user);
     const db = admin();
     const isAdm = await isAdminSession();
@@ -1007,3 +1188,41 @@ export const resetMyAccess = createServerFn({ method: "POST" }).handler(async ()
 
   return { ok: true };
 });
+
+/** Global secured-account leaderboard */
+export const getLeaderboardBoard = createServerFn({ method: "GET" })
+  .inputValidator((input) =>
+    z
+      .object({
+        period: z.enum(["24h", "7d", "month", "lifetime"]).default("7d"),
+        page: z.number().int().min(1).max(200).optional(),
+        pageSize: z.number().int().min(5).max(50).optional(),
+        search: z.string().max(80).optional(),
+      })
+      .parse(input ?? {}),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const { rateLimit } = await import("./rate-limit.server");
+    const rl = rateLimit(`leaderboard:${user.id}`, 60, 60_000);
+    if (!rl.ok) throw new Error(`Too many leaderboard requests — retry in ${rl.retryAfterSec}s`);
+    const { getLeaderboard } = await import("./leaderboard.server");
+    try {
+      return await getLeaderboard(admin(), {
+        period: data.period,
+        page: data.page,
+        pageSize: data.pageSize,
+        search: data.search,
+        viewerDiscordId: user.id,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/leaderboard_events|does not exist|relation/i.test(msg)) {
+        throw new Error(
+          "Leaderboard is not set up yet — apply migration 20260714160000_mc_refresh_and_leaderboard.sql",
+        );
+      }
+      throw e;
+    }
+  });

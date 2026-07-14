@@ -3,6 +3,7 @@ import {
   pollJobs,
   updateJob,
   flushAllLogs,
+  flushPendingTerminalUpdates,
   checkJobStatuses,
   postVerificationResult,
   fetchPresenceTokens,
@@ -100,8 +101,16 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
         if (controller.signal.aborted) {
           await applyTerminal(job.id, { status: "stopped", error: "Stopped by user" });
         } else {
-          // Ensure terminal state even if discord runner forgot to write it
-          await applyTerminal(job.id, { status: "completed" });
+          // Only complete if still live — never clobber error/stopped written by runner
+          const statuses = await checkJobStatuses(WORKER_ID, [job.id]);
+          const current = statuses?.find((j) => j.id === job.id)?.status;
+          if (!current || current === "running" || current === "pending" || current === "paused") {
+            await applyTerminal(job.id, { status: "completed" });
+          } else {
+            console.log(
+              `[worker] job ${job.id} already terminal (${current}) — not overwriting with completed`,
+            );
+          }
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -158,6 +167,7 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 
 async function poll() {
   try {
+    await flushPendingTerminalUpdates();
     const free = MAX_CONCURRENT_JOBS - runningJobs.size;
     if (free <= 0) return;
     const jobs = await pollJobs(WORKER_ID, free);

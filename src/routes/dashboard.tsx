@@ -20,6 +20,7 @@ import {
   Moon,
   Search,
   Command,
+  Trophy,
 } from "lucide-react";
 import luauxLogo from "@/assets/luaux-logo.png";
 import { useSettings } from "@/lib/settings-context";
@@ -47,6 +48,7 @@ const NAV: {
       { to: "/dashboard", icon: LayoutGrid, label: "Overview" },
       { to: "/dashboard/bots", icon: Bot, label: "MC Auto-Message" },
       { to: "/dashboard/logs", icon: ScrollText, label: "Logs" },
+      { to: "/dashboard/leaderboard", icon: Trophy, label: "Leaderboard" },
     ],
   },
   {
@@ -145,23 +147,23 @@ function SidebarContent({
                     data-active={active ? "true" : "false"}
                     className={`nav-glide w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group/item ${
                       active
-                        ? "bg-primary/10 text-primary border border-primary/25 shadow-[0_0_20px_oklch(0.79_0.16_85_/_0.08)]"
+                        ? "bg-primary/10 text-primary border border-primary/25 shadow-[0_0_20px_color-mix(in_oklch,var(--primary)_12%,transparent)]"
                         : "text-foreground/60 hover:bg-primary/5 hover:text-foreground/90 border border-transparent"
                     }`}
                   >
                     {active && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-primary shadow-[0_0_12px_oklch(0.79_0.16_85_/_0.6)] animate-glow-pulse-ring" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-primary shadow-[0_0_12px_color-mix(in_oklch,var(--primary)_55%,transparent)] animate-glow-pulse-ring" />
                     )}
                     <it.icon
                       className={`h-4 w-4 transition-all duration-300 ${
                         active
-                          ? "text-primary drop-shadow-[0_0_6px_oklch(0.79_0.16_85_/_0.5)]"
-                          : "text-muted-foreground/60 group-hover/item:text-primary/70 group-hover/item:drop-shadow-[0_0_4px_oklch(0.79_0.16_85_/_0.3)]"
+                          ? "text-primary drop-shadow-[0_0_6px_color-mix(in_oklch,var(--primary)_45%,transparent)]"
+                          : "text-muted-foreground/60 group-hover/item:text-primary/70"
                       }`}
                     />
                     <span className={active ? "font-semibold" : ""}>{it.label}</span>
                     {active && (
-                      <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.7)] animate-status-pulse" />
+                      <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_60%,transparent)] animate-status-pulse" />
                     )}
                     {!active && (
                       <ChevronRight className="ml-auto h-3 w-3 opacity-0 group-hover/item:opacity-100 transition-all duration-300 text-primary/50 group-hover/item:translate-x-0.5" />

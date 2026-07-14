@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSessionUser, admin, isAdminSession, unauthorized, forbidden } from "@/lib/api-helpers";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit.server";
+import { validateMcLaunchFields } from "@/lib/bot-job-validate.server";
 
 export const Route = createFileRoute("/api/bots/mc/start")({
   server: {
@@ -8,11 +10,13 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         const user = await getSessionUser();
         if (!user) return unauthorized();
 
+        const rl = rateLimit(`mc-start:${user.id}`, 20, 60_000);
+        if (!rl.ok) return rateLimitResponse(rl.retryAfterSec, "Too many launch attempts");
+
         const db = admin();
         const adminUser = await isAdminSession();
 
         let maxBots = 999;
-        let hoursRemaining = 0;
         if (!adminUser) {
           const { data: profile } = await db
             .from("profiles")
@@ -21,7 +25,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
             .maybeSingle();
 
           const { profileHasMcAccess } = await import("@/lib/plan-grant.server");
-          hoursRemaining = Number(profile?.bot_hours_remaining ?? 0);
+          const hoursRemaining = Number(profile?.bot_hours_remaining ?? 0);
           const planActive =
             !!profile?.active_plan_id &&
             !!profile?.plan_expires_at &&
@@ -45,35 +49,22 @@ export const Route = createFileRoute("/api/bots/mc/start")({
             // Hours-only access: 1 concurrent bot
             maxBots = 1;
           }
-
-          const { count: liveCount } = await db
-            .from("bot_jobs")
-            .select("id", { count: "exact", head: true })
-            .eq("discord_id", user.id)
-            .eq("type", "mc")
-            .in("status", ["pending", "running", "stopping", "paused"]);
-
-          // After we stop same-account jobs, count others; hard cap = max_bots
-          if ((liveCount ?? 0) >= maxBots) {
-            // Allow replace if launching same account (handled below) — check after stop
-          }
         }
 
-        let body;
+        let body: Record<string, unknown>;
         try {
           body = await request.json();
         } catch {
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        if (!body.serverHost || !body.serverPort || !body.messages?.length) {
-          return Response.json(
-            { error: "Missing required fields: serverHost, serverPort, messages" },
-            { status: 400 },
-          );
+        const fields = validateMcLaunchFields(body);
+        if (!fields.ok) {
+          return Response.json({ error: fields.error }, { status: 400 });
         }
 
-        if (!body.accountId) {
+        const accountId = String(body.accountId ?? "").trim();
+        if (!accountId) {
           return Response.json({ error: "accountId required" }, { status: 400 });
         }
 
@@ -86,25 +77,39 @@ export const Route = createFileRoute("/api/bots/mc/start")({
               : "microsoft";
 
         let config: Record<string, unknown> = {
-          accountId: body.accountId,
+          accountId,
           label: body.label,
-          serverHost: body.serverHost,
-          serverPort: body.serverPort,
+          serverHost: fields.serverHost,
+          serverPort: fields.serverPort,
           authType,
           username: body.username,
           uuid: body.uuid,
-          messages: body.messages,
-          interval: body.interval,
+          messages: fields.messages,
+          interval: fields.interval,
         };
 
         // Always load account from DB — trust DB auth_type over client body
         {
-          const { data: account } = await db
-            .from("mc_accounts")
-            .select("username,uuid,label,ssid,auth_type")
-            .eq("id", body.accountId)
-            .eq("discord_id", user.id)
-            .maybeSingle();
+          let account: Record<string, unknown> | null = null;
+          {
+            const { data: full, error: fullErr } = await db
+              .from("mc_accounts")
+              .select("username,uuid,label,ssid,refresh_token,auth_type")
+              .eq("id", accountId)
+              .eq("discord_id", user.id)
+              .maybeSingle();
+            if (fullErr && /refresh_token|column/i.test(fullErr.message)) {
+              const { data: legacy } = await db
+                .from("mc_accounts")
+                .select("username,uuid,label,ssid,auth_type")
+                .eq("id", accountId)
+                .eq("discord_id", user.id)
+                .maybeSingle();
+              account = legacy as Record<string, unknown> | null;
+            } else {
+              account = full as Record<string, unknown> | null;
+            }
+          }
 
           if (!account) {
             return Response.json({ error: "Account not found" }, { status: 404 });
@@ -123,71 +128,86 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           config.label = account.label || body.label;
 
           if (dbAuth === "microsoft") {
-            // Headless VPS cannot complete interactive device-code login.
-            // Prefer stored SSID if present; otherwise require SSID conversion.
             const rawSsid = typeof account.ssid === "string" ? account.ssid : "";
-            if (!rawSsid.trim()) {
+            const rawRt = typeof account.refresh_token === "string" ? account.refresh_token : "";
+            if (!rawSsid.trim() && !rawRt.trim()) {
               return Response.json(
                 {
                   error:
-                    "Microsoft device-code login is not available on the bot server. Add this account as SSID (access_token) or paste a token via Refresh Token.",
+                    "Microsoft device-code login is not available on the bot server. Add SSID (access_token) and optionally an MSA refresh_token.",
                 },
                 { status: 400 },
               );
             }
-            // Fall through as SSID
             config.authType = "ssid";
           }
 
           if (config.authType === "ssid" || dbAuth === "ssid") {
-            const { normalizeMcAccessToken, validateMinecraftSsid } = await import(
-              "@/lib/mc-ssid.server"
-            );
-            const ssid = normalizeMcAccessToken(
-              typeof account.ssid === "string" ? account.ssid : String(config.ssid || ""),
-            );
-            if (!ssid) {
+            const { ensureFreshMcAccessToken } = await import("@/lib/mc-refresh.server");
+            const ensured = await ensureFreshMcAccessToken({
+              accountId,
+              ssid: typeof account.ssid === "string" ? account.ssid : null,
+              refreshToken:
+                typeof account.refresh_token === "string" ? account.refresh_token : null,
+            });
+            if (!ensured.ok) {
+              if (ensured.needsManual) {
+                await db
+                  .from("mc_accounts")
+                  .update({ status: "token_expired" })
+                  .eq("id", accountId)
+                  .eq("discord_id", user.id);
+              }
               return Response.json(
                 {
-                  error:
-                    "No SSID stored on this account. Use Refresh Token and paste a fresh access_token.",
+                  error: ensured.needsManual
+                    ? `${ensured.error} Open the account → paste a fresh access_token (and optional refresh_token).`
+                    : ensured.error,
                 },
-                { status: 400 },
-              );
-            }
-
-            // Re-validate at launch so expired tokens fail before worker spin-up
-            const check = await validateMinecraftSsid(ssid);
-            if (!check.ok) {
-              await db
-                .from("mc_accounts")
-                .update({ status: "token_expired" })
-                .eq("id", body.accountId)
-                .eq("discord_id", user.id);
-              return Response.json(
-                {
-                  error: `${check.error} Open the account → Refresh Token.`,
-                },
-                { status: 400 },
+                { status: ensured.needsManual ? 400 : 502 },
               );
             }
 
             config.authType = "ssid";
-            config.ssid = check.token;
-            config.username = check.profile.name;
-            config.uuid = check.uuidDashed;
+            config.ssid = ensured.token;
+            config.username = ensured.profile.name;
+            config.uuid = ensured.uuidDashed;
+            config.accountId = accountId;
 
-            // Keep profile fields fresh
-            await db
+            const patch: Record<string, unknown> = {
+              username: ensured.profile.name,
+              uuid: ensured.uuidDashed,
+              status: "idle",
+              auth_type: "ssid",
+              ssid: ensured.token,
+            };
+            if (ensured.refreshed) {
+              patch.last_refreshed_at = new Date().toISOString();
+              if (ensured.refreshToken) patch.refresh_token = ensured.refreshToken;
+              if (ensured.expiresInSec) {
+                patch.token_expires_at = new Date(
+                  Date.now() + ensured.expiresInSec * 1000,
+                ).toISOString();
+              }
+            }
+            const { error: patchErr } = await db
               .from("mc_accounts")
-              .update({
-                username: check.profile.name,
-                uuid: check.uuidDashed,
-                status: "idle",
-                auth_type: "ssid",
-              })
-              .eq("id", body.accountId)
+              .update(patch)
+              .eq("id", accountId)
               .eq("discord_id", user.id);
+            if (patchErr && /refresh_token|last_refreshed|token_expires/i.test(patchErr.message)) {
+              await db
+                .from("mc_accounts")
+                .update({
+                  username: ensured.profile.name,
+                  uuid: ensured.uuidDashed,
+                  status: "idle",
+                  auth_type: "ssid",
+                  ssid: ensured.token,
+                })
+                .eq("id", accountId)
+                .eq("discord_id", user.id);
+            }
           }
         }
 
@@ -202,7 +222,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
 
         const sameAccount = (existingJobs || []).filter((j) => {
           const cfg = (j.config || {}) as { accountId?: string };
-          return cfg.accountId === body.accountId;
+          return cfg.accountId === accountId;
         });
 
         if (sameAccount.length > 0) {
@@ -218,7 +238,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         if (!adminUser) {
           const otherLive = (existingJobs || []).filter((j) => {
             const cfg = (j.config || {}) as { accountId?: string };
-            return cfg.accountId !== body.accountId;
+            return cfg.accountId !== accountId;
           }).length;
           if (otherLive >= maxBots) {
             return forbidden(
@@ -228,24 +248,38 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         }
 
         // Spend hour BEFORE enqueue so concurrent launches can't race free jobs
+        let hourSpent = false;
         if (!adminUser) {
           const { data: spent, error: spendErr } = await db.rpc("spend_bot_hour", {
             p_discord_id: user.id,
           });
           if (spendErr) {
-            // Fallback: conditional update only if still >= 1
+            // Atomic fallback: decrement only when still >= 1 (no client-side arithmetic)
+            const { data: profileRow } = await db
+              .from("profiles")
+              .select("bot_hours_remaining")
+              .eq("discord_id", user.id)
+              .maybeSingle();
+            const current = Number(profileRow?.bot_hours_remaining ?? 0);
+            if (current < 1) {
+              return forbidden("No bot hours remaining — top up or buy a plan");
+            }
             const { data: updated, error: updErr } = await db
               .from("profiles")
-              .update({ bot_hours_remaining: hoursRemaining - 1 })
+              .update({ bot_hours_remaining: current - 1 })
               .eq("discord_id", user.id)
+              .eq("bot_hours_remaining", current)
               .gte("bot_hours_remaining", 1)
               .select("bot_hours_remaining")
               .maybeSingle();
             if (updErr || !updated) {
               return forbidden("No bot hours remaining — top up or buy a plan");
             }
+            hourSpent = true;
           } else if (spent === false || spent === null) {
             return forbidden("No bot hours remaining — top up or buy a plan");
+          } else {
+            hourSpent = true;
           }
         }
 
@@ -260,7 +294,28 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           .select("id")
           .single();
 
-        if (error) return Response.json({ error: error.message }, { status: 500 });
+        if (error) {
+          // Refund hour if enqueue failed after spend
+          if (hourSpent) {
+            const { error: refundErr } = await db.rpc("refund_bot_hour", {
+              p_discord_id: user.id,
+            });
+            if (refundErr) {
+              // Fallback: re-read + increment (best-effort)
+              const { data: prof } = await db
+                .from("profiles")
+                .select("bot_hours_remaining")
+                .eq("discord_id", user.id)
+                .maybeSingle();
+              const cur = Number(prof?.bot_hours_remaining ?? 0);
+              await db
+                .from("profiles")
+                .update({ bot_hours_remaining: cur + 1 })
+                .eq("discord_id", user.id);
+            }
+          }
+          return Response.json({ error: error.message }, { status: 500 });
+        }
 
         return Response.json({ botId: job.id });
       },

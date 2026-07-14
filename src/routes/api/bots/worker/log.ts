@@ -36,10 +36,22 @@ export const Route = createFileRoute("/api/bots/worker/log")({
           return Response.json({ error: "No valid log rows" }, { status: 400 });
         }
 
-        const { error } = await db().from("bot_logs").insert(rows);
+        const client = db();
+        const { error } = await client.from("bot_logs").insert(rows);
         if (error) {
           console.error("[worker/log] insert failed:", error.message);
           return Response.json({ error: error.message }, { status: 500 });
+        }
+
+        // Touch job updated_at so orphan sweeper knows the worker is alive
+        const jobIds = [...new Set(rows.map((r) => r.job_id))];
+        if (jobIds.length > 0) {
+          const now = new Date().toISOString();
+          await client
+            .from("bot_jobs")
+            .update({ updated_at: now })
+            .in("id", jobIds)
+            .in("status", ["running", "paused", "stopping"]);
         }
 
         return Response.json({ ok: true, inserted: rows.length });

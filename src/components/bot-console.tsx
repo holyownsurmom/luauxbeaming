@@ -132,17 +132,20 @@ export function BotConsole({
 
   return (
     <div
-      className="relative rounded-xl overflow-hidden border border-amber-500/35 bg-black"
-      style={{ boxShadow: "0 0 0 1px rgba(245,158,11,0.25), 0 0 28px rgba(245,158,11,0.12)" }}
+      className="relative rounded-2xl overflow-hidden border border-primary/30 bg-black"
+      style={{
+        boxShadow:
+          "0 0 0 1px color-mix(in oklch, var(--primary) 22%, transparent), 0 0 28px color-mix(in oklch, var(--primary) 12%, transparent)",
+      }}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-amber-500/20 bg-zinc-950/95 gap-2">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-primary/15 bg-zinc-950/95 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex gap-1.5 shrink-0">
             <div className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+            <div className="h-2.5 w-2.5 rounded-full bg-primary/80" />
             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-amber-200/70 truncate">
+          <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-primary/70 truncate">
             {title}
           </span>
         </div>

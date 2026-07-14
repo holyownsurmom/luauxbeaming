@@ -133,18 +133,18 @@ export const addMcAccount = createServerFn({ method: "POST" })
       refreshToken = rt;
     }
 
-    // microsoft without SSID is not supported unless refresh_token can mint one
+    // Microsoft device-code: save account without SSID; worker shows link/code on launch
     if (data.auth_type === "microsoft" && !data.ssid?.trim() && !refreshToken) {
-      throw new Error(
-        "Paste a Minecraft access_token (SSID). Optionally add an MSA refresh_token for auto-renewal.",
-      );
-    }
-
-    if (
+      authType = "microsoft";
+      username = data.username?.trim() || data.label?.trim() || null;
+      if (!username) {
+        throw new Error("Label or Microsoft email/username required for device-code accounts");
+      }
+    } else if (
       data.auth_type === "ssid" ||
-      data.auth_type === "microsoft" ||
-      (refreshToken && data.ssid?.trim())
+      (data.auth_type === "microsoft" && (data.ssid?.trim() || refreshToken))
     ) {
+      // SSID path (or Microsoft with pasted token/refresh → store as ssid)
       if (data.ssid?.trim() || refreshToken) {
         const ensured = await ensureFreshMcAccessToken({
           ssid: data.ssid || null,
@@ -159,6 +159,8 @@ export const addMcAccount = createServerFn({ method: "POST" })
         if (ensured.expiresInSec) {
           tokenExpiresAt = new Date(Date.now() + ensured.expiresInSec * 1000).toISOString();
         }
+      } else if (data.auth_type === "ssid") {
+        throw new Error("Minecraft access_token (SSID) required");
       }
     }
 

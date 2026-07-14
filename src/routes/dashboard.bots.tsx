@@ -85,7 +85,7 @@ function BotsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     label: "",
-    auth_type: "ssid",
+    auth_type: "microsoft",
     username: "",
     uuid: "",
     ssid: "",
@@ -424,12 +424,19 @@ function BotsPage() {
     if (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim())
       return setError("Minecraft access token (SSID) or MSA refresh_token required");
     if (form.auth_type === "offline" && !form.username.trim()) return setError("Username required");
+    if (form.auth_type === "microsoft" && !form.label.trim() && !form.username.trim())
+      return setError("Label or Microsoft email required");
     setSaving(true);
     try {
       await addAcc({
         data: {
-          label: form.label.trim(),
-          auth_type: form.auth_type === "offline" ? "offline" : "ssid",
+          label: form.label.trim() || form.username.trim() || "ms-account",
+          auth_type:
+            form.auth_type === "offline"
+              ? "offline"
+              : form.auth_type === "microsoft"
+                ? "microsoft"
+                : "ssid",
           username: form.username.trim() || undefined,
           uuid: form.uuid.trim() || undefined,
           ssid: form.auth_type === "ssid" ? form.ssid.trim() || undefined : undefined,
@@ -442,9 +449,18 @@ function BotsPage() {
           ? form.refresh_token.trim()
             ? "SSID saved — auto-refresh enabled"
             : "SSID validated and account saved"
-          : "Account added",
+          : form.auth_type === "microsoft"
+            ? "Microsoft account saved — complete device-code login on launch"
+            : "Account added",
       );
-      setForm({ label: "", auth_type: "ssid", username: "", uuid: "", ssid: "", refresh_token: "" });
+      setForm({
+        label: "",
+        auth_type: "microsoft",
+        username: "",
+        uuid: "",
+        ssid: "",
+        refresh_token: "",
+      });
       setSsidPreview(null);
       setShowForm(false);
       await reload();
@@ -584,7 +600,15 @@ function BotsPage() {
       ]);
       logPollSinceRef.current = Date.now() - 60_000;
       msAuthCodeRef.current = null;
-      setMsAuthWaiting(false);
+      if (account.auth_type === "microsoft" && !account.has_ssid) {
+        setMsAuthWaiting(true);
+        toast.message("Waiting for Microsoft code…", {
+          description: "A login popup will open when the device code is ready",
+          duration: 15000,
+        });
+      } else {
+        setMsAuthWaiting(false);
+      }
       await refreshBots();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Launch failed";
@@ -900,14 +924,15 @@ function BotsPage() {
                   </span>
                   <select
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
-                    value={form.auth_type === "microsoft" ? "ssid" : form.auth_type}
+                    value={form.auth_type}
                     onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
                   >
+                    <option value="microsoft">Microsoft (device code)</option>
                     <option value="ssid">SSID / access token (premium)</option>
                     <option value="offline">Offline / Cracked (username only)</option>
                   </select>
                 </label>
-                {form.auth_type === "ssid" || form.auth_type === "microsoft" ? (
+                {form.auth_type === "ssid" ? (
                   <div className="md:col-span-2 space-y-2">
                     <label className="text-xs space-y-1 block">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
@@ -918,7 +943,7 @@ function BotsPage() {
                         value={form.ssid}
                         onChange={(e) => {
                           setSsidPreview(null);
-                          setForm({ ...form, ssid: e.target.value, auth_type: "ssid" });
+                          setForm({ ...form, ssid: e.target.value });
                         }}
                         placeholder="Paste full Minecraft services access_token (eyJ… or long token)"
                         autoComplete="off"
@@ -955,9 +980,28 @@ function BotsPage() {
                       />
                     </label>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      SSID alone works as before. If you also paste an MSA refresh_token, LuauX can
-                      renew the access token automatically when it expires. Secrets never appear in
-                      the console.
+                      Prefer Microsoft device-code if you do not have a token. SSID is for advanced
+                      users who already have a Minecraft access_token.
+                    </p>
+                  </div>
+                ) : form.auth_type === "microsoft" ? (
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-xs space-y-1 block">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        Microsoft email / username (optional)
+                      </span>
+                      <input
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        value={form.username}
+                        onChange={(e) => setForm({ ...form, username: e.target.value })}
+                        placeholder="you@outlook.com"
+                        autoComplete="off"
+                      />
+                    </label>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+                      On <strong>Launch</strong>, a Microsoft device-code popup appears. Open{" "}
+                      <span className="font-mono">microsoft.com/link</span>, enter the code, and
+                      approve. The worker caches the session for reconnects.
                     </p>
                   </div>
                 ) : (
@@ -978,10 +1022,20 @@ function BotsPage() {
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  disabled={saving || (form.auth_type === "ssid" && !form.ssid.trim())}
+                  disabled={
+                    saving ||
+                    (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim()) ||
+                    (form.auth_type === "offline" && !form.username.trim())
+                  }
                   className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold disabled:opacity-50 btn-premium"
                 >
-                  {saving ? "Saving..." : form.auth_type === "ssid" ? "Save SSID account" : "Save account"}
+                  {saving
+                    ? "Saving..."
+                    : form.auth_type === "ssid"
+                      ? "Save SSID account"
+                      : form.auth_type === "microsoft"
+                        ? "Save Microsoft account"
+                        : "Save account"}
                 </button>
                 <button
                   type="button"

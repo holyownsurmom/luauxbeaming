@@ -42,7 +42,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Do I need a Minecraft account to use MC Auto-Message?",
-    a: "Yes. You need a premium Minecraft account. Add it in MC Auto-Message > Add Account with Microsoft device-code login (or offline username for cracked servers). On launch, complete the Microsoft link/code popup.",
+    a: "Yes. You need a premium Minecraft account. Add it in MC Auto-Message → Add Account: Microsoft (device code), SSID access token, or offline/cracked username. For Microsoft, complete the link/code popup on launch.",
     category: "Getting Started",
     icon: Bot,
   },

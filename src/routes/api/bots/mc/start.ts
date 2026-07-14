@@ -130,16 +130,18 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           if (dbAuth === "microsoft") {
             const rawSsid = typeof account.ssid === "string" ? account.ssid : "";
             const rawRt = typeof account.refresh_token === "string" ? account.refresh_token : "";
-            if (!rawSsid.trim() && !rawRt.trim()) {
-              return Response.json(
-                {
-                  error:
-                    "Microsoft device-code login is not available on the bot server. Add SSID (access_token) and optionally an MSA refresh_token.",
-                },
-                { status: 400 },
-              );
+            // Prefer stored SSID/refresh when present; otherwise pure device-code on worker
+            if (rawSsid.trim() || rawRt.trim()) {
+              config.authType = "ssid";
+            } else {
+              config.authType = "microsoft";
+              config.username =
+                (typeof account.username === "string" && account.username) ||
+                (typeof account.label === "string" && account.label) ||
+                config.username;
+              config.accountId = accountId;
+              // no SSID validation — worker will run prismarine-auth device code
             }
-            config.authType = "ssid";
           }
 
           if (config.authType === "ssid" || dbAuth === "ssid") {

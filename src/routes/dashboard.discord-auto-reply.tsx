@@ -95,13 +95,19 @@ function DiscordAutoReplyPage() {
     : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
   void showPaywalls;
 
-  const refreshBots = useCallback(async () => {
+  const refreshBots = useCallback(async (opts?: { toastOnError?: boolean }) => {
     try {
       const res = await fetch("/api/bots/discord-autoreply/status");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || `Status ${res.status}`);
+      }
       const data = await res.json();
       if (data.bots) setRunningBots(data.bots);
-    } catch {
-      /* ignore status errors */
+    } catch (e) {
+      if (opts?.toastOnError) {
+        toast.error(e instanceof Error ? e.message : "Failed to load bot status");
+      }
     }
   }, []);
 
@@ -166,10 +172,19 @@ function DiscordAutoReplyPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start");
       setSelectedBotId(data.botId);
-      setConsoleEntries([]);
+      setConsoleEntries([
+        {
+          ts: Date.now(),
+          level: "system",
+          msg: `Job ${String(data.botId).slice(0, 8)}… queued — waiting for worker…`,
+        },
+      ]);
+      toast.success("Auto-reply bot launched");
       await refreshBots();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Launch failed");
+      const msg = e instanceof Error ? e.message : "Launch failed";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLaunching(false);
     }
@@ -185,10 +200,14 @@ function DiscordAutoReplyPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        console.error("Stop failed:", data.error || res.status);
+        toast.error(typeof data.error === "string" ? data.error : `Stop failed (${res.status})`);
+        return;
       }
       if (selectedBotId === botId) setSelectedBotId(null);
+      toast.success("Stop signal sent");
       await refreshBots();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Stop failed");
     } finally {
       setStoppingId(null);
     }
@@ -434,28 +453,61 @@ function DiscordAutoReplyPage() {
 
       {/* Live Console */}
       {selectedBotId && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3 animated-border noise-texture relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        <div className="rounded-2xl border border-border/50 bg-card/70 p-5 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
               <div
-                className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
+                className={`h-2 w-2 rounded-full shrink-0 ${
+                  activeBot?.status === "running"
+                    ? "bg-primary animate-pulse"
+                    : activeBot?.status === "pending"
+                      ? "bg-amber-400 animate-pulse"
+                      : activeBot?.status === "error"
+                        ? "bg-destructive"
+                        : "bg-muted-foreground"
+                }`}
               />
               <span className="text-xs font-semibold uppercase tracking-widest">Console</span>
-              <span className="text-xs text-muted-foreground">
-                {activeBot?.label || selectedBotId}
+              <span className="text-xs text-muted-foreground truncate">
+                {activeBot?.label || selectedBotId.slice(0, 8)}
               </span>
+              {activeBot?.status ? (
+                <span
+                  className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${
+                    activeBot.status === "running"
+                      ? "bg-primary/15 text-primary border-primary/20"
+                      : activeBot.status === "error"
+                        ? "bg-destructive/15 text-destructive border-destructive/20"
+                        : "bg-secondary/80 text-muted-foreground border-border/50"
+                  }`}
+                >
+                  {activeBot.status}
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground font-mono">
                 {consoleEntries.length} lines
               </span>
               <button
+                type="button"
                 onClick={() => setConsoleEntries([])}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
                 Clear
               </button>
+              {selectedBotId && (
+                <button
+                  type="button"
+                  onClick={() => void stopBot(selectedBotId)}
+                  disabled={stoppingId === selectedBotId}
+                  className="inline-flex items-center gap-1 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                >
+                  <Square className="h-3 w-3" /> Stop
+                </button>
+              )}
               <button
+                type="button"
                 onClick={() => setSelectedBotId(null)}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
@@ -463,18 +515,28 @@ function DiscordAutoReplyPage() {
               </button>
             </div>
           </div>
-          <BotConsole entries={consoleEntries} highlightBot={true} />
+          {activeBot?.error ? (
+            <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              {activeBot.error}
+            </div>
+          ) : null}
+          <BotConsole
+            entries={consoleEntries}
+            highlightBot={true}
+            title="LUAUX@AUTOREPLY ~ TAIL -F BOT.LOG"
+          />
         </div>
       )}
 
       {/* Active Instances */}
       {runningBots.length > 0 && (
-        <div className="rounded-2xl brutal-border bg-card p-5 space-y-3 animated-border noise-texture relative overflow-hidden">
+        <div className="rounded-2xl border border-border/50 bg-card/70 p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-xs uppercase tracking-widest text-muted-foreground">
-              Active Instances
+              Active bots ({runningBots.length})
             </div>
             <button
+              type="button"
               onClick={stopAndClearAll}
               disabled={stoppingId !== null}
               className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
@@ -485,27 +547,47 @@ function DiscordAutoReplyPage() {
           {runningBots.map((bot) => (
             <div
               key={bot.id}
-              className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-2"
+              className="flex items-center justify-between rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <div
-                  className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : bot.status === "pending" ? "bg-amber-400 animate-pulse" : "bg-muted-foreground"}`}
+                  className={`h-2 w-2 rounded-full shrink-0 ${
+                    bot.status === "running"
+                      ? "bg-primary animate-pulse"
+                      : bot.status === "pending"
+                        ? "bg-amber-400 animate-pulse"
+                        : bot.status === "error"
+                          ? "bg-destructive"
+                          : "bg-muted-foreground"
+                  }`}
                 />
-                <span className="text-sm font-semibold">{bot.label}</span>
-                <span className="text-xs text-muted-foreground capitalize">{bot.status}</span>
+                <span className="text-sm font-semibold truncate">{bot.label || "auto-reply"}</span>
+                <span
+                  className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest shrink-0 ${
+                    bot.status === "running"
+                      ? "bg-primary/15 text-primary border-primary/20"
+                      : bot.status === "error"
+                        ? "bg-destructive/15 text-destructive border-destructive/20"
+                        : "bg-secondary/80 text-muted-foreground border-border/50"
+                  }`}
+                >
+                  {bot.status}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedBotId(bot.id);
                     setConsoleEntries([]);
                   }}
-                  className="text-xs text-primary hover:underline"
+                  className="text-xs text-primary hover:underline font-semibold"
                 >
                   Console
                 </button>
                 <button
-                  onClick={() => stopBot(bot.id)}
+                  type="button"
+                  onClick={() => void stopBot(bot.id)}
                   disabled={stoppingId === bot.id}
                   className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
                 >

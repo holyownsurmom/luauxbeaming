@@ -186,16 +186,38 @@ function PurchasePage() {
           <div>
             <div className="font-semibold text-sm text-primary">Plan activated instantly</div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              Admin mode — payment bypassed. Access is live now.{" "}
-              <a href="/dashboard/bots" className="underline text-primary">
-                Deploy a bot
-              </a>
-              {" "}or{" "}
-              <a href="/dashboard/settings" className="underline text-primary">
-                manage keys
-              </a>.
+              Admin mode — payment bypassed. Access is live now.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a
+                href="/dashboard/bots"
+                className="inline-flex rounded-full bg-primary text-primary-foreground px-4 py-2 text-[11px] font-semibold"
+              >
+                1. Add MC account
+              </a>
+              <a
+                href="/dashboard/bots"
+                className="inline-flex rounded-full border border-primary/30 px-4 py-2 text-[11px] font-semibold text-primary"
+              >
+                2. Launch bot
+              </a>
+            </div>
           </div>
+        </div>
+      )}
+
+      {botHours > 0 && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm">
+            <span className="font-semibold text-primary">{botHours.toFixed(1)} bot hours</span>
+            <span className="text-muted-foreground"> ready — add an account and launch.</span>
+          </div>
+          <a
+            href="/dashboard/bots"
+            className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold hover:bg-primary/90 shrink-0"
+          >
+            Go to MC Auto-Message
+          </a>
         </div>
       )}
 
@@ -209,7 +231,9 @@ function PurchasePage() {
               <span className="font-display text-4xl font-semibold">{botHours.toFixed(1)}</span>
               <span className="text-sm text-muted-foreground">hours available</span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Included with your plan</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              1 hour spent per launch · plan optional for multi-bot
+            </p>
           </div>
           <p className="text-sm text-muted-foreground max-w-sm">
             Buy hours below or redeem a bot-hours key from Settings.
@@ -543,12 +567,42 @@ function PaymentView({
         )}
 
         {done && (
-          <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-            Purchase unlocked. Open{" "}
-            <a href="/dashboard/bots" className="underline">
-              Bots
-            </a>{" "}
-            (MC) or your plugin page — access is saved to your Discord account permanently.
+          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-5 space-y-4">
+            <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+              <Check className="h-4 w-4" />
+              Purchase unlocked
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Access is saved to your Discord account. Next steps for MC Auto-Message:
+            </p>
+            <ol className="text-sm space-y-2 text-foreground/90">
+              <li className="flex gap-2">
+                <span className="font-mono text-primary font-bold">1</span>
+                Open MC Auto-Message and add a Microsoft or SSID account
+              </li>
+              <li className="flex gap-2">
+                <span className="font-mono text-primary font-bold">2</span>
+                Set server IP + messages, then Launch
+              </li>
+              <li className="flex gap-2">
+                <span className="font-mono text-primary font-bold">3</span>
+                For Microsoft: complete the device-code popup when it appears
+              </li>
+            </ol>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <a
+                href="/dashboard/bots"
+                className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold hover:bg-primary/90"
+              >
+                Add account & launch
+              </a>
+              <a
+                href="/dashboard/discord-bot"
+                className="inline-flex items-center justify-center rounded-full border border-border/60 bg-card/80 px-5 py-2.5 text-xs font-semibold hover:bg-secondary/60"
+              >
+                Open plugins
+              </a>
+            </div>
           </div>
         )}
       </div>

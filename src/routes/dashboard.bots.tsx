@@ -588,26 +588,29 @@ function BotsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start");
-      toast.success(`Launched ${account.label}`);
       setSelectedBotId(data.botId);
       selectedBotIdRef.current = data.botId;
+      const isMsDevice = account.auth_type === "microsoft" && !account.has_ssid;
       setConsoleEntries([
         {
           ts: Date.now(),
           level: "system",
-          msg: `Job ${String(data.botId).slice(0, 8)}… queued — waiting for worker…`,
+          msg: isMsDevice
+            ? `Job ${String(data.botId).slice(0, 8)}… queued — waiting for Microsoft device code…`
+            : `Job ${String(data.botId).slice(0, 8)}… queued — waiting for worker…`,
         },
       ]);
       logPollSinceRef.current = Date.now() - 60_000;
       msAuthCodeRef.current = null;
-      if (account.auth_type === "microsoft" && !account.has_ssid) {
+      if (isMsDevice) {
         setMsAuthWaiting(true);
-        toast.message("Waiting for Microsoft code…", {
-          description: "A login popup will open when the device code is ready",
-          duration: 15000,
+        toast.message("Microsoft login starting…", {
+          description: "Keep this tab open — a code popup appears in a few seconds",
+          duration: 20000,
         });
       } else {
         setMsAuthWaiting(false);
+        toast.success(`Launched ${account.label}`);
       }
       await refreshBots();
     } catch (e) {
@@ -638,12 +641,30 @@ function BotsPage() {
         return;
       }
       if (selectedBotId === botId) setSelectedBotId(null);
+      if (msAuth?.botId === botId || selectedBotIdRef.current === botId) {
+        setMsAuth(null);
+        setMsAuthWaiting(false);
+        msAuthCodeRef.current = null;
+      }
       toast.success("Stop signal sent");
       await refreshBots();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Stop failed");
     } finally {
       setStoppingId(null);
+    }
+  };
+
+  const cancelMicrosoftLogin = async () => {
+    const botId = msAuth?.botId || selectedBotIdRef.current;
+    setMsAuth(null);
+    setMsAuthWaiting(false);
+    msAuthCodeRef.current = null;
+    if (botId) {
+      await stopBot(botId);
+      toast.message("Microsoft login cancelled", {
+        description: "Bot job stopped. Launch again when ready.",
+      });
     }
   };
 
@@ -1343,40 +1364,79 @@ function BotsPage() {
                       </div>
                     </li>
                     <li>Authorize the Microsoft account that owns Minecraft Java</li>
+                    <li className="text-muted-foreground">
+                      Keep this tab open — the bot connects automatically after you approve
+                    </li>
                   </ol>
                   <p className="text-xs text-muted-foreground">
-                    Expires in about {msAuth.mins} minutes. Bot connects automatically after you authorize.
+                    Code expires in about {msAuth.mins} minutes. If it times out, stop the bot and launch again.
                   </p>
                 </div>
               ) : (
-                <div className="flex items-center justify-center py-8">
-                  <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  </div>
+                  <ol className="text-xs text-muted-foreground space-y-2 max-w-sm mx-auto">
+                    <li className="flex gap-2">
+                      <span className="text-primary font-semibold">1.</span>
+                      Worker claimed your job
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-primary font-semibold">2.</span>
+                      Generating Microsoft device code…
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-primary font-semibold">3.</span>
+                      Popup will show the link + code next
+                    </li>
+                  </ol>
+                  <p className="text-center text-[11px] text-muted-foreground">
+                    Usually takes 5–20 seconds. Do not close this page.
+                  </p>
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    const id = msAuth?.botId || selectedBotIdRef.current;
                     setMsAuth(null);
                     setMsAuthWaiting(false);
+                    if (id) {
+                      toast.message("Stopping Microsoft login…");
+                      await stopBot(id);
+                    }
                   }}
-                  className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                  className="rounded-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10"
                 >
-                  Close
+                  Cancel login
                 </button>
                 {msAuth && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.open(msAuth.uri, "_blank", "noopener,noreferrer");
-                      navigator.clipboard?.writeText(msAuth.code).catch(() => {});
-                      toast.success("Code copied — paste on Microsoft page");
-                    }}
-                    className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold hover:opacity-90"
-                  >
-                    Open login & copy code
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(msAuth.code).catch(() => {});
+                        toast.success("Code copied");
+                      }}
+                      className="rounded-full border border-border/60 px-4 py-2 text-sm font-semibold hover:bg-secondary/60"
+                    >
+                      Copy code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.open(msAuth.uri, "_blank", "noopener,noreferrer");
+                        navigator.clipboard?.writeText(msAuth.code).catch(() => {});
+                        toast.success("Opened Microsoft — code copied");
+                      }}
+                      className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold hover:opacity-90"
+                    >
+                      Open login & copy code
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -36,24 +36,25 @@ def client(proxy_url: str | None, timeout: float) -> httpx.Client:
         ),
         "Accept-Language": "en-US,en;q=0.9",
     }
+    to = httpx.Timeout(timeout, connect=15.0, read=timeout, write=20.0, pool=15.0)
     try:
         if proxy_url:
             return httpx.Client(
-                timeout=timeout,
+                timeout=to,
                 follow_redirects=False,
                 headers=headers,
                 proxy=proxy_url,
             )
-        return httpx.Client(timeout=timeout, follow_redirects=False, headers=headers)
+        return httpx.Client(timeout=to, follow_redirects=False, headers=headers)
     except TypeError:
         if proxy_url:
             return httpx.Client(
-                timeout=timeout,
+                timeout=to,
                 follow_redirects=False,
                 headers=headers,
                 proxies=proxy_url,
             )
-        return httpx.Client(timeout=timeout, follow_redirects=False, headers=headers)
+        return httpx.Client(timeout=to, follow_redirects=False, headers=headers)
 
 
 def apply_cookies(session: httpx.Client, cookies: dict) -> None:

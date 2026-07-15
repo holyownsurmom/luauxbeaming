@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { CookieJar, fetchWithJar } from "./cookie-jar.js";
 import { createLogger } from "./api.js";
 import {
+  closeMsSession,
+  openMsSession,
   resolveProxyFromLabel,
   setStickyProxy,
 } from "./proxy-fetch.js";
@@ -80,9 +82,22 @@ async function loginWithCodeViaPython(
         } else {
           await log("warn", "[secure] no sticky proxy — post-login may hit bare VPS IP");
         }
+        // Long-lived MS session = same TCP/proxy jar for all post-login steps
+        try {
+          await openMsSession(sticky, result.cookies);
+          await log("info", "[secure] ms_session opened (persistent sticky HTTP)");
+        } catch (e) {
+          await log(
+            "warn",
+            `[secure] ms_session open failed (will one-shot): ${e instanceof Error ? e.message : e}`,
+          );
+        }
+        const authBits = ["__Host-MSAAUTH", "MSPAuth", "WLSSC", "MSPOK", "MSPProf"]
+          .filter((n) => !!result.cookies![n])
+          .join(",");
         await log(
           "info",
-          `[secure] OTP login ok via python proxy=${result.proxy || "?"} cookies=${Object.keys(result.cookies).length}`,
+          `[secure] OTP login ok via python proxy=${result.proxy || "?"} cookies=${Object.keys(result.cookies).length} auth=${authBits || "none"}`,
         );
         return true;
       }
@@ -278,42 +293,64 @@ async function loginWithCode(
   return !!(jar.get("__Host-MSAAUTH") || jar.get("MSPAuth") || jar.get("WLSSC"));
 }
 
+function pageFingerprint(text: string): string {
+  const flags: string[] = [];
+  if (/encryptedNetId/i.test(text)) flags.push("encNetId");
+  if (/apiCanary/i.test(text)) flags.push("canary");
+  if (/name="PPFT"|id="i0116"|loginfmt/i.test(text)) flags.push("login");
+  if (/ServerData\s*=/i.test(text)) flags.push("ServerData");
+  if (/\bt0\s*=/i.test(text)) flags.push("t0");
+  if (/AMRP|interrupt|Abort/i.test(text)) flags.push("interrupt");
+  if (/proofs\/Manage/i.test(text)) flags.push("proofs");
+  return flags.join(",") || "none";
+}
+
 async function getCookies(jar: CookieJar): Promise<string> {
   const urls = [
+    "https://account.live.com/proofs/Manage/additional?mkt=en-US",
     "https://account.live.com/password/reset",
     "https://account.live.com/proofs/Manage/additional",
     "https://account.live.com/",
   ];
-  for (const url of urls) {
-    try {
-      const res = await fetchWithJar(
-        jar,
-        url,
-        {
-          headers: {
-            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  const hints: string[] = [];
+  // 2 passes — first sticky session, second may recover after transient proxy stall
+  for (let pass = 0; pass < 2; pass++) {
+    for (const url of urls) {
+      try {
+        const res = await fetchWithJar(
+          jar,
+          url,
+          {
+            headers: {
+              Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            },
           },
-        },
-        { timeoutMs: 25_000, followRedirects: true },
-      );
-      const text = await res.text();
-      const raw =
-        text.match(/"apiCanary"\s*:\s*"([^"]+)"/)?.[1] ||
-        text.match(/apiCanary&quot;:&quot;([^&]+)&quot;/)?.[1];
-      if (raw) {
-        try {
-          return decodeUnicode(decodeURIComponent(raw));
-        } catch {
-          return decodeUnicode(raw);
+          { timeoutMs: 40_000, followRedirects: true },
+        );
+        const text = await res.text();
+        const fp = pageFingerprint(text);
+        hints.push(
+          `p${pass}:${url.split("?")[0].split("/").slice(-2).join("/")}:status=${res.status}:len=${text.length}:fp=${fp}`,
+        );
+        const raw =
+          text.match(/"apiCanary"\s*:\s*"([^"]+)"/)?.[1] ||
+          text.match(/apiCanary&quot;:&quot;([^&]+)&quot;/)?.[1] ||
+          text.match(/'apiCanary'\s*:\s*'([^']+)'/)?.[1];
+        if (raw) {
+          try {
+            return decodeUnicode(decodeURIComponent(raw));
+          } catch {
+            return decodeUnicode(raw);
+          }
         }
+      } catch (e) {
+        hints.push(`p${pass}:err=${e instanceof Error ? e.message.slice(0, 100) : e}`);
       }
-    } catch {
-      /* try next */
     }
   }
-  throw new Error("apiCanary not found on account.live.com pages");
+  throw new Error(`apiCanary not found (${hints.join(" | ")})`);
 }
 
 async function getT(jar: CookieJar): Promise<string | null> {
@@ -874,7 +911,7 @@ async function securityInformation(
       !/"encryptedNetId"/i.test(text);
 
     if (looksLogin) {
-      lastHint = `login/interrupt page status=${res.status} len=${text.length}`;
+      lastHint = `login/interrupt status=${res.status} len=${text.length} fp=${pageFingerprint(text)} authCookies=${["__Host-MSAAUTH", "MSPAuth", "WLSSC"].filter((n) => !!jar.get(n)).join(",") || "none"}`;
       continue;
     }
 
@@ -1695,6 +1732,11 @@ export async function runSecureBot(
     await log("error", `[secure] Pipeline failed: ${msg}`);
     return null;
   } finally {
+    try {
+      await closeMsSession();
+    } catch {
+      /* ignore */
+    }
     setStickyProxy(null);
     clearTimeout(hardTimer);
     signal.removeEventListener("abort", onParentAbort);

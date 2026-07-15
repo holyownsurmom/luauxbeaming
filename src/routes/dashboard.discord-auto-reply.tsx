@@ -19,6 +19,10 @@ import { getPluginKeys, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { PluginPage } from "@/components/plugin-page";
 import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
+import {
+  DiscordRiskDisclaimer,
+  useDiscordRiskDisclaimer,
+} from "@/components/discord-risk-disclaimer";
 
 export const Route = createFileRoute("/dashboard/discord-auto-reply")({
   head: () => ({ meta: [{ title: "Discord Auto-Reply — LuauX" }] }),
@@ -60,10 +64,10 @@ function DiscordAutoReplyPage() {
 
   const [token, setToken] = useState("");
   const [messages, setMessages] = useState("");
-  const [minDelay, setMinDelay] = useState("3");
-  const [maxDelay, setMaxDelay] = useState("8");
-  const [typing, setTyping] = useState(true);
-  const [autoAcceptFriends, setAutoAcceptFriends] = useState(true);
+  const [minDelay, setMinDelay] = useState("30");
+  const [maxDelay, setMaxDelay] = useState("90");
+  const [typing, setTyping] = useState(false);
+  const [autoAcceptFriends, setAutoAcceptFriends] = useState(false);
 
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -94,6 +98,8 @@ function DiscordAutoReplyPage() {
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
     : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
   void showPaywalls;
+
+  const risk = useDiscordRiskDisclaimer("autoreply", !!activeKey);
 
   const refreshBots = useCallback(async (opts?: { toastOnError?: boolean }) => {
     try {
@@ -147,6 +153,9 @@ function DiscordAutoReplyPage() {
   };
 
   const launchBot = async () => {
+    if (!risk.requireAccepted()) {
+      return setError("Accept the disclaimer before starting.");
+    }
     if (!token.trim()) return setError("User token required");
     const msgs = messages
       .split("\n")
@@ -163,9 +172,9 @@ function DiscordAutoReplyPage() {
         body: JSON.stringify({
           token: token.trim(),
           messages: msgs,
-          minDelay: parseFloat(minDelay) || 3,
-          maxDelay: parseFloat(maxDelay) || 8,
-          typing,
+          minDelay: Math.max(parseFloat(minDelay) || 30, 20),
+          maxDelay: Math.max(parseFloat(maxDelay) || 90, 45),
+          typing: false,
           autoAcceptFriends,
         }),
       });
@@ -249,12 +258,10 @@ function DiscordAutoReplyPage() {
         showBundleOffer
         icon={MessageSquare}
         features={[
-          "DM mode & Friend mode",
-          "Humanized reply delay & typing",
-          "Multi-token rotation",
-          "Auto-accept friend requests (safe)",
-          "Bring your own proxy, or use our premium pool (Enterprise)",
+          "DM auto-reply with humanized delays",
+          "Optional friend-accept (rate-limited)",
           "Live console",
+          "Use alt accounts only",
         ]}
       />
     );
@@ -264,6 +271,11 @@ function DiscordAutoReplyPage() {
 
   return (
     <div className="space-y-6 animate-page-in">
+      <DiscordRiskDisclaimer
+        tool="autoreply"
+        open={risk.open}
+        onAccepted={risk.onAccepted}
+      />
       <header className="flex items-start gap-4">
         <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
           <MessageSquare className="h-6 w-6" />
@@ -278,7 +290,7 @@ function DiscordAutoReplyPage() {
             )}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Hands-off DM responder with auto friend acceptance and humanized delay.
+            Slow DM replies on an alt only — Discord can ban self-bots. Use at your own risk.
           </p>
         </div>
       </header>

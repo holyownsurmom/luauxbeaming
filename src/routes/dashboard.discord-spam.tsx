@@ -21,6 +21,10 @@ import { toast } from "sonner";
 import { getPluginKeys, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
 import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
+import {
+  DiscordRiskDisclaimer,
+  useDiscordRiskDisclaimer,
+} from "@/components/discord-risk-disclaimer";
 
 export const Route = createFileRoute("/dashboard/discord-spam")({
   head: () => ({ meta: [{ title: "Discord Auto-Spam — LuauX" }] }),
@@ -90,12 +94,12 @@ function DiscordSpamPage() {
   const [channelId, setChannelId] = useState("");
   const [messages, setMessages] = useState("");
   // SAFETY: Discord user-token automation is against ToS.
-  // We default to 5 minutes (300s) minimum. Do not lower this.
-  const [interval, setInterval_] = useState("300");
+  // Worker enforces long floors (15–40 min warmup, 20+ min gaps). UI matches that.
+  const [interval, setInterval_] = useState("1200");
   const [deleteAfter, setDeleteAfter] = useState(false);
   const [humanize, setHumanize] = useState(true);
-  const [minDelay, setMinDelay] = useState("300");
-  const [maxDelay, setMaxDelay] = useState("420");
+  const [minDelay, setMinDelay] = useState("1200");
+  const [maxDelay, setMaxDelay] = useState("2400");
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -214,8 +218,13 @@ function DiscordSpamPage() {
     setTimeout(() => setCopied(null), 1500);
   };
 
+  const risk = useDiscordRiskDisclaimer("spam", !!activeKey);
+
   const launchBot = async () => {
-    if (!token.trim()) return setError("Bot token required");
+    if (!risk.requireAccepted()) {
+      return setError("Accept the disclaimer before starting.");
+    }
+    if (!token.trim()) return setError("User token required");
     if (!channelId.trim()) return setError("Channel ID required");
     const msgs = messages
       .split("\n")
@@ -234,11 +243,11 @@ function DiscordSpamPage() {
           guildId: "",
           channelId: channelId.trim(),
           messages: msgs,
-          interval: parseInt(interval, 10) || 5,
-          deleteAfterSend: deleteAfter,
-          humanize,
-          minDelay: parseFloat(minDelay) || 3,
-          maxDelay: parseFloat(maxDelay) || 8,
+          interval: Math.max(parseInt(interval, 10) || 1200, 1200),
+          deleteAfterSend: false,
+          humanize: true,
+          minDelay: Math.max(parseFloat(minDelay) || 1200, 1200),
+          maxDelay: Math.max(parseFloat(maxDelay) || 2400, 1800),
         }),
       });
       const data = await res.json();
@@ -541,6 +550,11 @@ function DiscordSpamPage() {
 
   return (
     <div className="space-y-6 animate-page-in">
+      <DiscordRiskDisclaimer
+        tool="spam"
+        open={risk.open}
+        onAccepted={risk.onAccepted}
+      />
       <header className="flex items-start gap-4">
         <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
           <Zap className="h-6 w-6" />
@@ -555,7 +569,7 @@ function DiscordSpamPage() {
             )}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Multi-token channel spammer with rotation and a live console.
+            Slow, short sessions. Use an alt account only — Discord can ban self-bots.
           </p>
         </div>
       </header>

@@ -36,13 +36,57 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const SUFFIXES = ["", " ", "  ", ".", "...", "!", " ~"];
+const SUFFIXES = ["", " ", "  ", ".", "...", "!", " ~", " lol", " fr", " ngl", " haha"];
 
 function variateMessage(msg: string): string {
-  if (Math.random() < 0.35) {
-    return msg + pickRandom(SUFFIXES);
+  let result = msg.trim();
+  if (Math.random() < 0.4) result += pickRandom(SUFFIXES);
+  if (Math.random() < 0.12 && result.length > 6) {
+    const idx = randomBetween(1, result.length - 2);
+    const ch = result[idx];
+    if (ch && /[a-z]/i.test(ch)) {
+      result = result.slice(0, idx) + ch + ch + result.slice(idx + 1);
+    }
   }
-  return msg;
+  if (Math.random() < 0.1) {
+    result = result.charAt(0).toLowerCase() + result.slice(1);
+  }
+  return result || msg;
+}
+
+function browserHeaders(token: string): Record<string, string> {
+  const chromeBuild = pickRandom(["131.0.0.0", "132.0.0.0", "133.0.0.0", "134.0.0.0"]);
+  const userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeBuild} Safari/537.36`;
+  const superProps = Buffer.from(
+    JSON.stringify({
+      os: "Windows",
+      browser: "Chrome",
+      device: "",
+      system_locale: "en-US",
+      browser_user_agent: userAgent,
+      browser_version: chromeBuild,
+      os_version: "10",
+      referrer: "",
+      referring_domain: "",
+      referrer_current: "",
+      referring_domain_current: "",
+      release_channel: "stable",
+      client_build_number: pickRandom([350000, 352000, 354000, 356000]),
+      client_event_source: null,
+    }),
+  ).toString("base64");
+  return {
+    Authorization: token,
+    "Content-Type": "application/json",
+    "User-Agent": userAgent,
+    Accept: "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    Origin: "https://discord.com",
+    Referer: "https://discord.com/channels/@me",
+    "X-Discord-Locale": "en-US",
+    "X-Discord-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
+    "X-Super-Properties": superProps,
+  };
 }
 
 const TYPING_SPEEDS = [40, 50, 60, 70, 80, 90, 100];
@@ -76,21 +120,26 @@ export async function runDiscordAutoReplyBot(
   // Defensive defaults — never NaN timers from missing UI fields
   const minDelaySec = (() => {
     const n = Number(config.minDelay);
-    if (!Number.isFinite(n) || n < 10) return 15;
+    // Floor raised — sub-20s reply spam is a ban magnet
+    if (!Number.isFinite(n) || n < 20) return 30;
     return Math.min(86_400, Math.floor(n));
   })();
   const maxDelaySec = (() => {
     const n = Number(config.maxDelay);
-    const floor = minDelaySec + 5;
-    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 45);
+    const floor = minDelaySec + 15;
+    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 90);
     return Math.min(86_400, Math.floor(n));
   })();
   config.minDelay = minDelaySec;
   config.maxDelay = maxDelaySec;
-  config.typing = config.typing !== false;
+  // Typing indicator API is a self-bot fingerprint — default off, rare if forced on
+  config.typing = config.typing === true;
   config.autoAcceptFriends = !!config.autoAcceptFriends;
 
-  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v2)...");
+  const apiHeaders = browserHeaders(config.token);
+  const chromeUa = apiHeaders["User-Agent"];
+
+  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v3)...");
   await updateJob(jobId, "running");
 
   let ws: WebSocket | null = null;
@@ -179,22 +228,31 @@ export async function runDiscordAutoReplyBot(
 
   const shouldThrottle = (): boolean => {
     const now = Date.now();
-    recentReplyTimes = recentReplyTimes.filter((t) => now - t < 60000);
-    return recentReplyTimes.length >= 3;
+    recentReplyTimes = recentReplyTimes.filter((t) => now - t < 120000);
+    // Max 2 replies per 2 minutes
+    return recentReplyTimes.length >= 2;
   };
 
   const shouldMissReply = (): boolean => {
-    if (replyCount < 5) return false;
-    if (Math.random() < 0.08) return true;
+    if (replyCount < 3) return false;
+    if (Math.random() < 0.14) return true;
     return false;
   };
+
+  let repliesSinceAfk = 0;
+  let afkEvery = randomBetween(12, 25);
+  const repliedUsers = new Map<string, number>(); // userId -> last reply ts
+  let friendsAcceptedHour = 0;
+  let friendsHourStart = Date.now();
 
   const shouldGoAway = (): boolean => {
     const now = Date.now();
     if (now < longAwayUntil) return true;
-    if (replyCount > 0 && replyCount % randomBetween(40, 80) === 0) {
-      longAwayUntil = now + randomBetween(120000, 600000);
-      log("info", `Going AFK for ${(longAwayUntil - now) / 60000 | 0}min (simulating offline)`).catch(() => {});
+    if (repliesSinceAfk >= afkEvery) {
+      repliesSinceAfk = 0;
+      afkEvery = randomBetween(12, 25);
+      longAwayUntil = now + randomBetween(180000, 900000);
+      log("info", `Going AFK for ${((longAwayUntil - now) / 60000) | 0}min (simulating offline)`).catch(() => {});
       return true;
     }
     return false;
@@ -231,19 +289,31 @@ export async function runDiscordAutoReplyBot(
               seq: lastSequence,
             });
           } else {
+            const status = pickRandom(["online", "idle", "dnd", "invisible"] as const);
             sendPayload(2, {
               token: config.token,
-              capabilities: 125,
+              capabilities: 16381,
               properties: {
-                os: "windows",
+                os: "Windows",
                 browser: "Chrome",
                 device: "",
+                system_locale: "en-US",
+                browser_user_agent: chromeUa,
+                browser_version: chromeUa.match(/Chrome\/([\d.]+)/)?.[1] || "134.0.0.0",
+                os_version: "10",
+                referrer: "",
+                referring_domain: "",
+                referrer_current: "",
+                referring_domain_current: "",
+                release_channel: "stable",
+                client_build_number: pickRandom([350000, 352000, 354000, 356000]),
+                client_event_source: null,
               },
               presence: {
-                status: "online",
-                since: 0,
+                status,
+                since: status === "idle" ? Date.now() - randomBetween(60_000, 600_000) : 0,
                 activities: [],
-                afk: false,
+                afk: status === "idle",
               },
               compress: false,
             });
@@ -276,6 +346,10 @@ export async function runDiscordAutoReplyBot(
             sessionId = d.session_id;
             reconnectAttempts = 0;
             await log("info", `Gateway ready! Running as user ${d.user.username}`);
+            // Warmup — don't reply instantly after connect
+            const warm = randomBetween(120_000, 480_000);
+            longAwayUntil = Date.now() + warm;
+            await log("info", `Warmup AFK ${(warm / 60000).toFixed(1)}min before first reply (anti-ban v3)`);
           }
 
           if (t === "RESUMED") {
@@ -313,7 +387,16 @@ export async function runDiscordAutoReplyBot(
                     return;
                   }
                   if (shouldThrottle()) {
-                    await log("info", "Throttled (3+ replies in 60s), skipping this message");
+                    await log("info", "Throttled (2+ replies in 2min), skipping this message");
+                    return;
+                  }
+
+                  const authorId = String(d.author.id || "");
+                  const lastToUser = repliedUsers.get(authorId) || 0;
+                  // Per-user cooldown: at most one reply per user every 10–25 min
+                  const userCd = randomBetween(600_000, 1_500_000);
+                  if (authorId && Date.now() - lastToUser < userCd) {
+                    await log("info", `Per-user cooldown active for ${authorTag} — skip`);
                     return;
                   }
 
@@ -323,19 +406,21 @@ export async function runDiscordAutoReplyBot(
 
                   let delay = randomBetween(minDelaySec * 1000, maxDelaySec * 1000);
                   if (replyCount < 3) {
-                    delay = randomBetween(12000, 30000);
-                  } else if (Math.random() < 0.12) {
-                    delay = randomBetween(60000, 180000);
+                    delay = randomBetween(45000, 120000);
+                  } else if (Math.random() < 0.18) {
+                    delay = randomBetween(120000, 360000);
                     await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
                   }
 
-                  const typingTime = config.typing ? typingDuration(reply) : 0;
+                  // Typing API only rarely (fingerprint) — sleep still simulates think time
+                  const useTyping = config.typing && Math.random() < 0.22;
+                  const typingTime = useTyping ? typingDuration(reply) : randomBetween(4000, 14000);
                   const waitMs = Math.max(delay, typingTime);
-                  if (config.typing) {
+                  if (useTyping) {
                     try {
                       await fetch(`https://discord.com/api/v9/channels/${channelId}/typing`, {
                         method: "POST",
-                        headers: { Authorization: config.token },
+                        headers: apiHeaders,
                       });
                     } catch {
                       /* ignore */
@@ -350,15 +435,19 @@ export async function runDiscordAutoReplyBot(
                       `https://discord.com/api/v9/channels/${channelId}/messages`,
                       {
                         method: "POST",
-                        headers: {
-                          Authorization: config.token,
-                          "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ content: reply }),
+                        headers: apiHeaders,
+                        body: JSON.stringify({
+                          content: reply,
+                          nonce: String(Date.now() + randomBetween(1000, 9999)),
+                          tts: false,
+                          flags: 0,
+                        }),
                       },
                     );
                     if (res.ok) {
                       replyCount++;
+                      repliesSinceAfk++;
+                      if (authorId) repliedUsers.set(authorId, Date.now());
                       recentReplyTimes.push(Date.now());
                       await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
                       return true;
@@ -411,21 +500,28 @@ export async function runDiscordAutoReplyBot(
             }
           }
 
-          if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
+              if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
             if (d.type === 3) {
               const targetUser = `@${d.user.username}`;
               const userId = d.id as string;
               await log("info", `Received incoming friend request from ${targetUser}`);
 
-              // Serialize friend-accept + DM on same queue as replies (rate-limit safety)
-              if (dmQueueDepth >= MAX_DM_QUEUE) {
+              // Cap friend accepts (mass-accept is a ban signal)
+              if (Date.now() - friendsHourStart > 3_600_000) {
+                friendsHourStart = Date.now();
+                friendsAcceptedHour = 0;
+              }
+              if (friendsAcceptedHour >= 4) {
+                await log("warn", `Friend-accept hourly cap (4) — skipping ${targetUser}`);
+              } else if (dmQueueDepth >= MAX_DM_QUEUE) {
                 await log("warn", `Friend-accept queue full — skipping ${targetUser}`);
               } else {
                 dmQueueDepth++;
                 dmQueue = dmQueue
                   .then(async () => {
                     if (stopped || abortSignal.aborted) return;
-                    await sleep(randomBetween(5000, 15000), abortSignal);
+                    // Long delay before accepting — looks less bot-like
+                    await sleep(randomBetween(45_000, 180_000), abortSignal);
                     if (stopped || abortSignal.aborted) return;
 
                     try {
@@ -433,10 +529,7 @@ export async function runDiscordAutoReplyBot(
                         `https://discord.com/api/v9/users/@me/relationships/${userId}`,
                         {
                           method: "PUT",
-                          headers: {
-                            Authorization: config.token,
-                            "Content-Type": "application/json",
-                          },
+                          headers: apiHeaders,
                           body: JSON.stringify({}),
                         },
                       );
@@ -445,17 +538,23 @@ export async function runDiscordAutoReplyBot(
                         await log("error", `Failed to accept friend request: ${text.slice(0, 200)}`);
                         return;
                       }
+                      friendsAcceptedHour++;
                       await log("info", `Auto-accepted friend request from ${targetUser}`);
 
                       if (!config.messages?.length) return;
+                      // Often skip immediate DM after accept
+                      if (Math.random() < 0.45) {
+                        await log("info", `Skipping instant DM after accept for ${targetUser}`);
+                        return;
+                      }
+                      await sleep(randomBetween(30_000, 120_000), abortSignal);
+                      if (stopped || abortSignal.aborted) return;
+
                       const dmChannelRes = await fetch(
                         "https://discord.com/api/v9/users/@me/channels",
                         {
                           method: "POST",
-                          headers: {
-                            Authorization: config.token,
-                            "Content-Type": "application/json",
-                          },
+                          headers: apiHeaders,
                           body: JSON.stringify({ recipient_id: userId }),
                         },
                       );
@@ -464,36 +563,25 @@ export async function runDiscordAutoReplyBot(
                         return;
                       }
                       const dmChannel = (await dmChannelRes.json()) as { id: string };
-                      await sleep(randomBetween(3000, 8000), abortSignal);
+                      await sleep(randomBetween(15_000, 45_000), abortSignal);
                       if (stopped || abortSignal.aborted) return;
 
                       const reply = variateMessage(
                         config.messages[Math.floor(Math.random() * config.messages.length)],
                       );
-                      if (config.typing) {
-                        try {
-                          await fetch(
-                            `https://discord.com/api/v9/channels/${dmChannel.id}/typing`,
-                            {
-                              method: "POST",
-                              headers: { Authorization: config.token },
-                            },
-                          );
-                          await sleep(typingDuration(reply), abortSignal);
-                        } catch {
-                          /* ignore typing */
-                        }
-                      }
+                      await sleep(randomBetween(5000, 15000), abortSignal);
                       if (stopped || abortSignal.aborted) return;
                       const sendRes = await fetch(
                         `https://discord.com/api/v9/channels/${dmChannel.id}/messages`,
                         {
                           method: "POST",
-                          headers: {
-                            Authorization: config.token,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({ content: reply }),
+                          headers: apiHeaders,
+                          body: JSON.stringify({
+                            content: reply,
+                            nonce: String(Date.now() + randomBetween(1000, 9999)),
+                            tts: false,
+                            flags: 0,
+                          }),
                         },
                       );
                       if (sendRes.ok) {

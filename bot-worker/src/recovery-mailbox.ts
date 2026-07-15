@@ -1,48 +1,19 @@
 /**
- * Per-account recovery mailbox providers.
- * Preferred: Mailcow API creates a real unique mailbox per secure job.
- * Fallback: Firstmail API (if key valid).
- * Fallback: catch-all domain (unique address, shared IMAP inbox).
+ * Recovery mailbox helpers for secure flow.
+ * Provider: Firstmail (unique mailbox per job) or catch-all domain.
  */
 
 export type RecoveryMailbox = {
   email: string;
   password: string;
-  /** IMAP auth password (often same as mailbox password) */
   imapPassword: string;
   imapHost: string;
   imapPort: number;
-  provider: "mailcow" | "firstmail" | "catchall";
+  provider: "firstmail" | "catchall";
 };
 
 function randLocal(prefix = "r"): string {
   return `${prefix}${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
-}
-
-function strongPassword(): string {
-  return (
-    Math.random().toString(36).slice(2, 10) +
-    Math.random().toString(36).slice(2, 6).toUpperCase() +
-    "9!"
-  );
-}
-
-function mailcowBase(): string | null {
-  const raw = (process.env.MAILCOW_API_URL || process.env.MAILCOW_URL || "").trim();
-  if (!raw) return null;
-  return raw.replace(/\/+$/, "");
-}
-
-function mailcowKey(): string | null {
-  return (process.env.MAILCOW_API_KEY || "").trim() || null;
-}
-
-function mailcowDomain(): string | null {
-  return (process.env.MAILCOW_DOMAIN || process.env.RECOVERY_MAIL_DOMAIN || "").trim() || null;
-}
-
-export function mailcowConfigured(): boolean {
-  return !!(mailcowBase() && mailcowKey() && mailcowDomain());
 }
 
 export function catchallConfigured(): boolean {
@@ -52,91 +23,6 @@ export function catchallConfigured(): boolean {
     process.env.RECOVERY_IMAP_USER &&
     process.env.RECOVERY_IMAP_PASS
   );
-}
-
-/** Create a unique mailbox on Mailcow for this secure job. */
-export async function createMailcowMailbox(): Promise<RecoveryMailbox> {
-  const base = mailcowBase();
-  const key = mailcowKey();
-  const domain = mailcowDomain();
-  if (!base || !key || !domain) {
-    throw new Error("Mailcow not configured (MAILCOW_API_URL, MAILCOW_API_KEY, MAILCOW_DOMAIN)");
-  }
-
-  const local = randLocal("r");
-  const password = strongPassword();
-  const email = `${local}@${domain}`;
-  const imapHost =
-    (process.env.MAILCOW_IMAP_HOST || process.env.RECOVERY_IMAP_HOST || "").trim() ||
-    base.replace(/^https?:\/\//, "").replace(/\/.*$/, "") ||
-    `mail.${domain}`;
-  const imapPort = parseInt(process.env.MAILCOW_IMAP_PORT || process.env.RECOVERY_IMAP_PORT || "993", 10) || 993;
-
-  const body = {
-    local_part: local,
-    domain,
-    name: local,
-    quota: String(process.env.MAILCOW_QUOTA_MB || "64"),
-    password,
-    password2: password,
-    active: "1",
-    force_pw_update: "0",
-    tls_enforce_in: "0",
-    tls_enforce_out: "0",
-  };
-
-  const url = `${base}/api/v1/add/mailbox`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-API-Key": key,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-
-  const text = await res.text();
-  let data: unknown;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Mailcow add/mailbox non-json status=${res.status} body=${text.slice(0, 180)}`);
-  }
-
-  // Mailcow returns array of { type, msg } objects
-  const items = Array.isArray(data) ? data : [data];
-  const failed = items.some(
-    (it) =>
-      it &&
-      typeof it === "object" &&
-      String((it as { type?: string }).type || "").toLowerCase() === "danger",
-  );
-  if (!res.ok || failed) {
-    throw new Error(
-      `Mailcow add/mailbox failed status=${res.status} body=${JSON.stringify(data).slice(0, 240)}`,
-    );
-  }
-
-  // Brief settle so IMAP is ready
-  await new Promise((r) => setTimeout(r, 1500));
-
-  return {
-    email,
-    password,
-    imapPassword: password,
-    imapHost,
-    imapPort,
-    provider: "mailcow",
-  };
 }
 
 /** Unique address on catch-all domain; all mail lands in one IMAP inbox. */
@@ -195,7 +81,6 @@ export async function readSecurityCodeFromImap(
         const mb = client.mailbox;
         const exists = mb && typeof mb === "object" ? mb.exists : 0;
         if (exists > 0) {
-          // Scan last few messages (catch-all may have noise)
           const from = Math.max(1, exists - 8);
           for (let seq = exists; seq >= from; seq--) {
             if (seen.has(seq)) continue;
@@ -206,17 +91,6 @@ export async function readSecurityCodeFromImap(
               });
               if (!message) continue;
               const source = message.source?.toString() || "";
-              const to =
-                message.envelope?.to?.map((a) => a.address || "").join(",") || "";
-              // For catch-all, prefer messages addressed to our unique local
-              if (
-                box.provider === "catchall" &&
-                to &&
-                !to.toLowerCase().includes(box.email.toLowerCase()) &&
-                !source.toLowerCase().includes(box.email.toLowerCase())
-              ) {
-                // still allow MS codes without perfect To match
-              }
               const match =
                 source.match(/Security code:\s*(\d{4,8})/i) ||
                 source.match(/code is[:\s]+(\d{4,8})/i) ||

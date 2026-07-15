@@ -1,3 +1,5 @@
+import { fetchViaProxyRaw, getStickyProxy } from "./proxy-fetch.js";
+
 export class CookieJar {
   private cookies = new Map<string, string>();
 
@@ -5,7 +7,6 @@ export class CookieJar {
     if (!setCookieHeader) return;
     const entries = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
     for (const entry of entries) {
-      // Only use the first name=value pair of each Set-Cookie line (before attributes)
       const first = entry.split(";")[0];
       const eqIdx = first.indexOf("=");
       if (eqIdx === -1) continue;
@@ -16,10 +17,18 @@ export class CookieJar {
     }
   }
 
+  setCookie(name: string, value: string) {
+    this.cookies.set(name, value);
+  }
+
   getHeader(): string {
     return Array.from(this.cookies.entries())
       .map(([k, v]) => `${k}=${v}`)
       .join("; ");
+  }
+
+  toRecord(): Record<string, string> {
+    return Object.fromEntries(this.cookies.entries());
   }
 
   get(name: string): string | undefined {
@@ -32,20 +41,94 @@ function collectSetCookies(res: Response): string[] {
   if (typeof headers.getSetCookie === "function") {
     return headers.getSetCookie();
   }
-  // Fallback: single combined header (may be incomplete for multi-cookie responses)
   const single = res.headers.get("set-cookie");
   return single ? [single] : [];
 }
 
 const DEFAULT_FETCH_TIMEOUT_MS = 25_000;
 
+export type FetchJarOpts = {
+  followRedirects?: boolean;
+  maxRedirects?: number;
+  timeoutMs?: number;
+  forceDirect?: boolean;
+};
+
+/**
+ * Cookie-aware fetch. When sticky residential proxy is set, MS hosts go through
+ * Python httpx so the IP matches OTP login.
+ */
 export async function fetchWithJar(
   jar: CookieJar,
   url: string,
   init: RequestInit = {},
-  opts: { followRedirects?: boolean; maxRedirects?: number; timeoutMs?: number } = {},
+  opts: FetchJarOpts = {},
 ): Promise<Response> {
+  const useProxy =
+    !opts.forceDirect &&
+    !!getStickyProxy() &&
+    /microsoft|live\.com|xboxlive|passport|minecraft\.net/i.test(url);
+
+  // Match prior jar behavior: default follow unless opts.followRedirects=false
   const followRedirects = opts.followRedirects !== false;
+
+  if (useProxy) {
+    const headersObj: Record<string, string> = {};
+    if (init.headers) {
+      const h = new Headers(init.headers);
+      h.forEach((v, k) => {
+        headersObj[k] = v;
+      });
+    }
+    let body: string | undefined;
+    if (typeof init.body === "string") body = init.body;
+    else if (init.body instanceof URLSearchParams) body = init.body.toString();
+    else if (init.body != null) body = String(init.body);
+
+    const result = await fetchViaProxyRaw(
+      jar.toRecord(),
+      url,
+      {
+        method: (init.method as string) || "GET",
+        headers: headersObj,
+        body,
+      },
+      {
+        followRedirects,
+        maxRedirects: opts.maxRedirects,
+        timeoutMs: opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
+      },
+    );
+
+    if (!result.ok) {
+      throw new Error(result.error || "proxy fetch failed");
+    }
+
+    if (result.cookies) {
+      for (const [k, v] of Object.entries(result.cookies)) {
+        jar.setCookie(k, v);
+      }
+    }
+
+    const outHeaders = new Headers(result.headers || {});
+    if (!outHeaders.has("content-type")) {
+      outHeaders.set("content-type", "text/html; charset=utf-8");
+    }
+
+    // Preserve final URL for callers that check res.url
+    const res = new Response(result.text, {
+      status: result.status,
+      statusText: String(result.status),
+      headers: outHeaders,
+    });
+    try {
+      Object.defineProperty(res, "url", { value: result.url || url, configurable: true });
+    } catch {
+      /* ignore */
+    }
+    return res;
+  }
+
   const maxRedirects = opts.maxRedirects ?? 10;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
 
@@ -63,7 +146,6 @@ export async function fetchWithJar(
   while (true) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    // Merge with caller signal if present
     const parentSignal = init.signal;
     const onParentAbort = () => controller.abort();
     if (parentSignal) {
@@ -98,7 +180,6 @@ export async function fetchWithJar(
       redirects++;
       currentUrl = new URL(location, currentUrl).toString();
 
-      // 307/308 preserve method + body; 301/302 POST → GET (browser-like)
       const method = (currentInit.method || "GET").toUpperCase();
       if ((res.status === 301 || res.status === 302) && method !== "GET" && method !== "HEAD") {
         currentInit = {

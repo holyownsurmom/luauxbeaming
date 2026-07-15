@@ -19,6 +19,9 @@ import { sendOtpFromWorker } from "./otp-send.js";
 import { syncPresenceBots, stopAllPresence } from "./verification-presence.js";
 import { setJobPaused, clearJobPaused } from "./pause-state.js";
 import { scanPendingPayments } from "./payment-watch.js";
+import { acquireInstanceLock } from "./instance-lock.js";
+
+acquireInstanceLock();
 
 const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
 const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);

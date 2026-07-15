@@ -186,6 +186,8 @@ def main() -> None:
             with get_session(proxy) as session:
                 result = login_with_code(session, email, proof_id, code)
                 result["proxy"] = label
+                if proxy:
+                    result["proxy_url"] = proxy
                 if result.get("ok"):
                     print(json.dumps(result))
                     return
@@ -197,6 +199,7 @@ def main() -> None:
         except Exception as e:
             last = {"ok": False, "error": str(e), "proxy": label}
             if proxy:
+                last["proxy_url"] = proxy
                 mark_bad(proxy)
     print(json.dumps(last))
 

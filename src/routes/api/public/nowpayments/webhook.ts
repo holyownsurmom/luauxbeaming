@@ -52,8 +52,14 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
         }
 
         const order_id = String(payload.order_id ?? "");
-        const status = String(payload.payment_status ?? "");
-        const confirmations = Number(payload.confirmations ?? 0);
+        const status = String(payload.payment_status ?? payload.status ?? "").toLowerCase();
+        // NP sometimes nests network confirmations under different keys
+        const confirmations = Number(
+          payload.confirmations ??
+            payload.network_confirmations ??
+            (payload.payment as Record<string, unknown> | undefined)?.confirmations ??
+            0,
+        );
         const paymentIdNp = payload.payment_id != null ? String(payload.payment_id) : null;
         if (!order_id) return new Response("Missing order_id", { status: 400 });
 
@@ -61,12 +67,12 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           auth: { persistSession: false, autoRefreshToken: false },
         });
 
-        // Store latest NP status/payload only — fulfillment is via fulfillPayment()
-        const { data: pmt, error: updErr } = await db
+        // Prefer match by our order_id; fall back to NP payment_id for older rows
+        let pmtQuery = db
           .from("payments")
           .update({
-            status,
-            confirmations,
+            status: status || "waiting",
+            confirmations: Number.isFinite(confirmations) ? confirmations : 0,
             raw_payload: payload,
             ...(paymentIdNp ? { np_payment_id: paymentIdNp } : {}),
           })
@@ -74,19 +80,52 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
           .select("*")
           .maybeSingle();
 
+        let { data: pmt, error: updErr } = await pmtQuery;
+
+        if (!updErr && !pmt && paymentIdNp) {
+          const fallback = await db
+            .from("payments")
+            .update({
+              status: status || "waiting",
+              confirmations: Number.isFinite(confirmations) ? confirmations : 0,
+              raw_payload: payload,
+              np_payment_id: paymentIdNp,
+            })
+            .eq("np_payment_id", paymentIdNp)
+            .select("*")
+            .maybeSingle();
+          pmt = fallback.data;
+          updErr = fallback.error;
+        }
+
         if (updErr) {
           console.error("[nowpayments] update error:", updErr.message);
           return new Response("DB error", { status: 500 });
         }
         if (!pmt) {
-          console.warn("[nowpayments] unknown order_id", order_id);
-          return new Response("Unknown order", { status: 404 });
+          console.warn(
+            "[nowpayments] unknown order_id",
+            order_id,
+            "payment_id",
+            paymentIdNp,
+            "status",
+            status,
+          );
+          // 200 so NP does not retry forever for dashboard payment-links we never created
+          return new Response("Unknown order", { status: 200 });
         }
 
+        console.log(
+          `[nowpayments] ipn ok order=${order_id} status=${status} conf=${confirmations} payment=${pmt.id}`,
+        );
+
         const required = Number(pmt.required_confirmations ?? 1);
+        // NP statuses: waiting | confirming | confirmed | sending | partially_paid | finished | failed | expired | refunded
         const isPaid =
           status === "finished" ||
-          (status === "confirmed" && confirmations >= required);
+          status === "confirmed" ||
+          status === "sending" ||
+          (status === "confirming" && confirmations >= required);
 
         if (!isPaid) {
           return new Response("ok");
@@ -95,7 +134,10 @@ export const Route = createFileRoute("/api/public/nowpayments/webhook")({
         // Always call fulfillPayment (idempotent) so missed grants can repair via ledger
         try {
           await fulfillPayment(db, pmt.id, {
-            confirmations: confirmations || Number(pmt.confirmations) || 1,
+            confirmations:
+              (Number.isFinite(confirmations) && confirmations > 0
+                ? confirmations
+                : Number(pmt.confirmations)) || required || 1,
             raw: payload,
           });
         } catch (e) {

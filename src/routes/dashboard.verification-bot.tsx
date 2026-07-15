@@ -229,7 +229,7 @@ function VerificationBotPage() {
         },
       });
       setSuccessMsg(
-        "Done! Button posted. Keep the VPS bot-worker online — it handles Verify clicks via Discord gateway.",
+        "Done! Verify button posted to your channel.",
       );
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to save verification settings.");

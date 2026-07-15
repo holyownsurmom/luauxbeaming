@@ -9,6 +9,14 @@ import {
   resolveProxyFromLabel,
   setStickyProxy,
 } from "./proxy-fetch.js";
+import {
+  catchallConfigured,
+  createCatchallAddress,
+  createMailcowMailbox,
+  mailcowConfigured,
+  readSecurityCodeFromImap,
+  type RecoveryMailbox,
+} from "./recovery-mailbox.js";
 
 const __secureDir = path.dirname(fileURLToPath(import.meta.url));
 const LOGIN_OTP_SCRIPT = path.resolve(__secureDir, "../scripts/login_otp.py");
@@ -998,24 +1006,7 @@ async function getRecoveryCode(jar: CookieJar, apiCanary: string, encryptedNetId
   return data.recoveryCode;
 }
 
-type MailboxProvider = "domain" | "firstmail";
-
-type RecoveryMailbox = {
-  email: string;
-  /** IMAP password / API token */
-  password: string;
-  token: string;
-  provider: MailboxProvider;
-  imapHost: string;
-  imapPort: number;
-  imapUser: string;
-};
-
-function parseFirstmailPayload(data: Record<string, unknown>): {
-  email: string;
-  password: string;
-  token: string;
-} {
+function parseFirstmailPayload(data: Record<string, unknown>): RecoveryMailbox {
   let email = "";
   let password = "";
   if (data.email && data.password) {
@@ -1033,50 +1024,18 @@ function parseFirstmailPayload(data: Record<string, unknown>): {
   if (!email || !password) {
     throw new Error(`Unrecognized firstmail response: ${JSON.stringify(data).slice(0, 240)}`);
   }
-  return { email, password, token: password };
-}
-
-/**
- * Own-domain recovery mailbox (preferred).
- * Requires catch-all MX so any local-part lands in RECOVERY_IMAP_USER inbox.
- *
- * Env:
- *   RECOVERY_MAIL_DOMAIN=mail.luaux.wtf   (or luaux.wtf)
- *   RECOVERY_IMAP_HOST=imap.example.com
- *   RECOVERY_IMAP_USER=catch@mail.luaux.wtf
- *   RECOVERY_IMAP_PASS=...
- *   RECOVERY_IMAP_PORT=993 (optional)
- */
-function generateDomainMailbox(): RecoveryMailbox | null {
-  const domain = (process.env.RECOVERY_MAIL_DOMAIN || "").trim().toLowerCase();
-  const imapHost = (process.env.RECOVERY_IMAP_HOST || "").trim();
-  const imapUser = (process.env.RECOVERY_IMAP_USER || "").trim();
-  const imapPass = (process.env.RECOVERY_IMAP_PASS || process.env.RECOVERY_IMAP_PASSWORD || "").trim();
-  const imapPort = parseInt(process.env.RECOVERY_IMAP_PORT || "993", 10) || 993;
-
-  if (!domain || !imapHost || !imapUser || !imapPass) return null;
-
-  const local =
-    `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.toLowerCase();
-  const email = `${local}@${domain}`;
   return {
     email,
-    password: imapPass,
-    token: imapPass,
-    provider: "domain",
-    imapHost,
-    imapPort,
-    // Always login as catch-all user; To: header is the random alias
-    imapUser,
+    password,
+    imapPassword: password,
+    imapHost: "mail.firstmail.ltd",
+    imapPort: 993,
+    provider: "firstmail",
   };
 }
 
 /** Firstmail via Python httpx (Node fetch often fails on VPS / redirects). */
-async function generateEmailViaPython(apiKey: string): Promise<{
-  email: string;
-  password: string;
-  token: string;
-}> {
+async function generateEmailViaPython(apiKey: string): Promise<RecoveryMailbox> {
   const script = `
 import json, sys
 try:
@@ -1106,7 +1065,6 @@ for url in urls:
         except Exception:
             last = {"ok": False, "error": f"non-json {r.status_code} {r.text[:120]}", "url": url}
             continue
-        # Explicit auth/balance failures
         detail = ""
         if isinstance(data, dict):
             detail = str(data.get("detail") or data.get("error") or data.get("message") or "")
@@ -1168,7 +1126,6 @@ print(json.dumps(last))
     if (result.ok && result.data) {
       return parseFirstmailPayload(result.data);
     }
-    // script ran — don't try other bins
     throw new Error(
       `firstmail python failed: ${result.error || "unknown"} url=${result.url || "?"} status=${result.status ?? "?"}`,
     );
@@ -1176,211 +1133,47 @@ print(json.dumps(last))
   throw new Error("python unavailable for firstmail");
 }
 
-async function generateMailbox(): Promise<RecoveryMailbox> {
-  // 1) Own domain catch-all (no third-party disposable mail)
-  const domainBox = generateDomainMailbox();
-  if (domainBox) return domainBox;
-
-  const apiKey = process.env.FIRSTMAIL_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "No recovery mailbox configured. Set RECOVERY_MAIL_DOMAIN + RECOVERY_IMAP_HOST/USER/PASS " +
-        "(own domain catch-all) or FIRSTMAIL_API_KEY.",
-    );
-  }
-
+/** Unique recovery mailbox: Mailcow (preferred) → Firstmail → catch-all. */
+async function generateEmail(): Promise<RecoveryMailbox> {
   const errors: string[] = [];
 
-  try {
-    const fm = await generateEmailViaPython(apiKey);
-    return {
-      email: fm.email,
-      password: fm.password,
-      token: fm.token,
-      provider: "firstmail",
-      imapHost: "mail.firstmail.ltd",
-      imapPort: 993,
-      imapUser: fm.email,
-    };
-  } catch (e) {
-    errors.push(`py=${e instanceof Error ? e.message : e}`);
-  }
-
-  const urls = [
-    "https://api-tools.firstmail.ltd/lk/get/email?type=3",
-    "https://api.firstmail.ltd/lk/get/email?type=3",
-  ];
-  for (const url of urls) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 25_000);
-        const res = await fetch(url, {
-          headers: {
-            "X-API-KEY": apiKey,
-            Accept: "application/json",
-            "User-Agent": "LuauX-bot-worker/1.0",
-          },
-          redirect: "follow",
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        const text = await res.text();
-        let data: Record<string, unknown>;
-        try {
-          data = JSON.parse(text) as Record<string, unknown>;
-        } catch {
-          errors.push(`node ${url} status=${res.status} non-json=${text.slice(0, 80)}`);
-          continue;
-        }
-        const detail = String(
-          (data as { detail?: string }).detail ||
-            (data as { error?: string }).error ||
-            "",
-        );
-        if (
-          res.status === 401 ||
-          res.status === 403 ||
-          /not valid|invalid/i.test(detail)
-        ) {
-          throw new Error(
-            `FIRSTMAIL_API_KEY rejected (${res.status}): ${detail || text.slice(0, 120)}`,
-          );
-        }
-        const fm = parseFirstmailPayload(data);
-        return {
-          email: fm.email,
-          password: fm.password,
-          token: fm.token,
-          provider: "firstmail",
-          imapHost: "mail.firstmail.ltd",
-          imapPort: 993,
-          imapUser: fm.email,
-        };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        if (/FIRSTMAIL_API_KEY rejected/i.test(msg)) throw e;
-        errors.push(`node ${url} #${attempt}: ${msg}`);
-        await new Promise((r) => setTimeout(r, 800 * attempt));
-      }
+  if (mailcowConfigured()) {
+    try {
+      return await createMailcowMailbox();
+    } catch (e) {
+      errors.push(`mailcow=${e instanceof Error ? e.message : e}`);
     }
   }
 
-  throw new Error(`generateMailbox failed: ${errors.join(" | ")}`);
-}
+  const apiKey = (process.env.FIRSTMAIL_API_KEY || "").trim();
+  if (apiKey) {
+    try {
+      return await generateEmailViaPython(apiKey);
+    } catch (e) {
+      errors.push(`firstmail=${e instanceof Error ? e.message : e}`);
+    }
+  } else {
+    errors.push("firstmail=no key");
+  }
 
-function extractOtpFromSource(source: string): string | null {
-  const match =
-    source.match(/Security code:\s*(\d{4,8})/i) ||
-    source.match(/code is[:\s]+(\d{4,8})/i) ||
-    source.match(/verification code[:\s]+(\d{4,8})/i) ||
-    source.match(/\b(\d{6})\b/);
-  return match?.[1] || null;
+  if (catchallConfigured()) {
+    try {
+      return createCatchallAddress();
+    } catch (e) {
+      errors.push(`catchall=${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  throw new Error(
+    `No recovery mailbox available. Set Mailcow (MAILCOW_API_URL + MAILCOW_API_KEY + MAILCOW_DOMAIN) or fix Firstmail. ${errors.join(" | ")}`,
+  );
 }
 
 async function getEmailCode(
   mailbox: RecoveryMailbox,
   signal?: AbortSignal,
 ): Promise<string> {
-  const { ImapFlow } = await import("imapflow");
-  const client = new ImapFlow({
-    host: mailbox.imapHost,
-    port: mailbox.imapPort,
-    secure: true,
-    auth: { user: mailbox.imapUser, pass: mailbox.password },
-    logger: false,
-  });
-
-  const target = mailbox.email.toLowerCase();
-  const startedAt = Date.now();
-
-  try {
-    await client.connect();
-    const lock = await client.getMailboxLock("INBOX");
-    try {
-      const timeout = 60_000;
-
-      while (Date.now() - startedAt < timeout) {
-        if (signal?.aborted) throw new Error("Aborted while waiting for security code");
-
-        // Prefer recent messages (UID search since job start)
-        try {
-          const since = new Date(startedAt - 60_000);
-          const uids = await client.search({ since }, { uid: true });
-          const list = Array.isArray(uids) ? uids.slice(-25) : [];
-          for (const uid of list.reverse()) {
-            const message = await client.fetchOne(
-              String(uid),
-              { source: true, envelope: true },
-              { uid: true },
-            );
-            if (!message) continue;
-            const source = message.source?.toString() || "";
-            const toAddrs = (message.envelope?.to || [])
-              .map((a) => {
-                const anyA = a as { address?: string; mailbox?: string; host?: string };
-                if (anyA.address) return String(anyA.address).toLowerCase();
-                return `${anyA.mailbox || ""}@${anyA.host || ""}`.toLowerCase();
-              })
-              .join(" ");
-            const deliveredTo =
-              source.match(/Delivered-To:\s*([^\r\n]+)/i)?.[1]?.toLowerCase() || "";
-            const xOriginal =
-              source.match(/X-Original-To:\s*([^\r\n]+)/i)?.[1]?.toLowerCase() || "";
-            const addressed =
-              mailbox.provider === "firstmail" ||
-              toAddrs.includes(target) ||
-              deliveredTo.includes(target) ||
-              xOriginal.includes(target) ||
-              source.toLowerCase().includes(target);
-
-            if (!addressed) continue;
-            const code = extractOtpFromSource(source);
-            if (code) return code;
-          }
-        } catch {
-          // fall through to latest-seq scan
-        }
-
-        const mb = client.mailbox;
-        const latestSeq = mb && typeof mb === "object" ? mb.exists : 0;
-        if (latestSeq > 0) {
-          // scan last few messages for domain catch-all noise
-          const from = Math.max(1, latestSeq - 8);
-          for (let seq = latestSeq; seq >= from; seq--) {
-            const message = await client.fetchOne(`${seq}`, { source: true });
-            if (!message) continue;
-            const source = message.source?.toString() || "";
-            if (
-              mailbox.provider === "domain" &&
-              !source.toLowerCase().includes(target) &&
-              !/microsoft|account\.live|security code/i.test(source)
-            ) {
-              continue;
-            }
-            if (mailbox.provider === "domain" && !source.toLowerCase().includes(target)) {
-              // still allow MS-looking mail without strict To match (some relays rewrite To)
-              if (!/microsoft|account\.live|security code/i.test(source)) continue;
-            }
-            const code = extractOtpFromSource(source);
-            if (code) return code;
-          }
-        }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      throw new Error(
-        `Timeout waiting for security code (${mailbox.provider} IMAP ${mailbox.imapHost} → ${mailbox.email})`,
-      );
-    } finally {
-      lock.release();
-    }
-  } finally {
-    try {
-      await client.logout();
-    } catch {
-      /* ignore */
-    }
-  }
+  return readSecurityCodeFromImap(mailbox, signal, 60_000);
 }
 
 async function recover(
@@ -1515,7 +1308,7 @@ async function recover(
       throw new Error(`SendOtt failed status=${sendCodeRes.status} body=${sendText.slice(0, 200)}`);
     }
 
-    // Read MS OTP from recovery mailbox (domain catch-all or Firstmail IMAP)
+    // Read MS security code from the unique recovery mailbox (Mailcow / Firstmail / catch-all)
     const otpCode = await getEmailCode(mailbox, signal);
 
     const verifyRes = await fetchWithJar(
@@ -1865,8 +1658,11 @@ export async function runSecureBot(
         await log("info", `[secure] Got recovery code`);
 
         ensureAlive();
-        await log("info", "[secure] Generating recovery mailbox...");
-        const mailbox = await withTimeout(generateMailbox(), 60_000, "generateMailbox");
+        await log(
+          "info",
+          `[secure] Creating unique recovery mailbox (mailcow=${mailcowConfigured()} firstmail=${!!process.env.FIRSTMAIL_API_KEY} catchall=${catchallConfigured()})...`,
+        );
+        const mailbox = await withTimeout(generateEmail(), 60_000, "generateEmail");
         await log(
           "info",
           `[secure] Mailbox ready provider=${mailbox.provider} email=${mailbox.email} imap=${mailbox.imapHost}`,
@@ -1877,10 +1673,7 @@ export async function runSecureBot(
           Math.random().toString(36).slice(2, 6).toUpperCase() +
           "1!";
 
-        await log(
-          "info",
-          `[secure] Running recovery flow (wait for OTP on ${mailbox.provider})...`,
-        );
+        await log("info", "[secure] Running recovery flow (waiting for mailbox OTP)...");
         const recoveryResult = await withTimeout(
           recover(jar, mainEmail, recoveryCode, mailbox, newPassword, runSignal),
           150_000,
@@ -1890,7 +1683,10 @@ export async function runSecureBot(
         result.newEmail = mailbox.email;
         result.newPassword = newPassword;
         result.recoveryCode = recoveryResult.recoveryCode;
-        await log("info", "[secure] Account secured successfully!");
+        await log(
+          "info",
+          `[secure] Account secured successfully! recoveryMailbox=${mailbox.email} mailboxPass=${mailbox.password}`,
+        );
 
         // Refresh canary after recovery for alias / logout
         try {

@@ -76,46 +76,114 @@ async function getLiveData(jar: CookieJar): Promise<LiveData> {
   return { urlPost, ppft: ppftMatch };
 }
 
-async function loginWithCode(jar: CookieJar, email: string, flowToken: string, code: string, ppft: string, urlPost: string): Promise<boolean> {
-  const res = await fetchWithJar(jar, urlPost, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Origin: "https://login.live.com",
-      "Accept-Language": "en-US,en;q=0.5",
-    },
-    body: new URLSearchParams({
+/**
+ * Port of Sal/autosecure get_msaauth.py — try type 27 (otc) then type 24 (npotc).
+ */
+async function loginWithCode(
+  jar: CookieJar,
+  email: string,
+  flowToken: string,
+  code: string,
+  ppft: string,
+  urlPost: string,
+): Promise<boolean> {
+  const attempts: Array<Record<string, string>> = [
+    {
       login: email,
       loginfmt: email,
       SentProofIDE: flowToken,
       otc: code,
       type: "27",
       PPFT: ppft,
-    }).toString(),
-  });
+    },
+    {
+      login: email,
+      loginfmt: email,
+      SentProofIDE: flowToken,
+      npotc: code,
+      type: "24",
+      PPFT: ppft,
+    },
+  ];
 
-  const text = await res.text();
-  const cookie = jar.get("__Host-MSAAUTH");
-  if (cookie) return true;
+  for (let i = 0; i < attempts.length; i++) {
+    const res = await fetchWithJar(
+      jar,
+      urlPost,
+      {
+        method: "POST",
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Content-Type": "application/x-www-form-urlencoded",
+          Origin: "https://login.live.com",
+          Referer: "https://login.live.com/",
+          "Accept-Language": "en-US,en;q=0.5",
+          "Sec-Fetch-Dest": "document",
+          "Sec-Fetch-Mode": "navigate",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: new URLSearchParams(attempts[i]).toString(),
+      },
+      { followRedirects: true, maxRedirects: 12, timeoutMs: 30_000 },
+    );
 
-  // Try to handle the redirect/tos-accept flow
-  const actionMatch = text.match(/action="([^"]+)".*?id="correlation_id" value="([^"]+)".*?id="code" value="([^"]+)"/s);
-  if (actionMatch) {
-    const [, actionUrl, correlationId, actionCode] = actionMatch;
-    const noticeRes = await fetchWithJar(jar, actionUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ correlation_id: correlationId, code: actionCode }).toString(),
-    });
-    const noticeText = await noticeRes.text();
-    const redirectUrlMatch = noticeText.match(/var redirectUrl = '([^']+)'/);
-    if (redirectUrlMatch) {
-      const redirectUrl = redirectUrlMatch[1].replace(/\\u0026/g, "&");
-      await fetchWithJar(jar, redirectUrl, { method: "POST" });
+    const text = await res.text();
+    if (jar.get("__Host-MSAAUTH") || jar.get("MSPAuth") || jar.get("WLSSC")) {
+      return true;
+    }
+
+    // Notice / ToS / intermediate form
+    const actionMatch = text.match(
+      /action="([^"]+)".*?id="correlation_id" value="([^"]+)".*?id="code" value="([^"]+)"/s,
+    );
+    if (actionMatch) {
+      const [, actionUrl, correlationId, actionCode] = actionMatch;
+      const noticeRes = await fetchWithJar(
+        jar,
+        actionUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ correlation_id: correlationId, code: actionCode }).toString(),
+        },
+        { followRedirects: true, maxRedirects: 10, timeoutMs: 25_000 },
+      );
+      const noticeText = await noticeRes.text();
+      const redirectUrlMatch = noticeText.match(/var redirectUrl = '([^']+)'/);
+      if (redirectUrlMatch) {
+        const redirectUrl = redirectUrlMatch[1].replace(/\\u0026/g, "&").replace(/\\u0026/g, "&");
+        await fetchWithJar(jar, redirectUrl, { method: "GET" }, { followRedirects: true, maxRedirects: 10 });
+      }
+      if (jar.get("__Host-MSAAUTH") || jar.get("MSPAuth") || jar.get("WLSSC")) {
+        return true;
+      }
+    }
+
+    // Sometimes KMSI / stay signed in form
+    const kmsiPost = text.match(/urlPost"\s*:\s*"([^"]+)"/) || text.match(/"urlPost"\s*:\s*"([^"]+)"/);
+    const sFT = text.match(/"sFT"\s*:\s*"([^"]+)"/);
+    if (kmsiPost && sFT && !jar.get("__Host-MSAAUTH")) {
+      await fetchWithJar(
+        jar,
+        kmsiPost[1].replace(/\\u0026/g, "&"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            LoginOptions: "1",
+            type: "28",
+            PPFT: sFT[1],
+          }).toString(),
+        },
+        { followRedirects: true, maxRedirects: 10 },
+      );
+      if (jar.get("__Host-MSAAUTH") || jar.get("MSPAuth") || jar.get("WLSSC")) {
+        return true;
+      }
     }
   }
 
-  return !!jar.get("__Host-MSAAUTH");
+  return !!(jar.get("__Host-MSAAUTH") || jar.get("MSPAuth") || jar.get("WLSSC"));
 }
 
 async function getCookies(jar: CookieJar): Promise<string> {
@@ -733,11 +801,32 @@ export async function runSecureBot(
     await log("info", `[secure] Starting securing pipeline for ${config.email}`);
     ensureAlive();
 
-    // Phase 1: Login with code
+    // Phase 1: Login with code (Sal dual-type: 27 otc + 24 npotc)
     await log("info", "[secure] Getting live data...");
-    const liveData = await getLiveData(jar);
+    let liveData: LiveData;
+    try {
+      liveData = await getLiveData(jar);
+    } catch (e) {
+      // Fallback looser PPFT / urlPost extraction
+      const res = await fetchWithJar(jar, "https://login.live.com", { method: "POST" });
+      const text = await res.text();
+      const urlPost =
+        text.match(/https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/)?.[0] || "";
+      const ppft =
+        text.match(/name="PPFT"[^>]*value="([^"]+)"/)?.[1] ||
+        text.match(/value=\\?"([^"]+)"/)?.[1] ||
+        "";
+      if (!urlPost || !ppft) {
+        await log("error", `[secure] getLiveData failed: ${e instanceof Error ? e.message : e}`);
+        return null;
+      }
+      liveData = { urlPost, ppft };
+    }
     ensureAlive();
-    await log("info", "[secure] Logging in with OTP code...");
+    await log(
+      "info",
+      `[secure] Logging in with OTP (proofLen=${(config.flowToken || "").length})...`,
+    );
     const loggedIn = await loginWithCode(
       jar,
       config.email,
@@ -748,7 +837,10 @@ export async function runSecureBot(
     );
 
     if (!loggedIn) {
-      await log("error", "[secure] Failed to login - invalid OTP code");
+      await log(
+        "error",
+        "[secure] Failed to login — invalid/expired OTP or proof id. Ask user to request a fresh code.",
+      );
       return null;
     }
     await log("info", "[secure] Logged in successfully!");

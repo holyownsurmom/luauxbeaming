@@ -447,17 +447,6 @@ function VerificationBotPage() {
                         placeholder="Leave blank to auto-fetch from Discord"
                       />
                     </label>
-                    <div className="md:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed space-y-1">
-                      <p>
-                        <strong className="text-foreground">Gateway mode (required):</strong> leave{" "}
-                        <strong>Interactions Endpoint URL empty</strong> on Discord Developer Portal.
-                        If that URL is set, Discord fails the click before the VPS bot can handle it.
-                      </p>
-                      <p>
-                        Needs: Bot Token + invite + VPS <code className="text-primary">bot-worker</code> online
-                        (pm2 logs should show <code className="text-primary">READY as YourBot</code>).
-                      </p>
-                    </div>
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                         Server ID
@@ -581,11 +570,7 @@ function VerificationBotPage() {
                 <ol className="list-decimal list-inside space-y-1.5 mt-2">
                   <li>Open <InlineCode>https://discord.com/developers/applications</InlineCode></li>
                   <li>New Application → Bot → Reset Token → copy <strong>Bot Token</strong></li>
-                  <li>General Information → copy <strong>Public Key</strong></li>
-                  <li>
-                    Interactions Endpoint URL →{" "}
-                    <InlineCode>https://luaux.wtf/api/discord/interactions</InlineCode>
-                  </li>
+                  <li>Leave <strong>Interactions Endpoint URL</strong> empty</li>
                   <li>OAuth2 → URL Generator → scopes: <InlineCode>bot</InlineCode> + <InlineCode>applications.commands</InlineCode></li>
                   <li>Permissions: Send Messages, Embed Links, Manage Roles, View Channels, Read Message History</li>
                   <li>Open the generated invite URL → pick your server → Authorize</li>
@@ -593,12 +578,12 @@ function VerificationBotPage() {
                 </ol>
               </GuideStep>
 
-              <GuideStep num={2} icon={<Key className="h-4 w-4 text-primary" />} title="Paste Bot Token + Public Key">
+              <GuideStep num={2} icon={<Key className="h-4 w-4 text-primary" />} title="Paste Bot Token">
                 <p>
-                  In Config, paste your <strong>Bot Token</strong> and <strong>Public Key</strong>, then Server / Role / Channel IDs.
+                  In Config, paste your <strong>Bot Token</strong>, then Server / Role / Channel IDs.
                 </p>
                 <p className="mt-2 text-[11px]">
-                  Public Key is required so Discord can verify button clicks for your bot.
+                  Public Key is optional — leave blank to auto-fill from your token.
                 </p>
               </GuideStep>
 

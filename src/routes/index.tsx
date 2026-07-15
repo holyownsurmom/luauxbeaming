@@ -400,7 +400,7 @@ function Index() {
               <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
             </span>
-            128 nodes online · eu-fra 18ms
+            Hosted bots · live console
           </div>
 
           <h1 className="mt-10 font-display text-6xl md:text-8xl lg:text-[96px] font-semibold leading-[0.88] tracking-tight text-gradient animate-fade-in-up stagger-2" style={{ opacity: 0 }}>
@@ -473,9 +473,9 @@ function Index() {
             </p>
             <div className="mt-8 space-y-4">
               {[
-                ["2,418", "AI replies today"],
-                ["128", "nodes online"],
-                ["18ms", "avg latency (eu-fra)"],
+                ["Live", "console streaming"],
+                ["Auto", "chat replies"],
+                ["Hosted", "no setup scripts"],
               ].map(([k, v]) => (
                 <div
                   key={v}
@@ -690,12 +690,10 @@ function Index() {
                  worldwide.
                </h2>
              </div>
-            <div className="flex items-center gap-4">
-              <div className="font-display text-5xl font-semibold text-gradient-gold">4.7</div>
-              <div className="text-xs uppercase tracking-widest">
-                <div className="text-primary font-display text-base tracking-wide">/5.0 rating</div>
-                <div className="mt-1 text-muted-foreground">based on 247 reviews</div>
-              </div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground max-w-xs text-right">
+              Real operators. Real setups.
+              <br />
+              Built for people who run bots daily.
             </div>
           </div>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">

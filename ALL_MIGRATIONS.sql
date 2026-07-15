@@ -63,7 +63,7 @@ VALUES
     5,
     210,
     30,
-    '["5 concurrent bots","7 bot-hours / day","Full analytics & live console","Advanced scanner + priority queue","All plugins included","Fast speed","Priority Discord support"]'::jsonb,
+    '["5 concurrent bots","7 bot-hours / day","Full analytics & live console","Advanced scanner + priority queue","Fast speed","Priority Discord support"]'::jsonb,
     2,
     'plan'
   ),

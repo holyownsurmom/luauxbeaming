@@ -256,47 +256,6 @@ function FloatingParticles() {
   );
 }
 
-function AnimatedCounter({ target, suffix = "" }: { target: number; suffix?: string }) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          const duration = 1500;
-          const steps = 60;
-          const increment = target / steps;
-          let current = 0;
-          const timer = setInterval(() => {
-            current += increment;
-            if (current >= target) {
-              setCount(target);
-              clearInterval(timer);
-            } else {
-              setCount(Math.floor(current));
-            }
-          }, duration / steps);
-        }
-      },
-      { threshold: 0.5 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [target]);
-
-  return (
-    <span ref={ref}>
-      {count.toLocaleString()}
-      {suffix}
-    </span>
-  );
-}
-
 function Index() {
   const [tick, setTick] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -662,20 +621,8 @@ function Index() {
             return (
             <div
               key={p.name}
-              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture shine-card reveal-scale ${delayClass} ${
-                p.highlight
-                  ? "border-2 border-primary/60 bg-card/80 lg:-translate-y-4 glow-primary pricing-glow holographic"
-                  : "border border-border/40 bg-card/50 hover:border-primary/30 magnetic-hover holographic"
-              }`}
+              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture shine-card reveal-scale ${delayClass} border border-border/40 bg-card/50 hover:border-primary/30 magnetic-hover holographic`}
             >
-              {p.highlight && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground px-5 py-1 text-[10px] font-semibold uppercase tracking-widest shadow-lg shadow-primary/30">
-                  Most popular
-                </div>
-              )}
-              {p.highlight && (
-                <div className="absolute inset-0 rounded-2xl gold-shimmer pointer-events-none" style={{ mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)", maskComposite: "exclude", WebkitMaskComposite: "xor", padding: "2px" }} />
-              )}
               <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
                 {p.name}
               </div>
@@ -710,22 +657,14 @@ function Index() {
               {me ? (
                 <Link
                   to="/dashboard"
-                  className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
-                    p.highlight
-                      ? "btn-gold-lg"
-                      : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
-                  }`}
+                  className="mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
                 >
                   Go to dashboard
                 </Link>
               ) : (
                 <button
                   onClick={openAuth}
-                  className={`mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 ${
-                    p.highlight
-                      ? "btn-gold-lg"
-                      : "border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
-                  }`}
+                  className="mt-8 block w-full text-center rounded-full py-4 text-xs font-semibold uppercase tracking-widest transition-all duration-400 border border-border/60 bg-card/80 hover:bg-primary/10 hover:text-primary hover:border-primary/30 hover:glow-border"
                 >
                    Get started
                  </button>

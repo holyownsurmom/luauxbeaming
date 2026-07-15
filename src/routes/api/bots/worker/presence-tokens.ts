@@ -13,29 +13,20 @@ export const Route = createFileRoute("/api/bots/worker/presence-tokens")({
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // Per-user verification bots (online via Gateway)
+        // Per-user verification bots only (gateway handles Verify clicks)
+        // Never use central DISCORD_BOT_TOKEN — invalid tokens cause 4004 spam
         const { data: rows } = await db()
           .from("verification_settings")
           .select("guild_id, bot_token, discord_id")
           .not("bot_token", "is", null);
 
         const bots = (rows || [])
-          .filter((r) => r.bot_token)
+          .filter((r) => typeof r.bot_token === "string" && r.bot_token.trim().length > 20)
           .map((r) => ({
             guild_id: r.guild_id,
-            bot_token: r.bot_token as string,
+            bot_token: (r.bot_token as string).trim(),
             label: `user-${String(r.discord_id || "").slice(0, 8)}`,
           }));
-
-        // Optional central fallback if configured
-        const central = envStr("DISCORD_BOT_TOKEN");
-        if (central && bots.length === 0) {
-          bots.push({
-            guild_id: "central",
-            bot_token: central,
-            label: "luaux-verification",
-          });
-        }
 
         return Response.json({ bots });
       },

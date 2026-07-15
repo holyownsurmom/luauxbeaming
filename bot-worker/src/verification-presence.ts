@@ -539,7 +539,12 @@ function connect(bot: PresenceBot) {
           console.log(`[presence] RESUMED for ${bot.label}`);
         }
         if (packet.t === "INTERACTION_CREATE" && packet.d) {
-          void handleInteraction(bot, packet.d as Record<string, unknown>).catch((e) =>
+          const d = packet.d as Record<string, unknown>;
+          const data = (d.data || {}) as Record<string, unknown>;
+          console.log(
+            `[verify-gw] INTERACTION_CREATE type=${d.type} custom_id=${data.custom_id || "-"} guild=${d.guild_id}`,
+          );
+          void handleInteraction(bot, d).catch((e) =>
             console.error("[verify-gw] interaction error:", e),
           );
         }

@@ -447,10 +447,16 @@ function VerificationBotPage() {
                         placeholder="Leave blank to auto-fetch from Discord"
                       />
                     </label>
-                    <div className="md:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
-                      <strong className="text-foreground">New:</strong> Verification runs on the VPS gateway bot
-                      (like AutoSecure). You only need a <strong>Bot Token</strong> + invite. No Interactions
-                      Endpoint URL required. Keep the worker online.
+                    <div className="md:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed space-y-1">
+                      <p>
+                        <strong className="text-foreground">Gateway mode (required):</strong> leave{" "}
+                        <strong>Interactions Endpoint URL empty</strong> on Discord Developer Portal.
+                        If that URL is set, Discord fails the click before the VPS bot can handle it.
+                      </p>
+                      <p>
+                        Needs: Bot Token + invite + VPS <code className="text-primary">bot-worker</code> online
+                        (pm2 logs should show <code className="text-primary">READY as YourBot</code>).
+                      </p>
                     </div>
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">

@@ -19,6 +19,7 @@ function runPythonSendOtt(email: string): Promise<{
   securityEmail?: string;
   proofId?: string;
   error?: string;
+  proxy?: string;
 } | null> {
   return new Promise((resolve) => {
     const candidates = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
@@ -30,9 +31,11 @@ function runPythonSendOtt(email: string): Promise<{
         return;
       }
       const bin = candidates[tried++];
+      // send_ott.py auto-loads bot-worker/proxies.txt and rotates on throttle
       const child = spawn(bin, [SCRIPT, email], {
         windowsHide: true,
         env: process.env,
+        cwd: path.resolve(__dirname, ".."),
       });
       let stdout = "";
       let stderr = "";
@@ -60,18 +63,24 @@ function runPythonSendOtt(email: string): Promise<{
             securityEmail?: string;
             proofId?: string;
             error?: string;
+            proxy?: string;
           };
           if (j.error?.includes("httpx not installed")) {
             console.error("[otp-send] httpx missing — run: pip install httpx");
             resolve(null);
             return;
           }
-          console.log("[otp-send] python result", { ok: j.ok, err: j.error?.slice(0, 120) });
+          console.log("[otp-send] python result", {
+            ok: j.ok,
+            proxy: j.proxy,
+            err: j.error?.slice(0, 140),
+          });
           resolve({
             ok: !!j.ok,
             securityEmail: j.securityEmail,
             proofId: j.proofId,
             error: j.error,
+            proxy: j.proxy,
           });
         } catch {
           console.error("[otp-send] python bad json", line.slice(0, 200), stderr.slice(0, 200));

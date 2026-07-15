@@ -724,22 +724,26 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       );
     }
 
-    const { error } = await db.from("verification_settings").upsert(
-      {
-        discord_id: user.id,
-        guild_id: guildId,
-        verified_role_id: roleId,
-        channel_id: channelId,
-        message_title: data.message_title,
-        message_description: data.message_description,
-        button_text: data.button_text,
-        bot_token: botTokenToUse,
-        bot_public_key: botPublicKey.toLowerCase(),
-      },
-      { onConflict: "discord_id" },
-    );
+    // Load previous post so we replace instead of stacking duplicates
+    const { data: existing } = await db
+      .from("verification_settings")
+      .select("last_message_id, channel_id")
+      .eq("discord_id", user.id)
+      .maybeSingle();
 
-    if (error) throw new Error(error.message);
+    if (existing?.last_message_id && existing?.channel_id) {
+      try {
+        await fetch(
+          `https://discord.com/api/v10/channels/${existing.channel_id}/messages/${existing.last_message_id}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bot ${botTokenToUse}` },
+          },
+        );
+      } catch {
+        /* old message may already be gone */
+      }
+    }
 
     const channelRes = await fetch(
       `https://discord.com/api/v10/channels/${channelId}/messages`,
@@ -778,8 +782,54 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       const text = await channelRes.text();
       console.error("[verification] post message failed:", channelRes.status, text);
       throw new Error(
-        `Saved, but could not post the Verify button (${channelRes.status}). Give the bot Send Messages + Embed Links in that channel.`,
+        `Could not post the Verify button (${channelRes.status}). Give the bot Send Messages + Embed Links in that channel.`,
       );
+    }
+
+    const posted = (await channelRes.json().catch(() => null)) as { id?: string } | null;
+    const lastMessageId = posted?.id || null;
+
+    const { error } = await db.from("verification_settings").upsert(
+      {
+        discord_id: user.id,
+        guild_id: guildId,
+        verified_role_id: roleId,
+        channel_id: channelId,
+        message_title: data.message_title,
+        message_description: data.message_description,
+        button_text: data.button_text,
+        bot_token: botTokenToUse,
+        bot_public_key: botPublicKey.toLowerCase(),
+        last_message_id: lastMessageId,
+      },
+      { onConflict: "discord_id" },
+    );
+
+    if (error) {
+      // Columns missing (last_message_id / bot_*) — still try without last_message_id
+      if (/last_message_id|bot_token|bot_public_key|column/i.test(error.message)) {
+        const { error: e2 } = await db.from("verification_settings").upsert(
+          {
+            discord_id: user.id,
+            guild_id: guildId,
+            verified_role_id: roleId,
+            channel_id: channelId,
+            message_title: data.message_title,
+            message_description: data.message_description,
+            button_text: data.button_text,
+            bot_token: botTokenToUse,
+            bot_public_key: botPublicKey.toLowerCase(),
+          },
+          { onConflict: "discord_id" },
+        );
+        if (e2) {
+          throw new Error(
+            `${e2.message}. Run SQL: ADD COLUMN bot_token, bot_public_key, last_message_id on verification_settings`,
+          );
+        }
+      } else {
+        throw new Error(error.message);
+      }
     }
 
     return { ok: true };

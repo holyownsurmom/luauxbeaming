@@ -216,7 +216,12 @@ export const Route = createFileRoute("/api/discord/interactions")({
             hasSig: !!signature,
             hasTs: !!timestamp,
           });
-          return new Response("Invalid signature", { status: 401 });
+          // Discord shows "This interaction failed" when endpoint returns non-2xx
+          // or when Interactions URL / Public Key is wrong on the bot application.
+          return new Response(
+            "Invalid signature — set Interactions Endpoint URL to https://luaux.wtf/api/discord/interactions and paste the correct Public Key in LuauX settings",
+            { status: 401 },
+          );
         }
 
         const botToken = resolved.botToken;

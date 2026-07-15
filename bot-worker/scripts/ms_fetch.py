@@ -1,24 +1,13 @@
 #!/usr/bin/env python3
 """
 Authenticated MS HTTP via residential proxy (same pool as login_otp / send_ott).
-stdin JSON:
-  {
-    "url": "...",
-    "method": "GET|POST",
-    "headers": {},
-    "body": "..." | null,
-    "cookies": {"name": "value"},
-    "proxy": "http://user:pass@host:port" | null,  # sticky preferred
-    "follow": true,
-    "timeout": 35
-  }
-stdout JSON:
-  { ok, status, url, text, cookies, proxy, error? }
+stdin JSON → stdout JSON one-shot request with cookie jar merge.
 """
 from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import urljoin, urlparse
 
 try:
     import httpx
@@ -27,6 +16,16 @@ except ImportError:
     sys.exit(0)
 
 from proxy_pool import load_proxies, mark_bad, next_proxy, proxy_label
+
+MS_DOMAINS = (
+    ".live.com",
+    "login.live.com",
+    "account.live.com",
+    ".microsoft.com",
+    "account.microsoft.com",
+    ".xboxlive.com",
+    "sisu.xboxlive.com",
+)
 
 
 def client(proxy_url: str | None, timeout: float) -> httpx.Client:
@@ -58,15 +57,52 @@ def client(proxy_url: str | None, timeout: float) -> httpx.Client:
 
 
 def apply_cookies(session: httpx.Client, cookies: dict) -> None:
+    """Inject jar cookies so they are sent to MS hosts (incl. __Host-*)."""
     for k, v in (cookies or {}).items():
         if not k or v is None:
             continue
-        # domain-less cookies work for subsequent requests on MS hosts
-        session.cookies.set(k, str(v))
+        val = str(v)
+        # Prefer Cookie header injection for Host-prefixed cookies
+        # also register under common MS domains for httpx jar
+        try:
+            session.cookies.set(k, val, domain="login.live.com", path="/")
+        except Exception:
+            pass
+        try:
+            session.cookies.set(k, val, domain="account.live.com", path="/")
+        except Exception:
+            pass
+        try:
+            session.cookies.set(k, val, domain=".live.com", path="/")
+        except Exception:
+            pass
+        try:
+            session.cookies.set(k, val, domain="account.microsoft.com", path="/")
+        except Exception:
+            pass
+        try:
+            session.cookies.set(k, val, domain=".microsoft.com", path="/")
+        except Exception:
+            pass
+        try:
+            session.cookies.set(k, val)
+        except Exception:
+            pass
 
 
-def dump_cookies(session: httpx.Client) -> dict:
-    return {k: v for k, v in session.cookies.items()}
+def cookie_header(cookies: dict) -> str:
+    return "; ".join(f"{k}={v}" for k, v in (cookies or {}).items() if k and v is not None)
+
+
+def dump_cookies(session: httpx.Client, base: dict) -> dict:
+    out = dict(base or {})
+    try:
+        for cookie in session.cookies.jar:
+            out[cookie.name] = cookie.value
+    except Exception:
+        for k, v in session.cookies.items():
+            out[k] = v
+    return out
 
 
 def do_request(req: dict) -> dict:
@@ -86,6 +122,11 @@ def do_request(req: dict) -> dict:
     if not url:
         return {"ok": False, "error": "missing url", "proxy": label}
 
+    # Always send explicit Cookie header so __Host-MSAAUTH is not dropped
+    ch = cookie_header(cookies)
+    if ch and "cookie" not in {k.lower() for k in headers}:
+        headers["Cookie"] = ch
+
     try:
         with client(proxy, timeout) as session:
             apply_cookies(session, cookies)
@@ -95,13 +136,16 @@ def do_request(req: dict) -> dict:
             redirects = 0
             res = None
             while True:
+                # refresh cookie header each hop from merged jar
+                merged = dump_cookies(session, cookies)
+                headers["Cookie"] = cookie_header(merged)
+
                 res = session.request(
                     current_method,
                     current,
                     headers=headers,
                     content=current_body if current_body is not None else None,
                 )
-                # merge set-cookie into jar automatically via httpx
                 if (
                     follow
                     and res.status_code in (301, 302, 303, 307, 308)
@@ -111,8 +155,6 @@ def do_request(req: dict) -> dict:
                     if not loc:
                         break
                     redirects += 1
-                    from urllib.parse import urljoin
-
                     current = urljoin(current, loc)
                     if res.status_code in (301, 302, 303) and current_method not in (
                         "GET",
@@ -120,17 +162,16 @@ def do_request(req: dict) -> dict:
                     ):
                         current_method = "GET"
                         current_body = None
-                        # drop content-type on method change
                         headers = {
                             k: v
                             for k, v in headers.items()
-                            if k.lower() not in ("content-type", "content-length")
+                            if k.lower()
+                            not in ("content-type", "content-length")
                         }
                     continue
                 break
 
             text = res.text if res is not None else ""
-            # cap body for IPC (node parses)
             if len(text) > 2_000_000:
                 text = text[:2_000_000]
             hdrs = {}
@@ -138,18 +179,19 @@ def do_request(req: dict) -> dict:
                 for k, v in res.headers.items():
                     if k.lower() != "set-cookie":
                         hdrs[k] = v
-                # ensure location is present for manual-redirect callers
                 loc = res.headers.get("location")
                 if loc:
                     hdrs["location"] = loc
+            final_cookies = dump_cookies(session, cookies)
             return {
                 "ok": True,
                 "status": res.status_code if res is not None else 0,
                 "url": str(res.url) if res is not None else current,
                 "text": text,
                 "headers": hdrs,
-                "cookies": dump_cookies(session),
+                "cookies": final_cookies,
                 "proxy": label,
+                "redirects": redirects,
             }
     except Exception as e:
         if proxy:

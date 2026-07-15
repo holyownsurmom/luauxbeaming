@@ -69,8 +69,11 @@ export async function fetchWithJar(
     !!getStickyProxy() &&
     /microsoft|live\.com|xboxlive|passport|minecraft\.net/i.test(url);
 
-  // Match prior jar behavior: default follow unless opts.followRedirects=false
-  const followRedirects = opts.followRedirects !== false;
+  // Honor classic RequestInit.redirect === "manual"
+  const followRedirects =
+    opts.followRedirects !== undefined
+      ? opts.followRedirects !== false
+      : init.redirect !== "manual";
 
   if (useProxy) {
     const headersObj: Record<string, string> = {};

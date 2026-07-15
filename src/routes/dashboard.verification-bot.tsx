@@ -212,10 +212,6 @@ function VerificationBotPage() {
       setSaving(false);
       return setErrorMsg("Bot Token is required");
     }
-    if (!botPublicKey.trim()) {
-      setSaving(false);
-      return setErrorMsg("Bot Public Key is required");
-    }
 
     try {
       await saveSettings({
@@ -232,7 +228,9 @@ function VerificationBotPage() {
           bot_public_key: botPublicKey.trim(),
         },
       });
-      setSuccessMsg("Done! Verification button posted. Members can click Verify now.");
+      setSuccessMsg(
+        "Done! Button posted. IMPORTANT: set Interactions Endpoint URL on your bot to https://luaux.wtf/api/discord/interactions (must show green check).",
+      );
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to save verification settings.");
     } finally {
@@ -440,16 +438,21 @@ function VerificationBotPage() {
                     </label>
                     <label className="text-xs space-y-1 md:col-span-2">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Bot Public Key
+                        Bot Public Key (optional — auto-filled from token)
                       </span>
                       <input
                         className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                         value={botPublicKey}
                         onChange={(e) => setBotPublicKey(e.target.value)}
-                        placeholder="64-char public key (hex)"
-                        required
+                        placeholder="Leave blank to auto-fetch from Discord"
                       />
                     </label>
+                    <div className="md:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
+                      <strong className="text-foreground">Required on Discord Developer Portal:</strong>{" "}
+                      Interactions Endpoint URL ={" "}
+                      <code className="text-primary">https://luaux.wtf/api/discord/interactions</code>
+                      {" "}(must show a green checkmark). Without this, Verify always fails.
+                    </div>
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                         Server ID

@@ -665,7 +665,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
         bot_token: z.string().min(20).max(200),
-        bot_public_key: z.string().min(32).max(128),
+        // Optional — we auto-fetch verify_key from Discord when possible
+        bot_public_key: z.string().max(128).optional().default(""),
       })
       .parse(input),
   )
@@ -689,16 +690,17 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
     }
 
     const botTokenToUse = data.bot_token.trim();
-    const botPublicKey = data.bot_public_key.replace(/\s+/g, "").replace(/^0x/i, "").trim();
-    if (!/^[0-9a-fA-F]{64}$/.test(botPublicKey)) {
-      throw new Error("Bot Public Key must be a 64-char hex string from Discord Developer Portal");
-    }
+    let botPublicKey = (data.bot_public_key || "")
+      .replace(/\s+/g, "")
+      .replace(/^0x/i, "")
+      .trim()
+      .toLowerCase();
 
     const guildId = data.guild_id.trim();
     const channelId = data.channel_id.trim();
     const roleId = data.verified_role_id.trim();
 
-    // Verify user's bot token + guild access
+    // Verify token + auto-fetch Public Key (verify_key) from Discord API
     const meRes = await fetch("https://discord.com/api/v10/users/@me", {
       headers: { Authorization: `Bot ${botTokenToUse}` },
     });
@@ -706,12 +708,27 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       throw new Error("Invalid bot token — check you copied the Bot Token from Developer Portal");
     }
 
+    const appRes = await fetch("https://discord.com/api/v10/oauth2/applications/@me", {
+      headers: { Authorization: `Bot ${botTokenToUse}` },
+    });
+    if (appRes.ok) {
+      const app = (await appRes.json()) as { verify_key?: string; id?: string };
+      if (app.verify_key && /^[0-9a-fA-F]{64}$/.test(app.verify_key)) {
+        botPublicKey = app.verify_key.toLowerCase();
+      }
+    }
+    if (!/^[0-9a-f]{64}$/.test(botPublicKey)) {
+      throw new Error(
+        "Could not load bot Public Key from Discord. Paste the 64-char Public Key from Developer Portal → General Information.",
+      );
+    }
+
     const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
       headers: { Authorization: `Bot ${botTokenToUse}` },
     });
     if (!guildRes.ok) {
       throw new Error(
-        "Your bot is not in that server. Invite your bot first, then try again.",
+        "Your bot is not in that server. Invite your bot first (OAuth2 URL Generator: bot + applications.commands), then try again.",
       );
     }
 

@@ -102,6 +102,20 @@ function errorEmbed(description: string) {
   };
 }
 
+async function fetchVerifyKeyFromToken(botToken: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://discord.com/api/v10/oauth2/applications/@me", {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    if (!res.ok) return null;
+    const app = (await res.json()) as { verify_key?: string };
+    const k = (app.verify_key || "").toLowerCase();
+    return /^[0-9a-f]{64}$/.test(k) ? k : null;
+  } catch {
+    return null;
+  }
+}
+
 async function resolveBotCredentials(
   rawBody: string,
   signature: string,
@@ -109,9 +123,15 @@ async function resolveBotCredentials(
   guildId?: string,
 ): Promise<{ ok: boolean; botToken: string | null; publicKey: string | null; tried: number }> {
   const candidates: Array<{ key: string; token: string | null }> = [];
+  const tokensToRefresh: string[] = [];
   const seen = new Set<string>();
+  const seenTokens = new Set<string>();
 
   const push = (key?: string | null, token?: string | null) => {
+    if (token && !seenTokens.has(token)) {
+      seenTokens.add(token);
+      tokensToRefresh.push(token);
+    }
     if (!key) return;
     const n = normalizePublicKey(key);
     if (!n || seen.has(n)) return;
@@ -138,7 +158,7 @@ async function resolveBotCredentials(
     const { data: allSettings } = await db()
       .from("verification_settings")
       .select("bot_public_key, bot_token")
-      .not("bot_public_key", "is", null);
+      .not("bot_token", "is", null);
     for (const row of allSettings || []) {
       push(row.bot_public_key, row.bot_token);
     }
@@ -155,6 +175,26 @@ async function resolveBotCredentials(
   for (const c of candidates) {
     if (verifyDiscordSignature(rawBody, signature, timestamp, c.key)) {
       return { ok: true, botToken: c.token, publicKey: c.key, tried: candidates.length };
+    }
+  }
+
+  // 4) Live-refresh verify_key from Discord for each known bot token
+  //    (fixes wrong/stale public keys saved in DB — root cause of "interaction failed")
+  for (const token of tokensToRefresh.slice(0, 8)) {
+    const liveKey = await fetchVerifyKeyFromToken(token);
+    if (!liveKey || seen.has(liveKey)) continue;
+    seen.add(liveKey);
+    if (verifyDiscordSignature(rawBody, signature, timestamp, liveKey)) {
+      // Persist corrected key for next time
+      try {
+        await db()
+          .from("verification_settings")
+          .update({ bot_public_key: liveKey })
+          .eq("bot_token", token);
+      } catch {
+        /* ignore */
+      }
+      return { ok: true, botToken: token, publicKey: liveKey, tried: candidates.length + 1 };
     }
   }
 

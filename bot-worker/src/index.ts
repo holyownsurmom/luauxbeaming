@@ -169,9 +169,16 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 }
 
 async function processOtpQueue() {
+  // Gateway path sends OTP itself. Only process leftover HTTP pending sessions
+  // that are not already being handled (status pending, no gateway flag).
   try {
     const sessions = await pollOtpPending(WORKER_ID, 3);
     for (const s of sessions) {
+      // Skip if gateway already set a proof / security email (race leftover)
+      if (s.flow_token && s.flow_token.length > 20 && s.security_email) {
+        console.log(`[otp] skip ${s.id.slice(0, 8)}… already has proof from gateway`);
+        continue;
+      }
       console.log(`[otp] sending for session ${s.id.slice(0, 8)}… (${s.mc_email.slice(0, 3)}***)`);
       const result = await sendOtpFromWorker(s.mc_email);
       const ok = await reportOtpResult({

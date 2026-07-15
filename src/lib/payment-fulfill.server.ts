@@ -40,8 +40,16 @@ export async function sendPurchaseWebhook(payload: {
   payment_id: string;
   products: string[];
 }) {
-  const url = envStr("PAYMENT_DISCORD_WEBHOOK_URL") || envStr("DISCORD_PAYMENT_WEBHOOK");
-  if (!url) return;
+  const url =
+    envStr("PAYMENT_DISCORD_WEBHOOK_URL") ||
+    envStr("DISCORD_PAYMENT_WEBHOOK") ||
+    envStr("SALES_WEBHOOK_URL");
+  if (!url) {
+    console.error(
+      "[payment-webhook] PAYMENT_DISCORD_WEBHOOK_URL missing — set on Vercel Production for sales alerts",
+    );
+    return false;
+  }
 
   const cur = String(payload.pay_currency || "").toUpperCase();
   const explorer =
@@ -55,33 +63,53 @@ export async function sendPurchaseWebhook(payload: {
     `**Plan:** ${payload.plan_name} (\`${payload.plan_id}\`)`,
     `**Products:** ${payload.products.join(", ") || payload.plan_name}`,
     `**Price:** $${Number(payload.price_usd).toFixed(2)} USD`,
-    `**Paid:** ${payload.pay_amount} ${cur}`,
-    `**Address:** \`${payload.pay_address}\``,
+    `**Paid:** ${payload.pay_amount} ${cur || "N/A"}`,
+    payload.pay_address ? `**Address:** \`${payload.pay_address}\`` : null,
     payload.txid ? `**TXID:** \`${payload.txid}\`` : "**TXID:** (admin / no chain tx)",
     explorer ? `**Explorer:** ${explorer}` : null,
     `**Buyer Discord:** <@${payload.discord_id}> (\`${payload.discord_id}\`)`,
     `**Payment ID:** \`${payload.payment_id}\``,
   ].filter(Boolean);
 
-  try {
-    await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: null,
-        embeds: [
-          {
-            title: "💰 New LuauX purchase",
-            description: lines.join("\n"),
-            color: 0x57f287,
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      }),
-    });
-  } catch (e) {
-    console.warn("[payment-webhook] failed", e);
+  const body = JSON.stringify({
+    username: "LuauX Sales",
+    content: null,
+    embeds: [
+      {
+        title: "💰 New LuauX sale",
+        description: lines.join("\n"),
+        color: 0x57f287,
+        timestamp: new Date().toISOString(),
+        footer: { text: "LuauX payment tracking" },
+      },
+    ],
+  });
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      });
+      if (res.ok || res.status === 204) {
+        console.log(`[payment-webhook] ok attempt=${attempt} payment=${payload.payment_id}`);
+        return true;
+      }
+      const text = await res.text().catch(() => "");
+      console.error(
+        `[payment-webhook] HTTP ${res.status} attempt=${attempt}: ${text.slice(0, 200)}`,
+      );
+    } catch (e) {
+      console.error(
+        `[payment-webhook] error attempt=${attempt}:`,
+        e instanceof Error ? e.message : e,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 400 * attempt));
   }
+  console.error("[payment-webhook] FAILED after retries payment=", payload.payment_id);
+  return false;
 }
 
 async function issuePluginKeys(

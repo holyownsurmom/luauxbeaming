@@ -229,7 +229,7 @@ function VerificationBotPage() {
         },
       });
       setSuccessMsg(
-        "Done! Button posted. IMPORTANT: set Interactions Endpoint URL on your bot to https://luaux.wtf/api/discord/interactions (must show green check).",
+        "Done! Button posted. Keep the VPS bot-worker online — it handles Verify clicks via Discord gateway.",
       );
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Failed to save verification settings.");
@@ -448,10 +448,9 @@ function VerificationBotPage() {
                       />
                     </label>
                     <div className="md:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-[11px] text-muted-foreground leading-relaxed">
-                      <strong className="text-foreground">Required on Discord Developer Portal:</strong>{" "}
-                      Interactions Endpoint URL ={" "}
-                      <code className="text-primary">https://luaux.wtf/api/discord/interactions</code>
-                      {" "}(must show a green checkmark). Without this, Verify always fails.
+                      <strong className="text-foreground">New:</strong> Verification runs on the VPS gateway bot
+                      (like AutoSecure). You only need a <strong>Bot Token</strong> + invite. No Interactions
+                      Endpoint URL required. Keep the worker online.
                     </div>
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">

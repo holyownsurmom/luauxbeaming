@@ -998,27 +998,167 @@ async function getRecoveryCode(jar: CookieJar, apiCanary: string, encryptedNetId
   return data.recoveryCode;
 }
 
-async function generateEmail(): Promise<{ email: string; password: string; token: string }> {
-  const apiKey = process.env.FIRSTMAIL_API_KEY;
-  if (!apiKey) throw new Error("FIRSTMAIL_API_KEY not set");
-
-  const res = await fetch("https://api-tools.firstmail.ltd/lk/get/email?type=3", {
-    headers: { "X-API-KEY": apiKey },
-  });
-  const data = (await res.json()) as Record<string, unknown>;
+function parseFirstmailPayload(data: Record<string, unknown>): {
+  email: string;
+  password: string;
+  token: string;
+} {
   let email = "";
   let password = "";
   if (data.email && data.password) {
-    email = data.email as string;
-    password = data.password as string;
+    email = String(data.email);
+    password = String(data.password);
   } else if (data.data && typeof data.data === "object") {
     const d = data.data as Record<string, string>;
     email = d.email;
     password = d.password;
-  } else {
-    throw new Error(`Unrecognized firstmail response: ${JSON.stringify(data)}`);
+  } else if (Array.isArray(data) && data[0] && typeof data[0] === "object") {
+    const d = data[0] as Record<string, string>;
+    email = d.email;
+    password = d.password;
+  }
+  if (!email || !password) {
+    throw new Error(`Unrecognized firstmail response: ${JSON.stringify(data).slice(0, 240)}`);
   }
   return { email, password, token: password };
+}
+
+/** Firstmail via Python httpx (Node fetch often fails on VPS / redirects). */
+async function generateEmailViaPython(apiKey: string): Promise<{
+  email: string;
+  password: string;
+  token: string;
+}> {
+  const script = `
+import json, sys
+try:
+    import httpx
+except ImportError:
+    print(json.dumps({"ok": False, "error": "httpx missing"}))
+    sys.exit(0)
+key = sys.argv[1]
+urls = [
+    "https://api-tools.firstmail.ltd/lk/get/email?type=3",
+    "https://api.firstmail.ltd/lk/get/email?type=3",
+    "https://firstmail.ltd/api/lk/get/email?type=3",
+]
+last = {"ok": False, "error": "no attempt"}
+for url in urls:
+    try:
+        r = httpx.get(url, headers={"X-API-KEY": key}, timeout=30.0, follow_redirects=True)
+        try:
+            data = r.json()
+        except Exception:
+            last = {"ok": False, "error": f"non-json {r.status_code} {r.text[:120]}", "url": url}
+            continue
+        if isinstance(data, dict) and (data.get("email") or (isinstance(data.get("data"), dict) and data["data"].get("email"))):
+            print(json.dumps({"ok": True, "data": data, "url": url, "status": r.status_code}))
+            sys.exit(0)
+        last = {"ok": False, "error": f"bad body {r.status_code}", "data": data, "url": url}
+    except Exception as e:
+        last = {"ok": False, "error": str(e), "url": url}
+print(json.dumps(last))
+`.trim();
+
+  const bins = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
+  for (const bin of bins) {
+    const result = await new Promise<{
+      ok?: boolean;
+      data?: Record<string, unknown>;
+      error?: string;
+      url?: string;
+      status?: number;
+    } | null>((resolve) => {
+      const child = spawn(bin, ["-c", script, apiKey], {
+        windowsHide: true,
+        env: process.env,
+        cwd: path.resolve(__secureDir, ".."),
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => {
+        stdout += String(d);
+      });
+      child.stderr.on("data", (d) => {
+        stderr += String(d);
+      });
+      child.on("error", () => resolve(null));
+      child.on("close", () => {
+        const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop() || "";
+        if (!line) {
+          resolve({ ok: false, error: `empty firstmail py (${stderr.slice(0, 120)})` });
+          return;
+        }
+        try {
+          resolve(JSON.parse(line));
+        } catch {
+          resolve({ ok: false, error: `bad json: ${line.slice(0, 120)}` });
+        }
+      });
+    });
+    if (!result) continue;
+    if (result.ok && result.data) {
+      return parseFirstmailPayload(result.data);
+    }
+    // script ran — don't try other bins
+    throw new Error(
+      `firstmail python failed: ${result.error || "unknown"} url=${result.url || "?"} status=${result.status ?? "?"}`,
+    );
+  }
+  throw new Error("python unavailable for firstmail");
+}
+
+async function generateEmail(): Promise<{ email: string; password: string; token: string }> {
+  const apiKey = process.env.FIRSTMAIL_API_KEY;
+  if (!apiKey) throw new Error("FIRSTMAIL_API_KEY not set");
+
+  const errors: string[] = [];
+
+  // 1) Python httpx (most reliable on Windows VPS)
+  try {
+    return await generateEmailViaPython(apiKey);
+  } catch (e) {
+    errors.push(`py=${e instanceof Error ? e.message : e}`);
+  }
+
+  // 2) Node fetch with redirects + retries
+  const urls = [
+    "https://api-tools.firstmail.ltd/lk/get/email?type=3",
+    "https://api.firstmail.ltd/lk/get/email?type=3",
+  ];
+  for (const url of urls) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 25_000);
+        const res = await fetch(url, {
+          headers: {
+            "X-API-KEY": apiKey,
+            Accept: "application/json",
+            "User-Agent": "LuauX-bot-worker/1.0",
+          },
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        const text = await res.text();
+        let data: Record<string, unknown>;
+        try {
+          data = JSON.parse(text) as Record<string, unknown>;
+        } catch {
+          errors.push(`node ${url} status=${res.status} non-json=${text.slice(0, 80)}`);
+          continue;
+        }
+        return parseFirstmailPayload(data);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`node ${url} #${attempt}: ${msg}`);
+        await new Promise((r) => setTimeout(r, 800 * attempt));
+      }
+    }
+  }
+
+  throw new Error(`Firstmail generateEmail failed: ${errors.join(" | ")}`);
 }
 
 async function getEmailCode(
@@ -1558,8 +1698,8 @@ export async function runSecureBot(
         if (!process.env.FIRSTMAIL_API_KEY) {
           await log("error", "[secure] FIRSTMAIL_API_KEY missing on worker — cannot finish recovery");
         } else {
-          await log("info", "[secure] Generating new email...");
-          const newEmailData = await withTimeout(generateEmail(), 20_000, "generateEmail");
+          await log("info", "[secure] Generating new email (Firstmail)...");
+          const newEmailData = await withTimeout(generateEmail(), 60_000, "generateEmail");
           await log("info", `[secure] Generated email: ${newEmailData.email}`);
 
           const newPassword =

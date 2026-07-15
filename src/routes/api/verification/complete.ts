@@ -33,17 +33,18 @@ export const Route = createFileRoute("/api/verification/complete")({
         const roleId = (config.roleId as string) || "";
         const sessionId = (config.sessionId as string) || "";
 
-        // Always use central LuauX bot for roles + channel posts
+        // Prefer the guild owner's bot token (per-user bot)
         let ownerId = ownerDiscordId;
+        let botToken = envStr("DISCORD_BOT_TOKEN");
         if (guildId) {
           const { data: settings } = await db()
             .from("verification_settings")
-            .select("verified_role_id, channel_id, discord_id")
+            .select("verified_role_id, channel_id, discord_id, bot_token")
             .eq("guild_id", guildId)
             .maybeSingle();
           if (!ownerId && settings?.discord_id) ownerId = settings.discord_id;
+          if (settings?.bot_token) botToken = settings.bot_token as string;
         }
-        const botToken = envStr("DISCORD_BOT_TOKEN");
 
         // Store under license owner so dashboard getSecuredAccounts works;
         // member id is still used for role assignment.

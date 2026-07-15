@@ -117,6 +117,8 @@ function VerificationBotPage() {
     "Click the button below to verify your account and gain access to the server.",
   );
   const [buttonText, setButtonText] = useState("Verify");
+  const [botToken, setBotToken] = useState("");
+  const [botPublicKey, setBotPublicKey] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -147,6 +149,8 @@ function VerificationBotPage() {
             message_title: string;
             message_description: string;
             button_text: string;
+            bot_token?: string | null;
+            bot_public_key?: string | null;
           };
           setGuildId(settings.guild_id || "");
           setVerifiedRoleId(settings.verified_role_id || "");
@@ -157,6 +161,8 @@ function VerificationBotPage() {
               "Click the button below to verify your account and gain access to the server.",
           );
           setButtonText(settings.button_text || "Verify");
+          setBotToken(settings.bot_token || "");
+          setBotPublicKey(settings.bot_public_key || "");
         }
       })
       .finally(() => setLoading(false));
@@ -202,6 +208,14 @@ function VerificationBotPage() {
       setSaving(false);
       return setErrorMsg("Channel ID is required");
     }
+    if (!botToken.trim()) {
+      setSaving(false);
+      return setErrorMsg("Bot Token is required");
+    }
+    if (!botPublicKey.trim()) {
+      setSaving(false);
+      return setErrorMsg("Bot Public Key is required");
+    }
 
     try {
       await saveSettings({
@@ -214,6 +228,8 @@ function VerificationBotPage() {
             messageDescription.trim() ||
             "Click the button below to verify your account and gain access to the server.",
           button_text: buttonText.trim() || "Verify",
+          bot_token: botToken.trim(),
+          bot_public_key: botPublicKey.trim(),
         },
       });
       setSuccessMsg("Done! Verification button posted. Members can click Verify now.");
@@ -244,10 +260,10 @@ function VerificationBotPage() {
             )}
           </h1>
           <p className="mt-1 text-muted-foreground">
-            Uses LuauX's central verification bot. <strong>No bot token field.</strong>
+            Use <strong>your own Discord bot</strong> — paste token + public key below.
           </p>
           <p className="text-[11px] text-primary/70 mt-0.5">
-            Invite LuauX's bot to your server, then enter Guild ID / Role ID / Channel ID below.
+            Create a bot in Discord Developer Portal, invite it, then enter IDs + credentials.
           </p>
         </div>
       </header>
@@ -401,13 +417,39 @@ function VerificationBotPage() {
                   <div>
                     <h3 className="font-semibold text-sm">Server settings</h3>
                     <p className="text-xs text-muted-foreground">
-                      Uses the official LuauX bot — just your server IDs.
+                      Your bot token + public key + server IDs.
                     </p>
                   </div>
                 </div>
 
                 <form onSubmit={handleSave} className="p-6 space-y-4">
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <label className="text-xs space-y-1 md:col-span-2">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        Bot Token
+                      </span>
+                      <input
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        value={botToken}
+                        onChange={(e) => setBotToken(e.target.value)}
+                        placeholder="Bot token from Developer Portal"
+                        type="password"
+                        autoComplete="off"
+                        required
+                      />
+                    </label>
+                    <label className="text-xs space-y-1 md:col-span-2">
+                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                        Bot Public Key
+                      </span>
+                      <input
+                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        value={botPublicKey}
+                        onChange={(e) => setBotPublicKey(e.target.value)}
+                        placeholder="64-char public key (hex)"
+                        required
+                      />
+                    </label>
                     <label className="text-xs space-y-1">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                         Server ID
@@ -432,7 +474,7 @@ function VerificationBotPage() {
                         required
                       />
                     </label>
-                    <label className="text-xs space-y-1">
+                    <label className="text-xs space-y-1 md:col-span-2">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
                         Channel ID
                       </span>
@@ -524,38 +566,31 @@ function VerificationBotPage() {
                 </div>
               </div>
 
-              <GuideStep num={1} icon={<Globe className="h-4 w-4 text-primary" />} title="Invite the LuauX bot">
+              <GuideStep num={1} icon={<Globe className="h-4 w-4 text-primary" />} title="Create your Discord bot">
                 <p>
-                  Uses the official LuauX bot. <strong>No Developer Portal. No token. No public key.</strong>
+                  Each user runs <strong>their own bot</strong> — not a shared central bot.
                 </p>
                 <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Click Invite bot</li>
-                  <li>Pick your server → Authorize</li>
+                  <li>Open <InlineCode>https://discord.com/developers/applications</InlineCode></li>
+                  <li>New Application → Bot → Reset Token → copy <strong>Bot Token</strong></li>
+                  <li>General Information → copy <strong>Public Key</strong></li>
+                  <li>
+                    Interactions Endpoint URL →{" "}
+                    <InlineCode>https://luaux.wtf/api/discord/interactions</InlineCode>
+                  </li>
+                  <li>OAuth2 → URL Generator → scopes: <InlineCode>bot</InlineCode> + <InlineCode>applications.commands</InlineCode></li>
+                  <li>Permissions: Send Messages, Embed Links, Manage Roles, View Channels, Read Message History</li>
+                  <li>Open the generated invite URL → pick your server → Authorize</li>
                   <li>Move the bot role above your Verified role</li>
                 </ol>
-                {inviteUrl ? (
-                  <a
-                    href={inviteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold hover:bg-primary/20"
-                  >
-                    Invite LuauX bot <ExternalLink className="h-4 w-4" />
-                  </a>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">Invite link unavailable (missing DISCORD_CLIENT_ID).</p>
-                )}
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  The bot needs: <strong>Send Messages</strong>, <strong>Embed Links</strong>, and <strong>Manage Roles</strong>.
-                </p>
               </GuideStep>
 
-              <GuideStep num={2} icon={<Key className="h-4 w-4 text-primary" />} title="No Bot Token Required">
+              <GuideStep num={2} icon={<Key className="h-4 w-4 text-primary" />} title="Paste Bot Token + Public Key">
                 <p>
-                  There is no field to enter a bot token because LuauX uses its own central bot to handle verification for everyone.
+                  In Config, paste your <strong>Bot Token</strong> and <strong>Public Key</strong>, then Server / Role / Channel IDs.
                 </p>
                 <p className="mt-2 text-[11px]">
-                  You only need to give the bot the correct permissions and role position in your server.
+                  Public Key is required so Discord can verify button clicks for your bot.
                 </p>
               </GuideStep>
 

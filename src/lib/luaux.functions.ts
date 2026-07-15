@@ -664,6 +664,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: z.string().min(1).max(100),
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
+        bot_token: z.string().min(20).max(200),
+        bot_public_key: z.string().min(32).max(128),
       })
       .parse(input),
   )
@@ -686,28 +688,33 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       throw new Error("No active Verification Bot license — purchase or redeem a key first");
     }
 
-    // Central LuauX bot only — no user token/public key required
-    const { envStr } = await import("./luaux-server.server");
-    const botTokenToUse = envStr("DISCORD_BOT_TOKEN");
-    if (!botTokenToUse) {
-      throw new Error("Server missing DISCORD_BOT_TOKEN — contact support");
+    const botTokenToUse = data.bot_token.trim();
+    const botPublicKey = data.bot_public_key.replace(/\s+/g, "").replace(/^0x/i, "").trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(botPublicKey)) {
+      throw new Error("Bot Public Key must be a 64-char hex string from Discord Developer Portal");
     }
 
     const guildId = data.guild_id.trim();
     const channelId = data.channel_id.trim();
     const roleId = data.verified_role_id.trim();
 
-    // Verify bot is in the guild
+    // Verify user's bot token + guild access
+    const meRes = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: `Bot ${botTokenToUse}` },
+    });
+    if (!meRes.ok) {
+      throw new Error("Invalid bot token — check you copied the Bot Token from Developer Portal");
+    }
+
     const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
       headers: { Authorization: `Bot ${botTokenToUse}` },
     });
     if (!guildRes.ok) {
       throw new Error(
-        "LuauX bot is not in that server. Use the Invite Bot button first, then try again.",
+        "Your bot is not in that server. Invite your bot first, then try again.",
       );
     }
 
-    // Verify channel is reachable
     const chRes = await fetch(`https://discord.com/api/v10/channels/${channelId}`, {
       headers: { Authorization: `Bot ${botTokenToUse}` },
     });
@@ -726,6 +733,8 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: data.message_title,
         message_description: data.message_description,
         button_text: data.button_text,
+        bot_token: botTokenToUse,
+        bot_public_key: botPublicKey.toLowerCase(),
       },
       { onConflict: "discord_id" },
     );

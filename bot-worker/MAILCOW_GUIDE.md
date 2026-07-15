@@ -1,6 +1,15 @@
 # LuauX recovery mailboxes (Mailcow)
 
-Each secured Microsoft account gets its **own unique mailbox** on your domain.
+**LuauX production target**
+
+| Setting | Value |
+|---------|--------|
+| Mailbox domain | `luaux.wtf` → addresses like `rxxxxx@luaux.wtf` |
+| Mail hostname | `mail.luaux.wtf` |
+| API URL | `https://mail.luaux.wtf` |
+| Bot-worker | Windows VPS (separate from Mailcow) |
+
+Each secured Microsoft account gets its **own unique mailbox** on that domain.
 
 ```
 Verify → OTP login → recovery code → create mailbox → MS sends code → IMAP read → secure done
@@ -59,39 +68,43 @@ Replace `yourdomain.com` and `MAIL_SERVER_IP` with yours.
 ### A record
 
 ```
-mail.yourdomain.com.   A   MAIL_SERVER_IP
+mail.luaux.wtf.   A   MAIL_SERVER_IP
 ```
 
-### MX (domain that receives recovery mail)
+(Cloudflare: **DNS only / grey cloud** for `mail` — not proxied.)
+
+### MX (apex receives `@luaux.wtf` mail)
 
 ```
-yourdomain.com.   MX 10   mail.yourdomain.com.
+luaux.wtf.   MX 10   mail.luaux.wtf.
 ```
 
-If recovery addresses are `@mail.yourdomain.com`, set MX on that zone/subdomain accordingly.
+Priority 10 is fine if this is the only MX. Remove other MX records that would steal mail.
 
-### SPF (TXT on the mail domain)
+### SPF (TXT on `luaux.wtf`)
 
 ```
-v=spf1 mx a ip4:MAIL_SERVER_IP -all
+v=spf1 mx a:mail.luaux.wtf ip4:MAIL_SERVER_IP -all
 ```
+
+If you already have an SPF TXT, **merge** into one record (don’t create two SPF records).
 
 ### DKIM
 
 Mailcow UI → **Configuration → Configuration & Details → Configuration → ARC/DKIM keys**  
-Add domain → copy the TXT record Mailcow shows.
+Add domain `luaux.wtf` → copy the TXT record Mailcow shows (usually `dkim._domainkey.luaux.wtf`).
 
 ### DMARC (TXT)
 
 ```
-_dmarc.yourdomain.com.  TXT  "v=DMARC1; p=none; rua=mailto:admin@yourdomain.com"
+_dmarc.luaux.wtf.  TXT  "v=DMARC1; p=none; rua=mailto:admin@luaux.wtf"
 ```
 
 ### PTR (reverse DNS)
 
-At your VPS host, set PTR for `MAIL_SERVER_IP` → `mail.yourdomain.com`.
+At your Linux VPS host, set PTR for `MAIL_SERVER_IP` → `mail.luaux.wtf`.
 
-Wait for DNS to propagate (`dig MX yourdomain.com`, `dig TXT yourdomain.com`).
+Wait for DNS to propagate (`dig MX luaux.wtf`, `dig A mail.luaux.wtf`).
 
 ---
 
@@ -179,14 +192,14 @@ Must show **exactly one** `bot-worker`.
 ## 8. Test Mailcow API manually
 
 ```powershell
-curl -X POST "https://mail.yourdomain.com/api/v1/add/mailbox" `
+curl -X POST "https://mail.luaux.wtf/api/v1/add/mailbox" `
   -H "X-API-Key: YOUR_KEY" `
   -H "Content-Type: application/json" `
-  -d "{\"local_part\":\"rtest123\",\"domain\":\"yourdomain.com\",\"name\":\"rtest123\",\"quota\":\"64\",\"password\":\"TestPass9!\",\"password2\":\"TestPass9!\",\"active\":\"1\",\"force_pw_update\":\"0\",\"tls_enforce_in\":\"0\",\"tls_enforce_out\":\"0\"}"
+  -d "{\"local_part\":\"rtest123\",\"domain\":\"luaux.wtf\",\"name\":\"rtest123\",\"quota\":\"64\",\"password\":\"TestPass9!\",\"password2\":\"TestPass9!\",\"active\":\"1\",\"force_pw_update\":\"0\",\"tls_enforce_in\":\"0\",\"tls_enforce_out\":\"0\"}"
 ```
 
 Success ≈ JSON with `"type":"success"`.  
-Then IMAP login as `rtest123@yourdomain.com` with that password.
+Then IMAP login as `rtest123@luaux.wtf` with that password.
 
 ---
 

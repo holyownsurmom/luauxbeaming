@@ -1,5 +1,77 @@
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { CookieJar, fetchWithJar } from "./cookie-jar.js";
 import { createLogger } from "./api.js";
+
+const __secureDir = path.dirname(fileURLToPath(import.meta.url));
+const LOGIN_OTP_SCRIPT = path.resolve(__secureDir, "../scripts/login_otp.py");
+
+/** Python residential-proxy OTP login → inject cookies into jar */
+async function loginWithCodeViaPython(
+  jar: CookieJar,
+  email: string,
+  proofId: string,
+  code: string,
+  log: (level: string, msg: string) => Promise<void>,
+): Promise<boolean> {
+  const bins = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
+  for (const bin of bins) {
+    try {
+      const result = await new Promise<{
+        ok?: boolean;
+        cookies?: Record<string, string>;
+        error?: string;
+        proxy?: string;
+      } | null>((resolve) => {
+        const child = spawn(bin, [LOGIN_OTP_SCRIPT, email, proofId, code], {
+          windowsHide: true,
+          env: process.env,
+          cwd: path.resolve(__secureDir, ".."),
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (d) => {
+          stdout += String(d);
+        });
+        child.stderr.on("data", (d) => {
+          stderr += String(d);
+        });
+        child.on("error", () => resolve(null));
+        child.on("close", () => {
+          const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop() || "";
+          if (!line) {
+            void log("warn", `[secure] login_otp empty (${bin}): ${stderr.slice(0, 160)}`);
+            resolve(null);
+            return;
+          }
+          try {
+            resolve(JSON.parse(line) as { ok?: boolean; cookies?: Record<string, string>; error?: string; proxy?: string });
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      if (!result) continue;
+      if (result.ok && result.cookies) {
+        for (const [k, v] of Object.entries(result.cookies)) {
+          jar.setFromResponse("https://login.live.com", `${k}=${v}`);
+        }
+        await log(
+          "info",
+          `[secure] OTP login ok via python proxy=${result.proxy || "?"} cookies=${Object.keys(result.cookies).length}`,
+        );
+        return true;
+      }
+      await log("warn", `[secure] python login failed: ${(result.error || "unknown").slice(0, 200)}`);
+      // Don't try other python bins if script ran
+      return false;
+    } catch {
+      /* try next bin */
+    }
+  }
+  return false;
+}
 
 export interface SecureJobConfig {
   email: string;
@@ -799,45 +871,58 @@ export async function runSecureBot(
     await log("info", `[secure] Starting securing pipeline for ${config.email}`);
     ensureAlive();
 
-    // Phase 1: Login with code (type 27 otc + type 24 npotc)
-    await log("info", "[secure] Getting live data...");
-    let liveData: LiveData;
-    try {
-      liveData = await getLiveData(jar);
-    } catch (e) {
-      // Fallback looser PPFT / urlPost extraction
-      const res = await fetchWithJar(jar, "https://login.live.com", { method: "POST" });
-      const text = await res.text();
-      const urlPost =
-        text.match(/https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/)?.[0] || "";
-      const ppft =
-        text.match(/name="PPFT"[^>]*value="([^"]+)"/)?.[1] ||
-        text.match(/value=\\?"([^"]+)"/)?.[1] ||
-        "";
-      if (!urlPost || !ppft) {
-        await log("error", `[secure] getLiveData failed: ${e instanceof Error ? e.message : e}`);
-        return null;
-      }
-      liveData = { urlPost, ppft };
-    }
+    // Phase 1: Login with OTP via residential proxies (python), fallback to node
     ensureAlive();
     await log(
       "info",
       `[secure] Logging in with OTP (proofLen=${(config.flowToken || "").length})...`,
     );
-    const loggedIn = await loginWithCode(
-      jar,
-      config.email,
-      config.flowToken,
-      config.code,
-      liveData.ppft,
-      liveData.urlPost,
-    );
+
+    let loggedIn = false;
+    if (config.flowToken && config.code) {
+      loggedIn = await loginWithCodeViaPython(
+        jar,
+        config.email,
+        config.flowToken,
+        config.code,
+        log,
+      );
+    }
+
+    if (!loggedIn) {
+      await log("info", "[secure] Python login unavailable/failed — trying node fallback...");
+      let liveData: LiveData;
+      try {
+        liveData = await getLiveData(jar);
+      } catch (e) {
+        const res = await fetchWithJar(jar, "https://login.live.com", { method: "POST" });
+        const text = await res.text();
+        const urlPost =
+          text.match(/https:\/\/login\.live\.com\/ppsecure\/post\.srf\?[^"'\\\s]+/)?.[0] || "";
+        const ppft =
+          text.match(/name="PPFT"[^>]*value="([^"]+)"/)?.[1] ||
+          text.match(/value=\\?"([^"]+)"/)?.[1] ||
+          "";
+        if (!urlPost || !ppft) {
+          await log("error", `[secure] getLiveData failed: ${e instanceof Error ? e.message : e}`);
+          return null;
+        }
+        liveData = { urlPost, ppft };
+      }
+      loggedIn = await loginWithCode(
+        jar,
+        config.email,
+        config.flowToken,
+        config.code,
+        liveData.ppft,
+        liveData.urlPost,
+      );
+    }
 
     if (!loggedIn) {
       await log(
         "error",
-        "[secure] Failed to login — invalid/expired OTP or proof id. Ask user to request a fresh code.",
+        "[secure] Failed to login — invalid/expired OTP, proof id mismatch, or MS blocked IP. Request a fresh code.",
       );
       return null;
     }

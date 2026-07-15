@@ -76,9 +76,7 @@ async function getLiveData(jar: CookieJar): Promise<LiveData> {
   return { urlPost, ppft: ppftMatch };
 }
 
-/**
- * Port of Sal/autosecure get_msaauth.py — try type 27 (otc) then type 24 (npotc).
- */
+/** Login with email OTP — try type 27 (otc) then type 24 (npotc). */
 async function loginWithCode(
   jar: CookieJar,
   email: string,
@@ -801,7 +799,7 @@ export async function runSecureBot(
     await log("info", `[secure] Starting securing pipeline for ${config.email}`);
     ensureAlive();
 
-    // Phase 1: Login with code (Sal dual-type: 27 otc + 24 npotc)
+    // Phase 1: Login with code (type 27 otc + type 24 npotc)
     await log("info", "[secure] Getting live data...");
     let liveData: LiveData;
     try {

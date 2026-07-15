@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Check, Copy, Clock, ShoppingCart, Package, Timer, Sparkles } from "lucide-react";
+import { Check, Copy, Clock, ShoppingCart, Package, Timer } from "lucide-react";
 import { getPlans, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
 import { addToCart, isInCart, subscribeCart } from "@/lib/cart";
@@ -360,22 +360,15 @@ function PurchasePage() {
               ["starter", "pro", "enterprise", "basic", "elite"].includes(p.id),
           )
           .map((plan) => {
-            const isPro = plan.id === "pro";
             const hoursPerDay = Math.round(plan.bot_hours / Math.max(plan.duration_days, 1));
+            const cleanFeatures = (plan.features || []).filter(
+              (f) => !/all plugins/i.test(f),
+            );
             return (
               <div
                 key={plan.id}
-                className={`relative rounded-2xl border border-border/60 bg-card p-6 md:p-7 flex flex-col overflow-hidden transition-all duration-300 ${
-                  isPro
-                    ? "ring-2 ring-primary/50 shadow-[0_0_40px_-12px] shadow-primary/30"
-                    : "hover:border-primary/30"
-                }`}
+                className="relative rounded-2xl border border-border/60 bg-card p-6 md:p-7 flex flex-col overflow-hidden transition-all duration-300 hover:border-primary/30"
               >
-                {isPro && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-widest px-3 py-1 flex items-center gap-1 brutal-border">
-                    <Sparkles className="h-3 w-3" /> {s.t("most_popular")}
-                  </div>
-                )}
                 {plan.id === "enterprise" && (
                   <div className="absolute top-4 right-4 rounded-md bg-secondary/60 text-foreground/80 text-[9px] font-semibold uppercase tracking-widest px-2 py-1">
                     {s.t("best_value")}
@@ -417,7 +410,7 @@ function PurchasePage() {
                 </div>
 
                 <ul className="mt-5 space-y-2 text-sm flex-1">
-                  {plan.features?.map((f) => (
+                  {cleanFeatures.map((f) => (
                     <FeatureRow key={f}>{f}</FeatureRow>
                   ))}
                 </ul>
@@ -434,11 +427,7 @@ function PurchasePage() {
                   <button
                     disabled={creating}
                     onClick={() => start(plan.id)}
-                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-semibold disabled:opacity-50 brutal-border btn-premium ${
-                      isPro
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "bg-secondary/50 hover:bg-secondary"
-                    }`}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-semibold disabled:opacity-50 brutal-border btn-premium bg-secondary/50 hover:bg-secondary"
                   >
                     {creating && selectedPlan === plan.id ? "…" : "Buy now"}
                   </button>

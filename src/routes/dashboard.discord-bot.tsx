@@ -11,7 +11,7 @@ const PLUGINS = [
     to: "/dashboard/verification-bot",
     icon: Shield,
     title: "Verification Bot",
-    desc: "Discord server verification with auto-role assignment and embed builder.",
+    desc: "Under work — not available for purchase right now.",
   },
   {
     to: "/dashboard/discord-spam",

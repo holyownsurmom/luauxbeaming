@@ -137,11 +137,10 @@ const PLANS = [
       "7 bot-hours / day",
       "Full analytics & live console",
       "Advanced scanner + priority queue",
-      "All plugins included",
       "Fast speed",
       "Priority Discord support",
     ],
-    highlight: true,
+    highlight: false,
   },
   {
     name: "Enterprise",
@@ -488,25 +487,6 @@ function Index() {
             </a>
           </div>
 
-          {/* Stats bar */}
-          <div className="mx-auto mt-24 grid max-w-3xl grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border/40 bg-border/50 md:grid-cols-3 animate-fade-in-up stagger-6" style={{ opacity: 0 }}>
-            {[
-              { k: "$10,000+", v: "value beamed", num: 10000, suffix: "+" },
-              { k: "99%", v: "uptime", num: 99, suffix: "%" },
-              { k: "35s", v: "avg deploy", num: 35, suffix: "s" },
-            ].map((s) => (
-              <div key={s.v} className="bg-card/80 px-6 py-8 text-left group hover:bg-card transition-all duration-500 relative overflow-hidden holographic">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-                <div className="relative font-display text-3xl md:text-4xl font-semibold text-gradient-gold glow-text">
-                  <AnimatedCounter target={s.num} suffix={s.suffix} />
-                </div>
-                <div className="relative mt-1.5 text-[11px] uppercase tracking-widest text-muted-foreground">
-                  {s.v}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 

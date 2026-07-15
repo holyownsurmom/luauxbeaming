@@ -16,7 +16,6 @@ import {
   getVerificationBotInvite,
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
-import { PluginPage } from "@/components/plugin-page";
 import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
@@ -305,23 +304,21 @@ function VerificationBotPage() {
       )}
 
       {!activeKey && !isAdmin && (
-        <PluginPage
-          pluginId="verification"
-          title="Verification Bot"
-          tagline="Server verification with auto role assignment."
-          cardTitle="Verification Bot"
-          cardDescription="30-day license. No public lifetime — renew monthly. Lifetime keys only via admin/support."
-          price={10}
-          priceNote="30 days · renew anytime"
-          icon={ShieldCheck}
-          features={[
-            "Auto-generated license key",
-            "Delivered via Discord DM after confirm",
-            "30 days of access, renew anytime",
-            "Central LuauX bot (no user bot token)",
-            "LTC / SOL payments only",
-          ]}
-        />
+        <div className="rounded-2xl brutal-border bg-card p-8 md:p-10 text-center space-y-4">
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-primary/10 brutal-border flex items-center justify-center">
+            <ShieldCheck className="h-7 w-7 text-primary" />
+          </div>
+          <div className="space-y-2">
+            <div className="inline-flex items-center rounded-full bg-primary/15 text-primary text-[10px] font-bold uppercase tracking-widest px-3 py-1">
+              Under work
+            </div>
+            <h2 className="font-display text-2xl font-semibold">Verification Bot</h2>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+              Verification Bot is currently under work and is not available for purchase.
+              Check back later — licenses cannot be bought right now.
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Tabs — visible for admins and users with active keys */}

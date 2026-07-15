@@ -34,7 +34,13 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
 export const getPlans = createServerFn({ method: "GET" }).handler(async () => {
   const { admin } = await import("./luaux-server.server");
   const { data } = await admin().from("plans").select("*").order("sort_order");
-  return data ?? [];
+  // No plan advertises "all plugins" — strip that claim server-side
+  return (data ?? []).map((plan) => {
+    const features = Array.isArray(plan.features)
+      ? (plan.features as string[]).filter((f) => !/all plugins/i.test(String(f)))
+      : plan.features;
+    return { ...plan, features };
+  });
 });
 
 export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () => {
@@ -485,6 +491,18 @@ export const createInvoice = createServerFn({ method: "POST" })
     const isAdm = await isAdminSession();
     const { data: plan } = await db.from("plans").select("*").eq("id", data.plan_id).maybeSingle();
     if (!plan) throw new Error("Unknown plan");
+
+    // Verification Bot is under work — block all public purchases
+    const planId = String(plan.id || "");
+    const planKind = String((plan as { kind?: string }).kind || "");
+    if (
+      planId === "verification" ||
+      planId.startsWith("verification") ||
+      planKind === "verification" ||
+      /verification/i.test(String(plan.name || ""))
+    ) {
+      throw new Error("Verification Bot is under work and cannot be purchased right now.");
+    }
 
     const order_id = `luaux_${user.id}_${Date.now()}`;
 

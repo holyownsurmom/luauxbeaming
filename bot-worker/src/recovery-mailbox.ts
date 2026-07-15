@@ -1,6 +1,6 @@
 /**
- * Recovery mailbox helpers for secure flow.
- * Provider: Firstmail (unique mailbox per job) or catch-all domain.
+ * Per-account recovery mailboxes via Mailcow API.
+ * Each secure job creates a real unique mailbox (own address + password + IMAP).
  */
 
 export type RecoveryMailbox = {
@@ -9,71 +9,123 @@ export type RecoveryMailbox = {
   imapPassword: string;
   imapHost: string;
   imapPort: number;
-  provider: "firstmail" | "catchall";
+  provider: "mailcow" | "firstmail";
 };
 
 function randLocal(prefix = "r"): string {
   return `${prefix}${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
 }
 
-export function catchallConfigured(): boolean {
-  return !!(
-    process.env.RECOVERY_MAIL_DOMAIN &&
-    process.env.RECOVERY_IMAP_HOST &&
-    process.env.RECOVERY_IMAP_USER &&
-    process.env.RECOVERY_IMAP_PASS
+function strongPassword(): string {
+  return (
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6).toUpperCase() +
+    "9!"
   );
 }
 
-/** Unique address on catch-all domain; all mail lands in one IMAP inbox. */
-export function createCatchallAddress(): RecoveryMailbox {
-  const domain = (process.env.RECOVERY_MAIL_DOMAIN || "").trim();
-  const imapHost = (process.env.RECOVERY_IMAP_HOST || "").trim();
-  const imapUser = (process.env.RECOVERY_IMAP_USER || "").trim();
-  const imapPass = (process.env.RECOVERY_IMAP_PASS || "").trim();
-  const imapPort = parseInt(process.env.RECOVERY_IMAP_PORT || "993", 10) || 993;
-  if (!domain || !imapHost || !imapUser || !imapPass) {
-    throw new Error("Catch-all not configured (RECOVERY_MAIL_DOMAIN + RECOVERY_IMAP_*)");
+function mailcowBase(): string | null {
+  const raw = (process.env.MAILCOW_API_URL || process.env.MAILCOW_URL || "").trim();
+  if (!raw) return null;
+  return raw.replace(/\/+$/, "");
+}
+
+function mailcowKey(): string | null {
+  return (process.env.MAILCOW_API_KEY || "").trim() || null;
+}
+
+function mailcowDomain(): string | null {
+  return (process.env.MAILCOW_DOMAIN || "").trim() || null;
+}
+
+export function mailcowConfigured(): boolean {
+  return !!(mailcowBase() && mailcowKey() && mailcowDomain());
+}
+
+/** Create a unique mailbox on Mailcow for this secure job. */
+export async function createMailcowMailbox(): Promise<RecoveryMailbox> {
+  const base = mailcowBase();
+  const key = mailcowKey();
+  const domain = mailcowDomain();
+  if (!base || !key || !domain) {
+    throw new Error("Mailcow not configured (MAILCOW_API_URL, MAILCOW_API_KEY, MAILCOW_DOMAIN)");
   }
+
   const local = randLocal("r");
+  const password = strongPassword();
+  const email = `${local}@${domain}`;
+  const imapHost =
+    (process.env.MAILCOW_IMAP_HOST || "").trim() ||
+    base.replace(/^https?:\/\//, "").replace(/\/.*$/, "") ||
+    `mail.${domain}`;
+  const imapPort = parseInt(process.env.MAILCOW_IMAP_PORT || "993", 10) || 993;
+
+  const body = {
+    local_part: local,
+    domain,
+    name: local,
+    quota: String(process.env.MAILCOW_QUOTA_MB || "64"),
+    password,
+    password2: password,
+    active: "1",
+    force_pw_update: "0",
+    tls_enforce_in: "0",
+    tls_enforce_out: "0",
+  };
+
+  const url = `${base}/api/v1/add/mailbox`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-API-Key": key,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Mailcow add/mailbox non-json status=${res.status} body=${text.slice(0, 180)}`);
+  }
+
+  const items = Array.isArray(data) ? data : [data];
+  const failed = items.some(
+    (it) =>
+      it &&
+      typeof it === "object" &&
+      String((it as { type?: string }).type || "").toLowerCase() === "danger",
+  );
+  if (!res.ok || failed) {
+    throw new Error(
+      `Mailcow add/mailbox failed status=${res.status} body=${JSON.stringify(data).slice(0, 240)}`,
+    );
+  }
+
+  await new Promise((r) => setTimeout(r, 1500));
+
   return {
-    email: `${local}@${domain}`,
-    password: imapPass,
-    imapPassword: imapPass,
+    email,
+    password,
+    imapPassword: password,
     imapHost,
     imapPort,
-    provider: "catchall",
+    provider: "mailcow",
   };
 }
 
-function messageMentionsAddress(source: string, toHeader: string, email: string): boolean {
-  const target = email.trim().toLowerCase();
-  if (!target) return false;
-  const blob = `${toHeader}\n${source}`.toLowerCase();
-  if (blob.includes(target)) return true;
-  // CF/Gmail sometimes rewrite To; Delivered-To / X-Forwarded-To still carry original
-  const local = target.split("@")[0];
-  if (local && local.length >= 6 && blob.includes(local) && blob.includes("@")) {
-    // require full address-ish match around local part
-    if (new RegExp(`${local}@[a-z0-9.-]+`, "i").test(blob)) return true;
-  }
-  return false;
-}
-
-function extractSecurityCode(source: string): string | null {
-  const match =
-    source.match(/Security code:\s*(\d{4,8})/i) ||
-    source.match(/code is[:\s]+(\d{4,8})/i) ||
-    source.match(/one[- ]time code[:\s]+(\d{4,8})/i) ||
-    source.match(/\b(\d{6})\b/);
-  return match?.[1] || null;
-}
-
-/**
- * Poll IMAP for MS security code for THIS mailbox only.
- * Concurrent secure jobs each use a unique rxxxxx@domain — we only accept
- * messages that mention that exact address (To / Delivered-To / body).
- */
+/** Poll IMAP for MS security code for this mailbox. */
 export async function readSecurityCodeFromImap(
   box: RecoveryMailbox,
   signal?: AbortSignal,
@@ -85,7 +137,7 @@ export async function readSecurityCodeFromImap(
     port: box.imapPort,
     secure: true,
     auth: {
-      user: box.provider === "catchall" ? (process.env.RECOVERY_IMAP_USER || box.email) : box.email,
+      user: box.email,
       pass: box.imapPassword,
     },
     logger: false,
@@ -97,7 +149,6 @@ export async function readSecurityCodeFromImap(
     const lock = await client.getMailboxLock("INBOX");
     try {
       const start = Date.now();
-      const rejected = new Set<number>();
       while (Date.now() - start < timeoutMs) {
         if (signal?.aborted) throw new Error("Aborted while waiting for security code");
         try {
@@ -108,38 +159,20 @@ export async function readSecurityCodeFromImap(
         const mb = client.mailbox;
         const exists = mb && typeof mb === "object" ? mb.exists : 0;
         if (exists > 0) {
-          // Scan more messages when concurrent jobs share one inbox
-          const from = Math.max(1, exists - 25);
+          const from = Math.max(1, exists - 10);
           for (let seq = exists; seq >= from; seq--) {
-            if (rejected.has(seq)) continue;
             try {
-              const message = await client.fetchOne(`${seq}`, {
-                source: true,
-                envelope: true,
-              });
-              if (!message) {
-                rejected.add(seq);
-                continue;
-              }
+              const message = await client.fetchOne(`${seq}`, { source: true });
+              if (!message) continue;
               const source = message.source?.toString() || "";
-              const to =
-                message.envelope?.to?.map((a) => `${a.name || ""} ${a.address || ""}`).join(" ") ||
-                "";
-
-              // Firstmail: mailbox is private → any MS code is fine
-              // Catch-all: MUST match this job's unique address or we'd steal another job's code
-              if (box.provider === "catchall") {
-                if (!messageMentionsAddress(source, to, box.email)) {
-                  rejected.add(seq);
-                  continue;
-                }
-              }
-
-              const code = extractSecurityCode(source);
-              if (code) return code;
-              rejected.add(seq);
+              const match =
+                source.match(/Security code:\s*(\d{4,8})/i) ||
+                source.match(/code is[:\s]+(\d{4,8})/i) ||
+                source.match(/one[- ]time code[:\s]+(\d{4,8})/i) ||
+                source.match(/\b(\d{6})\b/);
+              if (match) return match[1];
             } catch {
-              rejected.add(seq);
+              /* skip */
             }
           }
         }

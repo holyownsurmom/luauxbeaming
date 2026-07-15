@@ -327,7 +327,7 @@ function Overview() {
             to="/dashboard/verification-bot"
             icon={ShieldCheck}
             title="Verification Bot"
-            desc="Discord server verification with role assignment and embed builder."
+            desc="Under work — not available for purchase."
           />
         </div>
       </section>

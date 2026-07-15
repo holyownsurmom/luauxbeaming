@@ -10,8 +10,8 @@ import {
   setStickyProxy,
 } from "./proxy-fetch.js";
 import {
-  catchallConfigured,
-  createCatchallAddress,
+  createMailcowMailbox,
+  mailcowConfigured,
   readSecurityCodeFromImap,
   type RecoveryMailbox,
 } from "./recovery-mailbox.js";
@@ -1131,9 +1131,19 @@ print(json.dumps(last))
   throw new Error("python unavailable for firstmail");
 }
 
-/** Unique recovery mailbox: Firstmail (preferred) → catch-all fallback. */
+/** Unique recovery mailbox: Mailcow (preferred) → Firstmail fallback. */
 async function generateEmail(): Promise<RecoveryMailbox> {
   const errors: string[] = [];
+
+  if (mailcowConfigured()) {
+    try {
+      return await createMailcowMailbox();
+    } catch (e) {
+      errors.push(`mailcow=${e instanceof Error ? e.message : e}`);
+    }
+  } else {
+    errors.push("mailcow=not configured");
+  }
 
   const apiKey = (process.env.FIRSTMAIL_API_KEY || "").trim();
   if (apiKey) {
@@ -1142,20 +1152,10 @@ async function generateEmail(): Promise<RecoveryMailbox> {
     } catch (e) {
       errors.push(`firstmail=${e instanceof Error ? e.message : e}`);
     }
-  } else {
-    errors.push("firstmail=no FIRSTMAIL_API_KEY");
-  }
-
-  if (catchallConfigured()) {
-    try {
-      return createCatchallAddress();
-    } catch (e) {
-      errors.push(`catchall=${e instanceof Error ? e.message : e}`);
-    }
   }
 
   throw new Error(
-    `No recovery mailbox available. Set a valid FIRSTMAIL_API_KEY. ${errors.join(" | ")}`,
+    `No recovery mailbox available. Set MAILCOW_API_URL + MAILCOW_API_KEY + MAILCOW_DOMAIN. ${errors.join(" | ")}`,
   );
 }
 
@@ -1298,7 +1298,7 @@ async function recover(
       throw new Error(`SendOtt failed status=${sendCodeRes.status} body=${sendText.slice(0, 200)}`);
     }
 
-    // Read MS security code from the unique recovery mailbox (Firstmail / catch-all)
+    // Read MS security code from this job's unique mailbox (Mailcow / Firstmail)
     const otpCode = await getEmailCode(mailbox, signal);
 
     const verifyRes = await fetchWithJar(
@@ -1445,7 +1445,7 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
   }
 }
 
-const SECURE_HARD_TIMEOUT_MS = 7 * 60_000; // login + recovery + firstmail + cleanup
+const SECURE_HARD_TIMEOUT_MS = 7 * 60_000; // login + recovery + mailbox OTP + cleanup
 
 export async function runSecureBot(
   jobId: string,
@@ -1650,7 +1650,7 @@ export async function runSecureBot(
         ensureAlive();
         await log(
           "info",
-          `[secure] Creating unique recovery mailbox (firstmail=${!!process.env.FIRSTMAIL_API_KEY} catchall=${catchallConfigured()})...`,
+          `[secure] Creating unique recovery mailbox (mailcow=${mailcowConfigured()} firstmail=${!!process.env.FIRSTMAIL_API_KEY})...`,
         );
         const mailbox = await withTimeout(generateEmail(), 60_000, "generateEmail");
         await log(

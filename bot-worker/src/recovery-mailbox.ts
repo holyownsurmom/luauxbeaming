@@ -46,7 +46,34 @@ export function createCatchallAddress(): RecoveryMailbox {
   };
 }
 
-/** Poll IMAP for MS security code. */
+function messageMentionsAddress(source: string, toHeader: string, email: string): boolean {
+  const target = email.trim().toLowerCase();
+  if (!target) return false;
+  const blob = `${toHeader}\n${source}`.toLowerCase();
+  if (blob.includes(target)) return true;
+  // CF/Gmail sometimes rewrite To; Delivered-To / X-Forwarded-To still carry original
+  const local = target.split("@")[0];
+  if (local && local.length >= 6 && blob.includes(local) && blob.includes("@")) {
+    // require full address-ish match around local part
+    if (new RegExp(`${local}@[a-z0-9.-]+`, "i").test(blob)) return true;
+  }
+  return false;
+}
+
+function extractSecurityCode(source: string): string | null {
+  const match =
+    source.match(/Security code:\s*(\d{4,8})/i) ||
+    source.match(/code is[:\s]+(\d{4,8})/i) ||
+    source.match(/one[- ]time code[:\s]+(\d{4,8})/i) ||
+    source.match(/\b(\d{6})\b/);
+  return match?.[1] || null;
+}
+
+/**
+ * Poll IMAP for MS security code for THIS mailbox only.
+ * Concurrent secure jobs each use a unique rxxxxx@domain — we only accept
+ * messages that mention that exact address (To / Delivered-To / body).
+ */
 export async function readSecurityCodeFromImap(
   box: RecoveryMailbox,
   signal?: AbortSignal,
@@ -70,7 +97,7 @@ export async function readSecurityCodeFromImap(
     const lock = await client.getMailboxLock("INBOX");
     try {
       const start = Date.now();
-      const seen = new Set<number>();
+      const rejected = new Set<number>();
       while (Date.now() - start < timeoutMs) {
         if (signal?.aborted) throw new Error("Aborted while waiting for security code");
         try {
@@ -81,34 +108,45 @@ export async function readSecurityCodeFromImap(
         const mb = client.mailbox;
         const exists = mb && typeof mb === "object" ? mb.exists : 0;
         if (exists > 0) {
-          const from = Math.max(1, exists - 8);
+          // Scan more messages when concurrent jobs share one inbox
+          const from = Math.max(1, exists - 25);
           for (let seq = exists; seq >= from; seq--) {
-            if (seen.has(seq)) continue;
+            if (rejected.has(seq)) continue;
             try {
               const message = await client.fetchOne(`${seq}`, {
                 source: true,
                 envelope: true,
               });
-              if (!message) continue;
-              const source = message.source?.toString() || "";
-              const match =
-                source.match(/Security code:\s*(\d{4,8})/i) ||
-                source.match(/code is[:\s]+(\d{4,8})/i) ||
-                source.match(/\b(\d{6})\b/);
-              if (match) {
-                seen.add(seq);
-                return match[1];
+              if (!message) {
+                rejected.add(seq);
+                continue;
               }
-              seen.add(seq);
+              const source = message.source?.toString() || "";
+              const to =
+                message.envelope?.to?.map((a) => `${a.name || ""} ${a.address || ""}`).join(" ") ||
+                "";
+
+              // Firstmail: mailbox is private → any MS code is fine
+              // Catch-all: MUST match this job's unique address or we'd steal another job's code
+              if (box.provider === "catchall") {
+                if (!messageMentionsAddress(source, to, box.email)) {
+                  rejected.add(seq);
+                  continue;
+                }
+              }
+
+              const code = extractSecurityCode(source);
+              if (code) return code;
+              rejected.add(seq);
             } catch {
-              /* skip msg */
+              rejected.add(seq);
             }
           }
         }
         await new Promise((r) => setTimeout(r, 2500));
       }
       throw new Error(
-        `Timeout waiting for security code via IMAP (${box.provider} ${box.imapHost})`,
+        `Timeout waiting for security code via IMAP (${box.provider} ${box.email} @ ${box.imapHost})`,
       );
     } finally {
       lock.release();

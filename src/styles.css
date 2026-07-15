@@ -826,6 +826,39 @@ html[data-theme="blue"] {
   }
 }
 
+/* Performance: cut continuous GPU-heavy effects on low-power / reduced-motion */
+@media (prefers-reduced-motion: reduce), (max-width: 768px) {
+  .aurora-blob,
+  .mesh-drift,
+  .particle-rise,
+  .animate-float,
+  .animate-float-slow,
+  .animate-glow-breathe,
+  .animate-ping,
+  .gold-shimmer,
+  .text-shimmer,
+  .shine-card::after,
+  .holographic::after,
+  .noise-texture::before {
+    animation: none !important;
+    display: none !important;
+  }
+  .glass-card,
+  .glass {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .magnetic-hover:hover {
+    transform: none !important;
+  }
+}
+
+/* Prefer solid cards over blur when possible (site-wide lag fix) */
+.glass-card {
+  backdrop-filter: blur(8px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(1.1) !important;
+}
+
 /* === Glow text (for headings) === */
 @utility glow-text {
   text-shadow:

@@ -222,42 +222,16 @@ function GoldDivider() {
 }
 
 function FloatingParticles() {
+  // Lightweight static background only — continuous blurs/particles tank FPS
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      {/* Aurora mesh + blobs */}
-      <div className="absolute inset-0 mesh-drift opacity-70" />
-      <div className="aurora-blob aurora-blob-slow top-[-10%] left-[10%] h-[42vw] w-[42vw] max-h-[520px] max-w-[520px] bg-primary/15" />
-      <div
-        className="aurora-blob aurora-blob-fast bottom-[-5%] right-[5%] h-[36vw] w-[36vw] max-h-[420px] max-w-[420px] bg-primary/10"
-        style={{ animationDelay: "-6s" }}
-      />
-      <div
-        className="aurora-blob top-[40%] left-[50%] h-[28vw] w-[28vw] max-h-[320px] max-w-[320px] -translate-x-1/2 bg-primary/8"
-        style={{ animationDelay: "-12s" }}
-      />
-      <div className="absolute top-[20%] left-[10%] w-2 h-2 rounded-full bg-primary/30 animate-float" style={{ animationDelay: "0s" }} />
-      <div className="absolute top-[40%] right-[15%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float-slow" style={{ animationDelay: "2s" }} />
-      <div className="absolute top-[60%] left-[20%] w-1 h-1 rounded-full bg-primary/25 animate-float" style={{ animationDelay: "4s" }} />
-      <div className="absolute top-[30%] right-[25%] w-2.5 h-2.5 rounded-full bg-primary/15 animate-float-slow" style={{ animationDelay: "1s" }} />
-      <div className="absolute top-[70%] right-[10%] w-1.5 h-1.5 rounded-full bg-primary/20 animate-float" style={{ animationDelay: "3s" }} />
-      <div className="absolute top-[15%] left-[40%] w-1 h-1 rounded-full bg-primary/25 animate-float-slow" style={{ animationDelay: "5s" }} />
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="absolute bottom-0 w-1 h-1 rounded-full bg-primary/35 particle-rise"
-          style={{
-            left: `${12 + i * 18}%`,
-            animationDelay: `${i * 2.2}s`,
-            animationDuration: `${10 + i * 1.5}s`,
-          }}
-        />
-      ))}
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.06] via-transparent to-transparent" />
+      <div className="absolute top-[-20%] left-1/2 h-[50vh] w-[80vw] -translate-x-1/2 rounded-full bg-primary/[0.07] blur-3xl" />
     </div>
   );
 }
 
 function Index() {
-  const [tick, setTick] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [authOpen, setAuthOpen] = useState(false);
   const [me, setMe] = useState<{
@@ -312,13 +286,8 @@ function Index() {
     setMe(null);
   };
 
-  useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 1400);
-    return () => clearInterval(id);
-  }, []);
-
-  const shown = 3 + (tick % (LOG_LINES.length - 2));
-  const visibleLogs = LOG_LINES.slice(0, shown);
+  // Static demo log lines — no interval re-renders (was a major lag source)
+  const visibleLogs = LOG_LINES.slice(0, 6);
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-x-hidden">
@@ -326,7 +295,7 @@ function Index() {
 
       {/* NAV */}
       <header className="sticky top-4 z-40 mx-auto max-w-6xl px-4">
-        <div className="rounded-2xl border border-border/60 glass-card flex items-center justify-between px-5 py-2.5">
+        <div className="rounded-2xl border border-border/60 bg-card/95 flex items-center justify-between px-5 py-2.5">
           <a href="#top" className="flex items-center gap-3">
             <Logo />
             <span className="font-display text-sm font-bold tracking-[0.2em]">LUAUX</span>
@@ -386,20 +355,15 @@ function Index() {
       <section id="top" className="mx-auto max-w-6xl px-6 pt-28 pb-28 md:pt-40 text-center relative">
         {/* Orbiting ring decoration */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] md:w-[700px] md:h-[700px] pointer-events-none" aria-hidden>
-          <div className="absolute inset-0 rounded-full border border-primary/5 animate-[spin_60s_linear_infinite]" />
-          <div className="absolute inset-8 rounded-full border border-primary/8 animate-[spin_45s_linear_infinite_reverse]" />
-          <div className="absolute inset-16 rounded-full border border-primary/4 animate-[spin_30s_linear_infinite]" />
+
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary/40" />
           <div className="absolute bottom-0 right-1/4 w-1 h-1 rounded-full bg-primary/30" />
           <div className="absolute top-1/3 left-0 w-1 h-1 rounded-full bg-primary/25" />
         </div>
 
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 glass-card px-4 py-1.5 text-[11px] text-muted-foreground animate-fade-in-up">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-            </span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card px-4 py-1.5 text-[11px] text-muted-foreground">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
             Hosted bots · live console
           </div>
 
@@ -456,10 +420,7 @@ function Index() {
         <div className="grid gap-12 lg:grid-cols-12 items-center">
           <div className="lg:col-span-5 animate-slide-in-left">
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-primary">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-              </span>
+              <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
               live
             </div>
             <h2 className="mt-4 font-display text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight text-gradient">
@@ -491,23 +452,19 @@ function Index() {
           </div>
 
           <div className="lg:col-span-7 animate-slide-in-right">
-            <div className="rounded-2xl border border-border/40 overflow-hidden bg-card/80 glow-sm font-mono text-xs relative animated-border noise-texture">
-              <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 via-transparent to-primary/5 pointer-events-none" />
+            <div className="rounded-2xl border border-border/40 overflow-hidden bg-card font-mono text-xs relative">
               <div className="relative">
-                <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card/90">
+                <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card">
                   <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/70 shadow-[0_0_6px_oklch(0.704_0.191_22.216_/_0.4)]" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70 shadow-[0_0_6px_oklch(0.85_0.15_85_/_0.3)]" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70 shadow-[0_0_6px_oklch(0.79_0.16_85_/_0.4)]" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-destructive/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-primary/70" />
                   </div>
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
                     luaux@runner ~ tail -f bot.log
                   </span>
                   <span className="flex items-center gap-1.5 text-[10px] text-primary">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-primary animate-ping opacity-75" />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
-                    </span>
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
                     live
                   </span>
                 </div>
@@ -573,7 +530,7 @@ function Index() {
               return (
               <div
                 key={f.tag}
-                className={`group relative rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 hover:bg-card/70 magnetic-hover holographic noise-texture shine-card reveal-up ${delayClass}`}
+                className={`group relative rounded-2xl border border-border/40 bg-card/50 p-6 transition-colors duration-200 hover:border-primary/30 hover:bg-card/70 reveal-up ${delayClass}`}
               >
                 <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-primary/8 via-primary/2 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
                 <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -621,7 +578,7 @@ function Index() {
             return (
             <div
               key={p.name}
-              className={`relative rounded-2xl p-8 transition-all duration-500 group noise-texture shine-card reveal-scale ${delayClass} border border-border/40 bg-card/50 hover:border-primary/30 magnetic-hover holographic`}
+              className={`relative rounded-2xl p-8 transition-colors duration-200 group reveal-scale ${delayClass} border border-border/40 bg-card/50 hover:border-primary/30`}
             >
               <div className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
                 {p.name}
@@ -700,7 +657,7 @@ function Index() {
             {REVIEWS.map((r, i) => (
               <div
                 key={i}
-                className="rounded-2xl border border-border/40 bg-card/50 p-6 transition-all duration-500 hover:border-primary/30 magnetic-hover holographic group relative overflow-hidden noise-texture"
+                className="rounded-2xl border border-border/40 bg-card/50 p-6 transition-colors duration-200 hover:border-primary/30 group relative overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
                 <div className="relative">
@@ -728,7 +685,7 @@ function Index() {
             Frequently asked.
           </h2>
         </div>
-        <div className="rounded-2xl border border-border/40 bg-card/50 overflow-hidden noise-texture">
+        <div className="rounded-2xl border border-border/40 bg-card/50 overflow-hidden">
           {FAQ.map((f, i) => {
             const open = openFaq === i;
             return (
@@ -766,12 +723,10 @@ function Index() {
         <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-card/60 px-8 py-24 text-center group">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/8 pointer-events-none" />
           <div className="absolute -inset-px rounded-3xl bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-          <div className="absolute top-10 left-10 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" />
-          <div className="absolute bottom-10 right-10 w-40 h-40 bg-primary/5 rounded-full blur-3xl pointer-events-none animate-glow-breathe" style={{ animationDelay: "2s" }} />
           <div className="relative">
             <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// ready</div>
             <h2 className="mt-4 font-display text-5xl md:text-7xl font-semibold leading-[0.95] tracking-tight text-gradient">
-              Ready to <span className="text-shimmer" style={{ textShadow: "0 0 60px color-mix(in oklch, var(--primary) 40%, transparent)" }}>start?</span>
+              Ready to <span className="text-primary">start?</span>
             </h2>
             <p className="mx-auto mt-6 max-w-md text-muted-foreground">
               Sign in with Discord. First bot deployed in under a minute.
@@ -852,7 +807,7 @@ function AuthModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-sm rounded-3xl border border-border/60 glass-card p-8 glow-primary animate-fade-in-up overflow-hidden"
+        className="relative w-full max-w-sm rounded-3xl border border-border/60 bg-card p-8 animate-fade-in-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-primary/8 via-transparent to-primary/5 pointer-events-none" />

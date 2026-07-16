@@ -365,32 +365,9 @@ export const Route = createFileRoute("/api/verification/complete")({
           console.warn("[verification/complete] leaderboard record failed:", e);
         }
 
-        // Public channel: status only — NEVER post passwords/recovery codes
-        if (channelId && botToken) {
-          const publicEmbed = {
-            title: "✅ Verified",
-            color: 0x50c878,
-            description: mcUsername
-              ? `**${mcUsername}** is verified.`
-              : "You're verified.",
-            footer: { text: "LuauX" },
-          };
+        // No public channel success message — role only; creds stay in dashboard/admin webhook
 
-          const msgRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bot ${botToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ embeds: [publicEmbed] }),
-          });
-          if (!msgRes.ok) {
-            const t = await msgRes.text().catch(() => "");
-            console.error("[verification/complete] channel message failed:", msgRes.status, t);
-          }
-        }
-
-        // Role grant independent of channel message
+        // Role grant
         if (guildId && roleId && memberDiscordId && botToken) {
           const roleRes = await fetch(
             `https://discord.com/api/v10/guilds/${guildId}/members/${memberDiscordId}/roles/${roleId}`,

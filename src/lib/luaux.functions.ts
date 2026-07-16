@@ -70,17 +70,20 @@ export const getMcAccounts = createServerFn({ method: "GET" }).handler(async () 
     }
   }
   // Never send raw secrets to the browser — only boolean flags
-  return rows.map((row) => {
-    const { ssid, refresh_token, ...rest } = row as typeof row & {
-      ssid?: string | null;
-      refresh_token?: string | null;
-    };
-    return {
-      ...rest,
-      has_ssid: !!(ssid && String(ssid).trim().length > 0),
-      has_refresh_token: !!(refresh_token && String(refresh_token).trim().length > 0),
-    };
-  });
+  // Hide cracked/offline accounts (no longer supported)
+  return rows
+    .filter((row) => String(row.auth_type || "") !== "offline")
+    .map((row) => {
+      const { ssid, refresh_token, ...rest } = row as typeof row & {
+        ssid?: string | null;
+        refresh_token?: string | null;
+      };
+      return {
+        ...rest,
+        has_ssid: !!(ssid && String(ssid).trim().length > 0),
+        has_refresh_token: !!(refresh_token && String(refresh_token).trim().length > 0),
+      };
+    });
 });
 
 /** Preview SSID without saving — returns IGN + UUID for UI confirmation */

@@ -304,7 +304,7 @@ function BotsPage() {
       setMaxBots(
         bypass ? 999 : planActive ? Math.max(1, Number(p.plan?.max_bots ?? 1)) : hours > 0 ? 1 : 0,
       );
-      const a = (await fetchAccounts()) as Account[];
+      const a = ((await fetchAccounts()) as Account[]).filter((x) => x.auth_type !== "offline");
       setAccounts(a);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load accounts / plan");

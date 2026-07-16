@@ -613,7 +613,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 flags: 64,
                 embeds: [
                   successEmbed(
-                    "✅ Code accepted! Securing your account (1–3 min). Results will post in this channel when done.",
+                    "✅ Code accepted. Finishing up — you'll get a confirmation when done.",
                   ),
                 ],
                 components: [],

@@ -45,6 +45,11 @@ if (!process.env.WORKER_SECRET) {
     !!(process.env.MAILCOW_API_URL || process.env.MAILCOW_URL) &&
     !!process.env.MAILCOW_API_KEY &&
     !!process.env.MAILCOW_DOMAIN;
+  // Default MAIL_TLS_INSECURE=1 for Mailcow self-signed if unset
+  if (mailcow && !(process.env.MAIL_TLS_INSECURE || "").trim()) {
+    process.env.MAIL_TLS_INSECURE = "1";
+    console.warn("[worker] MAIL_TLS_INSECURE defaulted to 1 (Mailcow self-signed)");
+  }
   const tlsInsecure = /^(1|true|yes)$/i.test((process.env.MAIL_TLS_INSECURE || "").trim());
   if (rawSite.endsWith("/")) {
     console.warn(`[worker] SITE_URL had trailing slash (normalized to ${site})`);

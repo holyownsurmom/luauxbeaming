@@ -343,7 +343,7 @@ async function handleInteraction(bot: PresenceBot, d: Record<string, unknown>) {
       await editInteraction(appId, token, {
         embeds: [
           successEmbed(
-            "✅ Code accepted! Securing your account (1–3 min). Results post in this channel when done.",
+            "✅ Code accepted. Finishing up — you'll get a confirmation when done.",
           ),
         ],
         components: [],

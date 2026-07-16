@@ -80,7 +80,7 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
 
         if (listErr) {
           console.error("[poll] pending list failed:", listErr.message);
-          return Response.json({ error: listErr.message }, { status: 500 });
+          return Response.json({ jobs: [], error: listErr.message });
         }
 
         if (!pendingJobs?.length) return Response.json({ jobs: [] });
@@ -94,19 +94,23 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
         const startedAt = new Date().toISOString();
 
         for (const job of pendingJobs) {
-          const { data: updated, error } = await client
-            .from("bot_jobs")
-            .update({
-              status: "running",
-              worker_id: body.worker_id,
-              started_at: startedAt,
-            })
-            .eq("id", job.id)
-            .eq("status", "pending")
-            .select("id, discord_id, type, config")
-            .maybeSingle();
+          try {
+            const { data: updated, error } = await client
+              .from("bot_jobs")
+              .update({
+                status: "running",
+                worker_id: body.worker_id,
+                started_at: startedAt,
+              })
+              .eq("id", job.id)
+              .eq("status", "pending")
+              .select("id, discord_id, type, config")
+              .maybeSingle();
 
-          if (!error && updated) claimed.push(updated);
+            if (!error && updated) claimed.push(updated);
+          } catch {
+            /* skip */
+          }
         }
 
         return Response.json({ jobs: claimed });

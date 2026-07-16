@@ -16,7 +16,7 @@ describe("clampInterval", () => {
 });
 
 describe("validateDiscordSpamBody", () => {
-  it("rejects short interval by clamping to 300", () => {
+  it("clamps short interval to anti-ban v7 floors", () => {
     const r = validateDiscordSpamBody({
       token: "abc.def.ghi",
       channelId: "123456789012345678",
@@ -25,8 +25,8 @@ describe("validateDiscordSpamBody", () => {
     });
     assert.equal(r.ok, true);
     if (r.ok) {
-      assert.equal(r.config.interval, 300);
-      assert.ok(r.config.minDelay >= 900);
+      assert.equal(r.config.interval, 600);
+      assert.ok(r.config.minDelay >= 1800);
       assert.equal(r.config.humanize, true);
     }
   });

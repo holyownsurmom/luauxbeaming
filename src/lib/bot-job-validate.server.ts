@@ -5,7 +5,7 @@ const MAX_MESSAGE_LEN = 2000;
 const MAX_TOKEN_LEN = 512;
 const MAX_CHANNEL_ID_LEN = 32;
 const MAX_HOST_LEN = 253;
-const MIN_DISCORD_INTERVAL_SEC = 300;
+const MIN_DISCORD_INTERVAL_SEC = 600;
 const MIN_MC_INTERVAL_SEC = 5;
 const MAX_INTERVAL_SEC = 86_400;
 
@@ -97,8 +97,8 @@ export function validateDiscordSpamBody(body: Record<string, unknown>):
   const guildId =
     body.guildId != null ? String(body.guildId).trim().slice(0, MAX_CHANNEL_ID_LEN) : undefined;
   const label = body.label != null ? String(body.label).trim().slice(0, 64) : undefined;
-  let minDelay = clampInterval(body.minDelay, 1200, MAX_INTERVAL_SEC, 1200);
-  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 600, 2400));
+  let minDelay = clampInterval(body.minDelay, 1800, MAX_INTERVAL_SEC, 1800);
+  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 900, 3600));
   if (maxDelay < minDelay) maxDelay = minDelay + 600;
   return {
     ok: true,
@@ -143,8 +143,8 @@ export function validateDiscordAutoreplyBody(body: Record<string, unknown>):
     body.cooldownSec != null
       ? clampInterval(body.cooldownSec, 0, MAX_INTERVAL_SEC, 0)
       : undefined;
-  let minDelay = clampInterval(body.minDelay, 25, MAX_INTERVAL_SEC, 45);
-  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 20, 120));
+  let minDelay = clampInterval(body.minDelay, 40, MAX_INTERVAL_SEC, 60);
+  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 40, 180));
   if (maxDelay < minDelay) maxDelay = minDelay + 20;
   return {
     ok: true,

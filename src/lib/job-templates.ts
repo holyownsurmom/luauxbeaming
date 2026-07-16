@@ -88,8 +88,8 @@ export const SPAM_PROFILES = {
   balanced: {
     label: "Balanced",
     hint: "Recommended floors",
-    interval: "1200",
-    minDelay: "1200",
+    interval: "1800",
+    minDelay: "1800",
     maxDelay: "2400",
   },
 } as const;
@@ -104,7 +104,7 @@ export const AUTOREPLY_PROFILES = {
   balanced: {
     label: "Balanced",
     hint: "Recommended floors",
-    minDelay: "45",
+    minDelay: "60",
     maxDelay: "120",
   },
 } as const;

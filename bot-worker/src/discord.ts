@@ -1,8 +1,11 @@
 import { createLogger, updateJob } from "./api.js";
 import { runDiscordAutoReplyBot } from "./autoreply.js";
 import {
-  browserHeaders,
   circadianMultiplier,
+  createSessionBrowser,
+  humanNonce,
+  messageFingerprint,
+  overRollingLimit,
   pickRandom,
   quietHoursExtraMs,
   randomBetween,
@@ -58,21 +61,22 @@ export async function runDiscordBot(
     return;
   }
 
-  // Anti-ban v6: shared humanize, quiet hours, circadian, richer variation, hard floors
+  // Anti-ban v7: stable browser fingerprint, harder floors, rolling limits, less heat
   const minDelaySec = (() => {
     const n = Number(config.minDelay);
-    if (!Number.isFinite(n) || n < 900) return 1200;
+    // Floor raised: sub-20min channel spam is a ban magnet
+    if (!Number.isFinite(n) || n < 1200) return 1800;
     return Math.min(86_400, Math.floor(n));
   })();
   const maxDelaySec = (() => {
     const n = Number(config.maxDelay);
-    const floor = minDelaySec + 300;
-    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 2400);
+    const floor = minDelaySec + 600;
+    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 3600);
     return Math.min(86_400, Math.floor(n));
   })();
   const intervalSec = (() => {
     const n = Number(config.interval);
-    if (!Number.isFinite(n) || n < 300) return 600;
+    if (!Number.isFinite(n) || n < 600) return 900;
     return Math.min(86_400, Math.floor(n));
   })();
   config.minDelay = minDelaySec;
@@ -81,7 +85,7 @@ export async function runDiscordBot(
   config.humanize = true; // always on
 
   const startedAt = Date.now();
-  await log("system", "Initializing Discord user-token client (anti-ban mode v6)...");
+  await log("system", "Initializing Discord user-token client (anti-ban mode v7)...");
   await updateJob(jobId, "running");
 
   let stopped = false;
@@ -100,12 +104,15 @@ export async function runDiscordBot(
   };
 
   // Short sessions = less heat
-  const SESSION_MSG_CAP = randomBetween(4, 10);
-  const DAILY_MSG_SOFT_CAP = randomBetween(12, 22);
-  const apiHeaders = browserHeaders(
+  const SESSION_MSG_CAP = randomBetween(3, 7);
+  const DAILY_MSG_SOFT_CAP = randomBetween(8, 16);
+  const sessionBrowser = createSessionBrowser();
+  const apiHeaders = sessionBrowser.headers(
     config.token,
     `https://discord.com/channels/${config.guildId || "@me"}/${config.channelId}`,
   );
+  const recentSendStamps: number[] = [];
+  const recentFingerprints: string[] = [];
 
   abortSignal.addEventListener(
     "abort",
@@ -121,24 +128,24 @@ export async function runDiscordBot(
   if (quietExtra > 0) {
     await log(
       "system",
-      `Quiet hours — sleeping extra ${(quietExtra / 60000).toFixed(0)}min before warmup (anti-ban v6)`,
+      `Quiet hours — sleeping extra ${(quietExtra / 60000).toFixed(0)}min before warmup (anti-ban v7)`,
     );
     await sleep(quietExtra, abortSignal);
     if (stopped || abortSignal.aborted) return;
   }
 
-  // Warmup 12–35 min (slightly less extreme than v5 but still human)
-  const warmupMs = randomBetween(720_000, 2_100_000);
+  // Warmup 18–50 min — accounts that post immediately after "login" get flagged
+  const warmupMs = randomBetween(1_080_000, 3_000_000);
   await log(
     "system",
-    `Warmup: ${(warmupMs / 60000).toFixed(1)}min idle before first message (anti-ban v6)...`,
+    `Warmup: ${(warmupMs / 60000).toFixed(1)}min idle before first message (anti-ban v7)...`,
   );
   await sleep(warmupMs, abortSignal);
   if (stopped || abortSignal.aborted) return;
 
   await log(
     "system",
-    `Message loop started | session cap ~${SESSION_MSG_CAP} | soft daily ~${DAILY_MSG_SOFT_CAP} | anti-ban v6`,
+    `Message loop started | session cap ~${SESSION_MSG_CAP} | soft daily ~${DAILY_MSG_SOFT_CAP} | anti-ban v7`,
   );
 
   let sentCount = 0;
@@ -168,31 +175,36 @@ export async function runDiscordBot(
   const calculateCooldown = (totalSent: number, rt: number): number => {
     // Quiet hours mid-session → long pause
     const q = quietHoursExtraMs();
-    if (q > 0 && Math.random() < 0.7) return q;
+    if (q > 0 && Math.random() < 0.85) return q;
+
+    // Rolling hard limit: max 2 channel messages / 45 min
+    if (overRollingLimit(recentSendStamps, 45 * 60_000, 2)) {
+      return randomBetween(20 * 60, 55 * 60) * 1000;
+    }
 
     // Micro "reading" pauses
-    if (Math.random() < 0.32) {
-      return randomBetween(240, 840) * 1000;
+    if (Math.random() < 0.38) {
+      return randomBetween(360, 1200) * 1000;
     }
     if (totalSent > 0 && msgsSinceMediumBreak >= mediumBreakEvery) {
       msgsSinceMediumBreak = 0;
-      mediumBreakEvery = randomBetween(2, 4);
-      return randomBetween(720, 2100) * 1000;
+      mediumBreakEvery = randomBetween(2, 3);
+      return randomBetween(900, 2700) * 1000;
     }
-    if (Math.random() < 0.25) {
-      return randomBetween(300, 780) * 1000;
+    if (Math.random() < 0.3) {
+      return randomBetween(420, 960) * 1000;
     }
-    if (rt > 12 && Math.random() < 0.38) {
-      return randomBetween(900, 2400) * 1000;
+    if (rt > 10 && Math.random() < 0.42) {
+      return randomBetween(1200, 3000) * 1000;
     }
     if (sentCount > 0 && msgsSinceLongAfk >= longAfkEvery) {
       msgsSinceLongAfk = 0;
-      longAfkEvery = randomBetween(4, 8);
-      return randomBetween(1500, 4200) * 1000;
+      longAfkEvery = randomBetween(3, 6);
+      return randomBetween(1800, 5400) * 1000;
     }
     // Random "went offline" window
-    if (sentCount >= 3 && Math.random() < 0.08) {
-      return randomBetween(45 * 60, 120 * 60) * 1000;
+    if (sentCount >= 2 && Math.random() < 0.12) {
+      return randomBetween(50 * 60, 150 * 60) * 1000;
     }
     return 0;
   };
@@ -203,25 +215,26 @@ export async function runDiscordBot(
     sendCount: number,
     rt: number,
   ): number => {
-    let min = Math.max(baseMin, 1200);
-    let max = Math.max(baseMax, min + 600);
+    let min = Math.max(baseMin, 1800);
+    let max = Math.max(baseMax, min + 900);
 
     if (sendCount < 2) {
-      min = Math.max(min, 1500);
-      max = Math.max(max, 3000);
+      min = Math.max(min, 2100);
+      max = Math.max(max, 4200);
     } else if (sendCount < 4) {
-      min = Math.max(min, 1350);
-      max = Math.max(max, 2400);
+      min = Math.max(min, 1800);
+      max = Math.max(max, 3600);
     }
 
     // Runtime fatigue + circadian
-    const slowdown = (1 + Math.min(rt / 35, 5)) * circadianMultiplier();
+    const slowdown = (1 + Math.min(rt / 28, 6)) * circadianMultiplier();
     min *= slowdown;
     max *= slowdown;
 
     const delay = randomBetween(min * 1000, max * 1000);
-    const jitter = randomBetween(-75_000, 280_000);
-    return Math.max(min * 1000 * 0.85, delay + jitter);
+    // Asymmetric jitter — prefer slower, not faster
+    const jitter = randomBetween(-45_000, 420_000);
+    return Math.max(min * 1000 * 0.9, delay + jitter);
   };
 
   const sendNext = async () => {
@@ -255,12 +268,21 @@ export async function runDiscordBot(
     const baseMsg = config.messages[messageOrder[shufflePosition] % config.messages.length];
     shufflePosition++;
     let msg = variateMessage(baseMsg);
-    if (msg === lastSentText && config.messages.length > 1) {
-      msg = variateMessage(baseMsg) + pickRandom([" ", ".", " ~", " 💀"]);
+    // Avoid near-duplicate content (ban signal)
+    let fp = messageFingerprint(msg);
+    let tries = 0;
+    while (
+      tries < 4 &&
+      (msg === lastSentText || recentFingerprints.includes(fp)) &&
+      config.messages.length > 0
+    ) {
+      msg = variateMessage(baseMsg) + pickRandom([" ", ".", " ~", " 💀", ""]);
+      fp = messageFingerprint(msg);
+      tries++;
     }
 
     // Think time only — never call typing API on spam path
-    const think = typingDurationMs(msg, 6000, 22_000) + randomBetween(2000, 12_000);
+    const think = typingDurationMs(msg, 8000, 28_000) + randomBetween(3000, 16_000);
     await sleep(think, abortSignal);
     if (stopped) return;
 
@@ -281,12 +303,12 @@ export async function runDiscordBot(
           headers: apiHeaders,
           body: JSON.stringify({
             content: msg,
-            nonce: String(Date.now() + randomBetween(1000, 99999)),
+            nonce: humanNonce(),
             tts: false,
             flags: 0,
           }),
         },
-        2,
+        1, // fewer retries on spam = less hammering when limited
         abortSignal,
       );
 
@@ -299,12 +321,15 @@ export async function runDiscordBot(
         msgsSinceMediumBreak++;
         msgsSinceLongAfk++;
         lastSentText = msg;
+        recentSendStamps.push(Date.now());
+        recentFingerprints.push(fp);
+        if (recentFingerprints.length > 12) recentFingerprints.shift();
         consecutiveRateLimits = 0;
         failCount = Math.max(0, failCount - 1);
         await log("bot", `> ${msg}`);
 
         if (config.deleteAfterSend) {
-          await log("warn", "deleteAfterSend ignored (anti-ban v6: deletes fingerprint accounts)");
+          await log("warn", "deleteAfterSend ignored (anti-ban v7: deletes fingerprint accounts)");
         }
       } else {
         failCount++;
@@ -323,11 +348,14 @@ export async function runDiscordBot(
           consecutiveRateLimits++;
           failCount = Math.max(0, failCount - 3);
 
-          let retryAfter = (120 + consecutiveRateLimits * 90 + randomBetween(0, 90)) * 1000;
+          let retryAfter = (180 + consecutiveRateLimits * 120 + randomBetween(0, 120)) * 1000;
           try {
             const parsed = JSON.parse(res.body);
             if (parsed.retry_after) {
-              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(45_000, 120_000);
+              retryAfter = Math.ceil(parsed.retry_after * 1000) + randomBetween(60_000, 180_000);
+            }
+            if (parsed.global || res.global) {
+              retryAfter = Math.max(retryAfter, randomBetween(15 * 60_000, 40 * 60_000));
             }
           } catch {
             /* keep computed */
@@ -339,13 +367,13 @@ export async function runDiscordBot(
           );
           await sleep(retryAfter, abortSignal);
           if (consecutiveRateLimits >= 2) {
-            const longPause = randomBetween(2400, 4800) * 1000;
+            // Protect account — end session instead of grinding through RL
             await log(
               "warn",
-              `Repeated rate limits. Extra cool-down: ${(longPause / 1000).toFixed(0)}s`,
+              "Repeated rate limits — ending session early to protect token (anti-ban v7)",
             );
-            await sleep(longPause, abortSignal);
-            consecutiveRateLimits = 0;
+            await markCompleted();
+            return;
           }
         }
 
@@ -355,7 +383,7 @@ export async function runDiscordBot(
           return;
         }
 
-        if (failCount > 4) {
+        if (failCount > 3) {
           await log("error", "Too many failures, stopping to protect account");
           await markError("Too many send failures");
           return;
@@ -368,21 +396,21 @@ export async function runDiscordBot(
 
     if (stopped) return;
 
-    // After several consecutive channel messages, force a long break
-    if (consecutiveSameChannel >= randomBetween(3, 6) && Math.random() < 0.55) {
+    // After a few channel messages, force a long break
+    if (consecutiveSameChannel >= randomBetween(2, 4) && Math.random() < 0.7) {
       consecutiveSameChannel = 0;
-      const channelBreak = randomBetween(25 * 60, 70 * 60) * 1000;
+      const channelBreak = randomBetween(35 * 60, 95 * 60) * 1000;
       await log(
         "system",
-        `Channel fatigue break: ${(channelBreak / 60000).toFixed(0)}min (anti-ban v6)`,
+        `Channel fatigue break: ${(channelBreak / 60000).toFixed(0)}min (anti-ban v7)`,
       );
       await sleep(channelBreak, abortSignal);
       if (stopped) return;
     }
 
     const runtime = calculateDelay(
-      Math.max(minDelaySec, 1200),
-      Math.max(maxDelaySec, minDelaySec + 600),
+      Math.max(minDelaySec, 1800),
+      Math.max(maxDelaySec, minDelaySec + 900),
       sentCount,
       rt,
     );

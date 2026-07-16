@@ -115,10 +115,10 @@ function DiscordSpamPage() {
   const [messages, setMessages] = useState("");
   // SAFETY: Discord user-token automation is against ToS.
   // Worker enforces long floors (15–40 min warmup, 20+ min gaps). UI matches that.
-  const [interval, setInterval_] = useState("1200");
+  const [interval, setInterval_] = useState("1800");
   const [deleteAfter, setDeleteAfter] = useState(false);
   const [humanize, setHumanize] = useState(true);
-  const [minDelay, setMinDelay] = useState("1200");
+  const [minDelay, setMinDelay] = useState("1800");
   const [maxDelay, setMaxDelay] = useState("2400");
   const [delayProfile, setDelayProfile] = useState<"safe" | "balanced" | "custom">("balanced");
   const [templates, setTemplates] = useState<SpamTemplate[]>([]);
@@ -354,10 +354,10 @@ function DiscordSpamPage() {
           guildId: "",
           channelId: channelId.trim(),
           messages: msgs,
-          interval: Math.max(parseInt(interval, 10) || 1200, 1200),
+          interval: Math.max(parseInt(interval, 10) || 1800, 1800),
           deleteAfterSend: false,
           humanize: true,
-          minDelay: Math.max(parseFloat(minDelay) || 1200, 1200),
+          minDelay: Math.max(parseFloat(minDelay) || 1800, 1800),
           maxDelay: Math.max(parseFloat(maxDelay) || 2400, 1800),
         }),
       });
@@ -872,7 +872,7 @@ function DiscordSpamPage() {
                   </span>
                   <input
                     type="number"
-                    min="1200"
+                    min="1800"
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                     value={minDelay}
                     onChange={(e) => {

@@ -82,7 +82,7 @@ function DiscordAutoReplyPage() {
 
   const [token, setToken] = useState("");
   const [messages, setMessages] = useState("");
-  const [minDelay, setMinDelay] = useState("45");
+  const [minDelay, setMinDelay] = useState("60");
   const [maxDelay, setMaxDelay] = useState("120");
   const [typing, setTyping] = useState(false);
   const [autoAcceptFriends, setAutoAcceptFriends] = useState(false);
@@ -276,8 +276,8 @@ function DiscordAutoReplyPage() {
         body: JSON.stringify({
           token: token.trim(),
           messages: msgs,
-          minDelay: Math.max(parseFloat(minDelay) || 45, 25),
-          maxDelay: Math.max(parseFloat(maxDelay) || 120, 45),
+          minDelay: Math.max(parseFloat(minDelay) || 60, 40),
+          maxDelay: Math.max(parseFloat(maxDelay) || 180, 80),
           typing: false,
           autoAcceptFriends,
         }),

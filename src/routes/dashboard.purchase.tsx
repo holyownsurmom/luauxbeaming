@@ -83,12 +83,13 @@ function PurchasePage() {
     });
   }, [fetchPlans, fetchProfile]);
 
-  // Poll payment until fulfilled (not just "confirmed" on-chain)
+  // Poll payment until fulfilled — depend on id only so setPayment doesn't restart the timer
+  const paymentId = payment?.id;
   useEffect(() => {
-    if (!payment) return;
+    if (!paymentId) return;
     const t = setInterval(async () => {
       try {
-        const p = (await getPay({ data: { id: payment.id } })) as typeof payment & {
+        const p = (await getPay({ data: { id: paymentId } })) as NonNullable<typeof payment> & {
           fulfilled_at?: string | null;
         };
         setPayment(p);
@@ -104,7 +105,7 @@ function PurchasePage() {
       }
     }, 8000);
     return () => clearInterval(t);
-  }, [payment, getPay, fetchProfile]);
+  }, [paymentId, getPay, fetchProfile]);
 
   const [adminActivated, setAdminActivated] = useState(false);
   const [cartTick, setCartTick] = useState(0);

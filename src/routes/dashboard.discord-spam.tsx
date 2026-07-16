@@ -225,11 +225,12 @@ function DiscordSpamPage() {
     };
   }, []);
 
+  const paymentId = payment?.id;
   useEffect(() => {
-    if (!payment) return;
+    if (!paymentId) return;
     const t = setInterval(async () => {
       try {
-        const p = (await getPay({ data: { id: payment.id } })) as Payment;
+        const p = (await getPay({ data: { id: paymentId } })) as Payment;
         setPayment(p);
         if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
@@ -240,7 +241,7 @@ function DiscordSpamPage() {
       }
     }, 8000);
     return () => clearInterval(t);
-  }, [payment, getPay, fetchKeys]);
+  }, [paymentId, getPay, fetchKeys]);
 
   const activeKey = adminBypassesPaywall(isAdmin)
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
@@ -265,8 +266,19 @@ function DiscordSpamPage() {
 
   useEffect(() => {
     refreshBots();
-    const interval = setInterval(refreshBots, 5000);
-    return () => clearInterval(interval);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshBots();
+    };
+    const interval = setInterval(tick, 8000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshBots();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refreshBots]);
 
   useEffect(() => {

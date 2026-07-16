@@ -169,10 +169,26 @@ export function validateMcLaunchFields(body: {
   serverPort?: unknown;
   messages?: unknown;
   interval?: unknown;
-}): { ok: true; serverHost: string; serverPort: number; messages: string[]; interval: number } | {
-  ok: false;
-  error: string;
-} {
+  autoReply?: unknown;
+  autoReplyMessages?: unknown;
+  autoReplyCmd?: unknown;
+  autoReplyCooldownSec?: unknown;
+}):
+  | {
+      ok: true;
+      serverHost: string;
+      serverPort: number;
+      messages: string[];
+      interval: number;
+      autoReply: boolean;
+      autoReplyMessages?: string[];
+      autoReplyCmd: "r" | "reply";
+      autoReplyCooldownSec: number;
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
   const serverHost = String(body.serverHost ?? "")
     .trim()
     .slice(0, MAX_HOST_LEN);
@@ -189,7 +205,27 @@ export function validateMcLaunchFields(body: {
   const messages = normalizeMessages(body.messages);
   if (!messages) return { ok: false, error: "At least one non-empty message required" };
   const interval = clampInterval(body.interval, MIN_MC_INTERVAL_SEC, MAX_INTERVAL_SEC, 30);
-  return { ok: true, serverHost, serverPort: Math.floor(port), messages, interval };
+  const autoReply = body.autoReply === true || body.autoReply === "true" || body.autoReply === 1;
+  const autoReplyMessages = normalizeMessages(body.autoReplyMessages) || undefined;
+  const cmdRaw = String(body.autoReplyCmd ?? "r")
+    .trim()
+    .toLowerCase();
+  const autoReplyCmd: "r" | "reply" = cmdRaw === "reply" ? "reply" : "r";
+  const cool = Number(body.autoReplyCooldownSec);
+  const autoReplyCooldownSec = Number.isFinite(cool)
+    ? Math.max(3, Math.min(120, Math.floor(cool)))
+    : 8;
+  return {
+    ok: true,
+    serverHost,
+    serverPort: Math.floor(port),
+    messages,
+    interval,
+    autoReply,
+    ...(autoReplyMessages ? { autoReplyMessages } : {}),
+    autoReplyCmd,
+    autoReplyCooldownSec,
+  };
 }
 
 export const MAX_CONCURRENT_DISCORD_JOBS = 3;

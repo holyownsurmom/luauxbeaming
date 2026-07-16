@@ -171,12 +171,12 @@ export function createLogger(jobId: string, discordId: string) {
     console.log(`[job ${short}] [${level}] ${message}`);
 
     logBuffer.push({ job_id: jobId, discord_id: discordId, level, message });
+    // Only force-flush rare/critical events. High-frequency bot/system lines
+    // batch via scheduleFlush — force-flushing every "bot" line flooded the API.
     const forceFlush =
       immediate ||
       message.startsWith("MS_AUTH_REQUIRED|") ||
       level === "error" ||
-      level === "system" ||
-      level === "bot" ||
       /logged in|spawned|connecting|ssid|waiting \d+s before first/i.test(message);
 
     if (forceFlush) {

@@ -10,14 +10,16 @@ export const getMyProfile = createServerFn({ method: "GET" }).handler(async () =
   const db = admin();
   const { data: profile } = await db
     .from("profiles")
-    .select("*")
+    .select(
+      "discord_id, username, global_name, avatar_url, email, bot_hours_remaining, active_plan_id, plan_expires_at, created_at, updated_at",
+    )
     .eq("discord_id", user.id)
     .maybeSingle();
   let plan = null;
   if (profile?.active_plan_id) {
     const { data: p } = await db
       .from("plans")
-      .select("*")
+      .select("id, name, price_usd, features, sort_order, duration_days, bot_hours, max_bots, kind")
       .eq("id", profile.active_plan_id)
       .maybeSingle();
     plan = p;
@@ -105,7 +107,7 @@ export const addMcAccount = createServerFn({ method: "POST" })
     z
       .object({
         label: z.string().min(1).max(60),
-        auth_type: z.enum(["microsoft", "ssid", "offline"]),
+        auth_type: z.enum(["microsoft", "ssid"]),
         username: z.string().max(60).optional().nullable(),
         uuid: z.string().max(60).optional().nullable(),
         ssid: z.string().max(4000).optional().nullable(),
@@ -168,10 +170,6 @@ export const addMcAccount = createServerFn({ method: "POST" })
       } else if (data.auth_type === "ssid") {
         throw new Error("Minecraft access_token (SSID) required");
       }
-    }
-
-    if (authType === "offline" && !username) {
-      throw new Error("Username required for offline accounts");
     }
 
     // Prefer label from IGN for SSID if user left generic label

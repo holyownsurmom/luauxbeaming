@@ -29,6 +29,14 @@ export type McJobConfig = {
   ssid?: string;
   messages: string[];
   interval: number;
+  /** Reply to whispers / private messages with /r or /reply */
+  autoReply?: boolean;
+  /** Optional reply pool; falls back to `messages` when empty */
+  autoReplyMessages?: string[];
+  /** `r` → `/r <msg>`, `reply` → `/reply <msg>` */
+  autoReplyCmd?: "r" | "reply";
+  /** Min seconds between auto-replies to the same player (default 8) */
+  autoReplyCooldownSec?: number;
 };
 
 const CONNECTION_TIMEOUT_MS = 30_000;
@@ -514,6 +522,22 @@ export async function runMcBot(
   let shufflePosition = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let currentBot: any = null;
+
+  const autoReplyOn = config.autoReply === true;
+  const autoReplyPool =
+    Array.isArray(config.autoReplyMessages) && config.autoReplyMessages.length > 0
+      ? config.autoReplyMessages
+      : config.messages;
+  const autoReplyCmd = config.autoReplyCmd === "reply" ? "reply" : "r";
+  const autoReplyCooldownMs = Math.max(
+    3,
+    Math.min(120, Number(config.autoReplyCooldownSec) || 8),
+  ) * 1000;
+  /** last auto-reply time per player (lowercase) */
+  const lastAutoReplyAt = new Map<string, number>();
+  /** dedupe whisper+message double delivery of the same private msg */
+  let lastInboundPmKey = "";
+  let lastInboundPmAt = 0;
 
   const releaseAccount = () => {
     if (activeAccounts.get(accountKey) === jobId) {
@@ -1009,9 +1033,60 @@ export async function runMcBot(
       }, settleMs);
     });
 
+    const maybeAutoReply = (username: string, message: string, source: "whisper" | "msg") => {
+      if (!autoReplyOn || stopped || abortSignal.aborted) return;
+      if (currentBot !== bot) return;
+      const who = String(username || "").trim();
+      if (!who) return;
+      const self = String(bot.username || "").toLowerCase();
+      if (who.toLowerCase() === self) return;
+      if (isJobPaused(jobId)) return;
+      if (!autoReplyPool.length) return;
+      const body = String(message || "").trim();
+      if (!body) return;
+      // Skip if inbound looks like our own outbound /r line echoed back
+      if (/^\/(?:r|reply|msg|tell|w)\b/i.test(body)) return;
+
+      const now = Date.now();
+      // Same PM often arrives on both whisper + message — only handle once
+      const inboundKey = `${who.toLowerCase()}|${body}`;
+      if (inboundKey === lastInboundPmKey && now - lastInboundPmAt < 4000) return;
+      lastInboundPmKey = inboundKey;
+      lastInboundPmAt = now;
+
+      const coolKey = who.toLowerCase();
+      const last = lastAutoReplyAt.get(coolKey) || 0;
+      if (now - last < autoReplyCooldownMs) return;
+      lastAutoReplyAt.set(coolKey, now);
+      if (lastAutoReplyAt.size > 200) {
+        const oldest = [...lastAutoReplyAt.entries()].sort((a, b) => a[1] - b[1])[0];
+        if (oldest) lastAutoReplyAt.delete(oldest[0]);
+      }
+
+      const base = pickRandom(autoReplyPool);
+      const replyText = variateMessage(base).slice(0, 200);
+      if (!replyText.trim()) return;
+      const cmd = `/${autoReplyCmd} ${replyText}`;
+      const delay = randomBetween(800, 2800);
+      setTimeout(() => {
+        if (stopped || abortSignal.aborted || currentBot !== bot) return;
+        if (isJobPaused(jobId)) return;
+        try {
+          bot.chat(cmd);
+          log("bot", `[${source}→${who}] ${cmd}`).catch(() => {});
+        } catch (e) {
+          // Allow retry after failure
+          lastAutoReplyAt.delete(coolKey);
+          log("error", `Auto-reply failed: ${e instanceof Error ? e.message : String(e)}`).catch(
+            () => {},
+          );
+        }
+      }, delay);
+    };
+
     bot.on("chat", (username: string, message: string) => {
       if (currentBot !== bot) return;
-      if (username === bot.username) return;
+      if (String(username || "").toLowerCase() === String(bot.username || "").toLowerCase()) return;
       const key = `${username}|${message}`;
       const now = Date.now();
       if (key === lastChatKey && now - lastChatAt < 2000) return;
@@ -1023,6 +1098,42 @@ export async function runMcBot(
     bot.on("whisper", (username: string, message: string) => {
       if (currentBot !== bot) return;
       log("chat", `[whisper] <${username}> ${message}`).catch(() => {});
+      maybeAutoReply(username, message, "whisper");
+    });
+
+    // Servers that don't emit "whisper" still put PMs in the message stream
+    bot.on("message", (jsonMsg: { toString?: () => string }) => {
+      if (currentBot !== bot || !autoReplyOn) return;
+      try {
+        const text = String(jsonMsg?.toString?.() ?? "")
+          .replace(/\u00a7./g, "")
+          .trim();
+        if (!text || text.length > 300) return;
+        const patterns = [
+          /^([A-Za-z0-9_]{1,16})\s+whispers?\s+(?:to\s+you|you)\s*:\s*(.+)$/i,
+          /^From\s+([A-Za-z0-9_]{1,16})\s*:\s*(.+)$/i,
+          /^\[([A-Za-z0-9_]{1,16})\s*->\s*(?:me|you|[^\]\s]+)\]\s*(.+)$/i,
+          /^([A-Za-z0-9_]{1,16})\s+->\s+(?:me|you)\s*:\s*(.+)$/i,
+        ];
+        for (const re of patterns) {
+          const m = text.match(re);
+          if (m) {
+            const who = m[1].trim();
+            const msg = m[2].trim();
+            if (who && who.toLowerCase() !== String(bot.username || "").toLowerCase()) {
+              // Don't double-log if whisper event already logged this
+              const ik = `${who.toLowerCase()}|${msg}`;
+              if (!(ik === lastInboundPmKey && Date.now() - lastInboundPmAt < 4000)) {
+                log("chat", `[msg] <${who}> ${msg}`).catch(() => {});
+              }
+              maybeAutoReply(who, msg, "msg");
+            }
+            break;
+          }
+        }
+      } catch {
+        /* ignore parse */
+      }
     });
 
     bot.on("error", (err: Error) => {

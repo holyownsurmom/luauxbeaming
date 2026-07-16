@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 export type ConsoleEntry = {
   ts: number;
@@ -71,6 +71,46 @@ function entriesToText(entries: ConsoleEntry[]): string {
     .join("\n");
 }
 
+const ConsoleRow = memo(function ConsoleRow({
+  entry,
+  highlightBot,
+}: {
+  entry: ConsoleEntry;
+  highlightBot: boolean;
+}) {
+  const tag = classifyEntry(entry.level, entry.msg);
+  const isBot = highlightBot && entry.level === "bot";
+  return (
+    <div
+      className={`flex items-start gap-2 ${isBot ? "bg-sky-500/5 -mx-1 px-1 rounded" : ""}`}
+    >
+      <span className="text-zinc-600 shrink-0 w-[58px] tabular-nums select-none">
+        {formatTime(entry.ts)}
+      </span>
+      <span
+        className={`shrink-0 inline-flex items-center justify-center min-w-[42px] px-1.5 rounded-full border text-[9px] font-bold tracking-wide ${tag.className}`}
+      >
+        {tag.label}
+      </span>
+      <span
+        className={`min-w-0 break-words ${
+          entry.level === "error"
+            ? "text-red-300/90"
+            : entry.level === "warn"
+              ? "text-amber-200/90"
+              : entry.level === "bot"
+                ? "text-sky-200/90"
+                : entry.level === "chat"
+                  ? "text-cyan-100/85"
+                  : "text-zinc-200/85"
+        }`}
+      >
+        {entry.msg}
+      </span>
+    </div>
+  );
+});
+
 export function BotConsole({
   entries,
   maxHeight = 400,
@@ -92,6 +132,8 @@ export function BotConsole({
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollPaused, setScrollPaused] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Cap DOM rows — full buffer still available for copy via entries
+  const visibleEntries = useMemo(() => entries.slice(-200), [entries]);
 
   // Auto-scroll only when not scroll-paused and not bot-paused view preference
   useEffect(() => {
@@ -99,7 +141,7 @@ export function BotConsole({
     const el = containerRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [entries.length, scrollPaused]);
+  }, [visibleEntries.length, scrollPaused]);
 
   const copyLog = async () => {
     const text = entriesToText(entries);
@@ -235,40 +277,13 @@ export function BotConsole({
           </div>
         ) : (
           <div className="space-y-0.5">
-            {entries.map((entry, i) => {
-              const tag = classifyEntry(entry.level, entry.msg);
-              const isBot = highlightBot && entry.level === "bot";
-              return (
-                <div
-                  key={`${entry.ts}-${i}`}
-                  className={`flex items-start gap-2 ${isBot ? "bg-sky-500/5 -mx-1 px-1 rounded" : ""}`}
-                >
-                  <span className="text-zinc-600 shrink-0 w-[58px] tabular-nums select-none">
-                    {formatTime(entry.ts)}
-                  </span>
-                  <span
-                    className={`shrink-0 inline-flex items-center justify-center min-w-[42px] px-1.5 rounded-full border text-[9px] font-bold tracking-wide ${tag.className}`}
-                  >
-                    {tag.label}
-                  </span>
-                  <span
-                    className={`min-w-0 break-words ${
-                      entry.level === "error"
-                        ? "text-red-300/90"
-                        : entry.level === "warn"
-                          ? "text-amber-200/90"
-                          : entry.level === "bot"
-                            ? "text-sky-200/90"
-                            : entry.level === "chat"
-                              ? "text-cyan-100/85"
-                              : "text-zinc-200/85"
-                    }`}
-                  >
-                    {entry.msg}
-                  </span>
-                </div>
-              );
-            })}
+            {visibleEntries.map((entry, i) => (
+              <ConsoleRow
+                key={`${entry.ts}-${entry.level}-${i}-${entry.msg.slice(0, 24)}`}
+                entry={entry}
+                highlightBot={highlightBot}
+              />
+            ))}
           </div>
         )}
 

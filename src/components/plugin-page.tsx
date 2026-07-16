@@ -86,11 +86,12 @@ export function PluginPage({
       .finally(() => setLoading(false));
   }, [fetchKeys, pluginId]);
 
+  const paymentId = payment?.id;
   useEffect(() => {
-    if (!payment) return;
+    if (!paymentId) return;
     const t = setInterval(async () => {
       try {
-        const p = (await getPay({ data: { id: payment.id } })) as Payment;
+        const p = (await getPay({ data: { id: paymentId } })) as Payment;
         setPayment(p);
         if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
@@ -101,7 +102,7 @@ export function PluginPage({
       }
     }, 8000);
     return () => clearInterval(t);
-  }, [payment, getPay, fetchKeys, pluginId]);
+  }, [paymentId, getPay, fetchKeys, pluginId]);
 
   const startCheckout = async () => {
     setError(null);

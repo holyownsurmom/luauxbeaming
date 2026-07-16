@@ -15,6 +15,10 @@ export type McLaunchPreset = {
   serverPort: string;
   messages: string;
   interval: string;
+  autoReply?: boolean;
+  autoReplyMessages?: string;
+  autoReplyCmd?: "r" | "reply";
+  autoReplyCooldownSec?: string;
   createdAt: number;
 };
 
@@ -99,6 +103,10 @@ export function saveLaunchPreset(
     serverPort: p.serverPort.trim() || "25565",
     messages: p.messages,
     interval: p.interval || "5",
+    autoReply: p.autoReply,
+    autoReplyMessages: p.autoReplyMessages,
+    autoReplyCmd: p.autoReplyCmd === "reply" ? "reply" : "r",
+    autoReplyCooldownSec: p.autoReplyCooldownSec || "8",
     createdAt: Date.now(),
   };
   const next = [row, ...listLaunchPresets().filter((x) => x.id !== row.id)].slice(0, MAX_USER);

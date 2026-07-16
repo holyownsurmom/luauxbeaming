@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { ScrollText, RefreshCw, Filter, Square, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { BotConsole, type ConsoleEntry } from "@/components/bot-console";
@@ -73,8 +73,19 @@ function LogsPage() {
 
   useEffect(() => {
     refreshBots();
-    const t = setInterval(refreshBots, 5000);
-    return () => clearInterval(t);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshBots();
+    };
+    const t = setInterval(tick, 8000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshBots();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refreshBots]);
 
   useEffect(() => {
@@ -103,16 +114,17 @@ function LogsPage() {
     return () => es.close();
   }, []);
 
-  const filteredLogs = allLogs.filter((l) => {
-    if (levelFilter !== "all" && l.level !== levelFilter) return false;
-    if (selectedBot !== "all") {
-      const botId = (l as ConsoleEntry & { botId?: string }).botId;
-      if (botId && botId !== selectedBot) return false;
-      // if no botId on entry, keep when "all" only — drop when filtering
-      if (!botId) return false;
-    }
-    return true;
-  });
+  const filteredLogs = useMemo(() => {
+    return allLogs.filter((l) => {
+      if (levelFilter !== "all" && l.level !== levelFilter) return false;
+      if (selectedBot !== "all") {
+        const botId = (l as ConsoleEntry & { botId?: string }).botId;
+        if (botId && botId !== selectedBot) return false;
+        if (!botId) return false;
+      }
+      return true;
+    });
+  }, [allLogs, levelFilter, selectedBot]);
 
   return (
     <div className="space-y-6 animate-page-in">

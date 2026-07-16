@@ -24,7 +24,7 @@ import { acquireInstanceLock } from "./instance-lock.js";
 acquireInstanceLock();
 
 const WORKER_ID = process.env.WORKER_ID || API_WORKER_ID;
-const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "3000", 10) || 3000);
+const POLL_INTERVAL = Math.max(1000, parseInt(process.env.POLL_INTERVAL_MS || "5000", 10) || 5000);
 const STATUS_CHECK_INTERVAL = Math.max(5000, POLL_INTERVAL * 2);
 const MAX_CONCURRENT_JOBS = Math.max(1, parseInt(process.env.MAX_CONCURRENT_JOBS || "8", 10) || 8);
 

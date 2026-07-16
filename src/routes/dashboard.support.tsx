@@ -42,7 +42,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "Do I need a Minecraft account to use MC Auto-Message?",
-    a: "Yes. You need a premium Minecraft account. Add it in MC Auto-Message → Add Account: Microsoft (device code), SSID access token, or offline/cracked username. For Microsoft, complete the link/code popup on launch.",
+    a: "Yes. You need a premium Minecraft account. Add it in MC Auto-Message → Add Account: Microsoft (device code) or SSID access token. For Microsoft, complete the link/code popup on launch.",
     category: "Getting Started",
     icon: Bot,
   },
@@ -214,7 +214,7 @@ const FAQS: FAQItem[] = [
   },
   {
     q: "How do I add another Minecraft account?",
-    a: "Go to MC Auto-Message → Add Account. Use SSID (Minecraft services access_token) for premium accounts, or offline for cracked. Device-code login is not available on the bot server.",
+    a: "Go to MC Auto-Message → Add Account. Use Microsoft device-code or SSID (Minecraft services access_token). Cracked/offline accounts are not supported.",
     category: "Account & Billing",
     icon: Bot,
   },

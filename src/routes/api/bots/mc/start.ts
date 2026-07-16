@@ -69,12 +69,7 @@ export const Route = createFileRoute("/api/bots/mc/start")({
         }
 
         const authTypeRaw = String(body.authType || "microsoft");
-        const authType =
-          authTypeRaw === "offline"
-            ? "offline"
-            : authTypeRaw === "ssid"
-              ? "ssid"
-              : "microsoft";
+        const authType = authTypeRaw === "ssid" ? "ssid" : "microsoft";
 
         let config: Record<string, unknown> = {
           accountId,
@@ -86,6 +81,10 @@ export const Route = createFileRoute("/api/bots/mc/start")({
           uuid: body.uuid,
           messages: fields.messages,
           interval: fields.interval,
+          autoReply: fields.autoReply,
+          autoReplyCmd: fields.autoReplyCmd,
+          autoReplyCooldownSec: fields.autoReplyCooldownSec,
+          ...(fields.autoReplyMessages ? { autoReplyMessages: fields.autoReplyMessages } : {}),
         };
 
         // Always load account from DB — trust DB auth_type over client body
@@ -115,12 +114,14 @@ export const Route = createFileRoute("/api/bots/mc/start")({
             return Response.json({ error: "Account not found" }, { status: 404 });
           }
 
-          const dbAuth =
-            account.auth_type === "offline"
-              ? "offline"
-              : account.auth_type === "ssid"
-                ? "ssid"
-                : "microsoft";
+          if (account.auth_type === "offline") {
+            return Response.json(
+              { error: "Cracked/offline accounts are not supported — use Microsoft or SSID" },
+              { status: 400 },
+            );
+          }
+
+          const dbAuth = account.auth_type === "ssid" ? "ssid" : "microsoft";
 
           config.authType = dbAuth;
           config.username = account.username || body.username || body.label;

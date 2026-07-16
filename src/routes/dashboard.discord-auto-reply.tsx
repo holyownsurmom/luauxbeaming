@@ -212,11 +212,21 @@ function DiscordAutoReplyPage() {
   }, []);
 
   useEffect(() => {
-    if (activeKey) {
-      refreshBots();
-      const interval = setInterval(refreshBots, 5000);
-      return () => clearInterval(interval);
-    }
+    if (!activeKey) return;
+    refreshBots();
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshBots();
+    };
+    const interval = setInterval(tick, 8000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshBots();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [activeKey, refreshBots]);
 
   useEffect(() => {

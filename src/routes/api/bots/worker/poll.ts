@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { authWorker, workerDb } from "@/lib/worker-auth.server";
 
 const db = workerDb;
+/** Module-scoped so reclaim is not run on every worker poll tick */
+let lastReclaimAt = 0;
 
 export const Route = createFileRoute("/api/bots/worker/poll")({
   server: {
@@ -21,33 +23,38 @@ export const Route = createFileRoute("/api/bots/worker/poll")({
         const client = db();
         const limit = Math.min(Math.max(body.limit || 3, 1), 10);
 
-        // Reclaim orphans left running after worker crash (best-effort; RPC may be missing)
-        try {
-          const { data: reclaimed, error: reclaimErr } = await client.rpc(
-            "reclaim_stale_bot_jobs",
-            { p_stale_minutes: 45 },
-          );
-          if (reclaimErr) {
-            // Fallback without RPC: mark silent running/stopping jobs as error
-            const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
-            const { error: fbErr } = await client
-              .from("bot_jobs")
-              .update({
-                status: "error",
-                error: "Worker lost contact — job reclaimed as stale (fallback)",
-                stopped_at: new Date().toISOString(),
-                worker_id: null,
-              })
-              .in("status", ["running", "stopping", "paused"])
-              .lt("updated_at", cutoff);
-            if (fbErr) {
-              console.warn("[poll] orphan reclaim fallback failed:", fbErr.message);
+        // Reclaim at most once every 10 minutes (was every poll ~3s — heavy on Supabase)
+        const now = Date.now();
+        const RECLAIM_EVERY_MS = 10 * 60_000;
+        if (now - lastReclaimAt >= RECLAIM_EVERY_MS) {
+          lastReclaimAt = now;
+          try {
+            const { data: reclaimed, error: reclaimErr } = await client.rpc(
+              "reclaim_stale_bot_jobs",
+              { p_stale_minutes: 45 },
+            );
+            if (reclaimErr) {
+              // Fallback without RPC: mark silent running/stopping jobs as error
+              const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+              const { error: fbErr } = await client
+                .from("bot_jobs")
+                .update({
+                  status: "error",
+                  error: "Worker lost contact — job reclaimed as stale (fallback)",
+                  stopped_at: new Date().toISOString(),
+                  worker_id: null,
+                })
+                .in("status", ["running", "stopping", "paused"])
+                .lt("updated_at", cutoff);
+              if (fbErr) {
+                console.warn("[poll] orphan reclaim fallback failed:", fbErr.message);
+              }
+            } else if (typeof reclaimed === "number" && reclaimed > 0) {
+              console.warn(`[poll] reclaimed ${reclaimed} stale bot job(s)`);
             }
-          } else if (typeof reclaimed === "number" && reclaimed > 0) {
-            console.warn(`[poll] reclaimed ${reclaimed} stale bot job(s)`);
+          } catch (e) {
+            console.warn("[poll] orphan reclaim error:", e);
           }
-        } catch (e) {
-          console.warn("[poll] orphan reclaim error:", e);
         }
 
         // Prefer atomic SKIP LOCKED RPC

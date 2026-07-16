@@ -79,11 +79,12 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  const paymentId = payment?.id;
   useEffect(() => {
-    if (!payment) return;
+    if (!paymentId) return;
     const t = setInterval(async () => {
       try {
-        const p = (await getPay({ data: { id: payment.id } })) as Payment;
+        const p = (await getPay({ data: { id: paymentId } })) as Payment;
         setPayment(p);
         if (p.fulfilled_at || p.status === "finished") {
           clearInterval(t);
@@ -95,7 +96,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       }
     }, 8000);
     return () => clearInterval(t);
-  }, [payment, getPay, payingPlanId]);
+  }, [paymentId, getPay, payingPlanId]);
 
   if (!open) return null;
 

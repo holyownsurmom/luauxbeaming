@@ -138,6 +138,10 @@ function BotsPage() {
     serverPort: "25565",
     messages: "" as string,
     interval: "5",
+    autoReply: true,
+    autoReplyMessages: "" as string,
+    autoReplyCmd: "r" as "r" | "reply",
+    autoReplyCooldownSec: "8",
   });
   const [mcTab, setMcTab] = useState<"launch" | "presets">("launch");
   const [userServers, setUserServers] = useState<McServerEntry[]>([]);
@@ -171,12 +175,17 @@ function BotsPage() {
   };
 
   const applyPreset = (p: McLaunchPreset) => {
-    setMcConfig({
+    setMcConfig((c) => ({
+      ...c,
       serverHost: p.serverHost,
       serverPort: p.serverPort || "25565",
       messages: p.messages,
       interval: p.interval || "5",
-    });
+      autoReply: p.autoReply ?? c.autoReply,
+      autoReplyMessages: p.autoReplyMessages ?? c.autoReplyMessages,
+      autoReplyCmd: p.autoReplyCmd === "reply" ? "reply" : "r",
+      autoReplyCooldownSec: p.autoReplyCooldownSec || c.autoReplyCooldownSec,
+    }));
     setMcTab("launch");
     toast.success(`Loaded “${p.name}”`);
   };
@@ -193,6 +202,10 @@ function BotsPage() {
       serverPort: mcConfig.serverPort,
       messages: mcConfig.messages,
       interval: mcConfig.interval,
+      autoReply: mcConfig.autoReply,
+      autoReplyMessages: mcConfig.autoReplyMessages,
+      autoReplyCmd: mcConfig.autoReplyCmd,
+      autoReplyCooldownSec: mcConfig.autoReplyCooldownSec,
     });
     setPresetName("");
     refreshMcPresets();
@@ -351,13 +364,21 @@ function BotsPage() {
         if (data.type !== "log") return;
         const msg = String(data.msg || data.message || "");
         const botId = data.botId || data.job_id || data.jobId;
+        const ts = typeof data.ts === "number" ? data.ts : Date.now();
+        if (ts > logPollSinceRef.current) logPollSinceRef.current = ts;
         handleMsAuthMessage(msg, botId);
         if (msg.startsWith("MS_AUTH_REQUIRED|")) return;
         if (botId && botId === selectedBotIdRef.current) {
-          setConsoleEntries((prev) => [
-            ...prev.slice(-499),
-            { ts: data.ts || Date.now(), level: data.level || "info", msg },
-          ]);
+          setConsoleEntries((prev) => {
+            const key = `${Math.floor(ts / 1000)}|${data.level || "info"}|${msg}`;
+            if (prev.some((p) => `${Math.floor(p.ts / 1000)}|${p.level}|${p.msg}` === key)) {
+              return prev;
+            }
+            return [
+              ...prev.slice(-499),
+              { ts, level: data.level || "info", msg },
+            ];
+          });
         }
       } catch {
         /* ignore parse errors */
@@ -427,9 +448,11 @@ function BotsPage() {
     };
   }, [selectedBotId, handleMsAuthMessage]);
 
-  // Backup poll for console logs (SSE can lag/miss on Vercel)
+  // Sparse backup poll only when SSE is dead (was 1.5s always — triple load with SSE)
   useEffect(() => {
     const poll = async () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (eventSourceRef.current?.readyState === EventSource.OPEN) return;
       try {
         const botId = selectedBotIdRef.current;
         if (!botId) return;
@@ -448,50 +471,62 @@ function BotsPage() {
           botId?: string;
           level?: string;
         }>;
+        if (!logs.length) return;
+        const toAdd: ConsoleEntry[] = [];
         for (const row of logs) {
           if (row.ts > logPollSinceRef.current) logPollSinceRef.current = row.ts;
           handleMsAuthMessage(String(row.msg || ""), row.botId);
           if (
-            row.botId &&
-            row.botId === selectedBotIdRef.current &&
-            !String(row.msg || "").startsWith("MS_AUTH_REQUIRED|")
+            !row.botId ||
+            row.botId !== selectedBotIdRef.current ||
+            String(row.msg || "").startsWith("MS_AUTH_REQUIRED|")
           ) {
-            setConsoleEntries((prev) => {
-              const key = `${Math.floor(row.ts / 1000)}|${row.level}|${row.msg}`;
-              const exists = prev.some(
-                (p) =>
-                  p.msg === row.msg &&
-                  p.level === row.level &&
-                  Math.abs(p.ts - row.ts) < 2000,
-              );
-              if (exists) return prev;
-              // also skip if same second key already present
-              if (
-                prev.some(
-                  (p) => `${Math.floor(p.ts / 1000)}|${p.level}|${p.msg}` === key,
-                )
-              ) {
-                return prev;
-              }
-              return [
-                ...prev.slice(-499),
-                { ts: row.ts, level: (row.level as ConsoleEntry["level"]) || "info", msg: row.msg },
-              ];
-            });
+            continue;
           }
+          toAdd.push({
+            ts: row.ts,
+            level: (row.level as ConsoleEntry["level"]) || "info",
+            msg: row.msg,
+          });
         }
+        if (!toAdd.length) return;
+        setConsoleEntries((prev) => {
+          const seen = new Set(
+            prev.map((p) => `${Math.floor(p.ts / 1000)}|${p.level}|${p.msg}`),
+          );
+          const next = [...prev];
+          let changed = false;
+          for (const row of toAdd) {
+            const key = `${Math.floor(row.ts / 1000)}|${row.level}|${row.msg}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            next.push(row);
+            changed = true;
+          }
+          return changed ? next.slice(-500) : prev;
+        });
       } catch {
         /* ignore */
       }
     };
-    const id = setInterval(poll, 1500);
-    poll();
+    const id = setInterval(poll, 5000);
     return () => clearInterval(id);
   }, [handleMsAuthMessage, selectedBotId]);
 
   useEffect(() => {
-    const interval = setInterval(refreshBots, 5000);
-    return () => clearInterval(interval);
+    const tick = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refreshBots();
+    };
+    const interval = setInterval(tick, 8000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refreshBots();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [refreshBots]);
 
   const checkSsid = async () => {
@@ -520,7 +555,6 @@ function BotsPage() {
     if (!form.label.trim()) return setError("Label required");
     if (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim())
       return setError("Minecraft access token (SSID) or MSA refresh_token required");
-    if (form.auth_type === "offline" && !form.username.trim()) return setError("Username required");
     if (form.auth_type === "microsoft" && !form.label.trim() && !form.username.trim())
       return setError("Label or Microsoft email required");
     setSaving(true);
@@ -528,12 +562,7 @@ function BotsPage() {
       await addAcc({
         data: {
           label: form.label.trim() || form.username.trim() || "ms-account",
-          auth_type:
-            form.auth_type === "offline"
-              ? "offline"
-              : form.auth_type === "microsoft"
-                ? "microsoft"
-                : "ssid",
+          auth_type: form.auth_type === "microsoft" ? "microsoft" : "ssid",
           username: form.username.trim() || undefined,
           uuid: form.uuid.trim() || undefined,
           ssid: form.auth_type === "ssid" ? form.ssid.trim() || undefined : undefined,
@@ -546,9 +575,7 @@ function BotsPage() {
           ? form.refresh_token.trim()
             ? "SSID saved — auto-refresh enabled"
             : "SSID validated and account saved"
-          : form.auth_type === "microsoft"
-            ? "Microsoft account saved — complete device-code login on launch"
-            : "Account added",
+          : "Microsoft account saved — complete device-code login on launch",
       );
       setForm({
         label: "",
@@ -666,6 +693,10 @@ function BotsPage() {
       setError("At least one message required");
       return;
     }
+    const replyMsgs = mcConfig.autoReplyMessages
+      .split("\n")
+      .map((m) => m.trim())
+      .filter(Boolean);
 
     setLaunching(true);
     setError(null);
@@ -677,10 +708,14 @@ function BotsPage() {
           accountId: account.id,
           label: account.label,
           serverHost: mcConfig.serverHost,
-          serverPort: parseInt(mcConfig.serverPort, 10),
+          serverPort: 25565,
           authType: account.auth_type,
           messages: msgs,
           interval: parseInt(mcConfig.interval, 10) || 5,
+          autoReply: mcConfig.autoReply,
+          autoReplyCmd: mcConfig.autoReplyCmd,
+          autoReplyCooldownSec: parseInt(mcConfig.autoReplyCooldownSec, 10) || 8,
+          ...(replyMsgs.length ? { autoReplyMessages: replyMsgs } : {}),
         }),
       });
       const data = await res.json();
@@ -866,11 +901,7 @@ function BotsPage() {
 
       <BotPanel
         title="Server"
-        subtitle={
-          mcConfig.serverHost
-            ? `${mcConfig.serverHost}:${mcConfig.serverPort}`
-            : "not set"
-        }
+        subtitle={mcConfig.serverHost ? mcConfig.serverHost : "not set"}
       >
         <BotTabBar
           value={mcTab}
@@ -883,24 +914,14 @@ function BotsPage() {
 
         {mcTab === "launch" && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px] gap-3">
-              <BotField label="Host">
-                <input
-                  className={fieldMonoClass}
-                  value={mcConfig.serverHost}
-                  onChange={(e) => setMcConfig({ ...mcConfig, serverHost: e.target.value })}
-                  placeholder="mc.hypixel.net"
-                />
-              </BotField>
-              <BotField label="Port">
-                <input
-                  className={fieldMonoClass}
-                  value={mcConfig.serverPort}
-                  onChange={(e) => setMcConfig({ ...mcConfig, serverPort: e.target.value })}
-                  placeholder="25565"
-                />
-              </BotField>
-            </div>
+            <BotField label="Server IP / host">
+              <input
+                className={fieldMonoClass}
+                value={mcConfig.serverHost}
+                onChange={(e) => setMcConfig({ ...mcConfig, serverHost: e.target.value })}
+                placeholder="mc.hypixel.net"
+              />
+            </BotField>
 
             <div className="flex flex-wrap gap-1.5">
               {[...BUILTIN_SERVERS.slice(0, 6), ...userServers.slice(0, 4)].map((s) => (
@@ -969,6 +990,67 @@ function BotsPage() {
                 </DashButton>
               </div>
             </div>
+
+            <div className="rounded-xl border border-border/50 bg-card/40 p-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-border"
+                  checked={mcConfig.autoReply}
+                  onChange={(e) => setMcConfig({ ...mcConfig, autoReply: e.target.checked })}
+                />
+                Auto-reply to whispers / DMs
+              </label>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                When someone messages the bot, it answers with{" "}
+                <span className="font-mono text-foreground/80">/{mcConfig.autoReplyCmd}</span>{" "}
+                (cooldown per player). Uses reply lines below, or chat messages if empty.
+              </p>
+              {mcConfig.autoReply && (
+                <>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <BotField label="Reply command">
+                      <select
+                        className={`${fieldMonoClass} w-32`}
+                        value={mcConfig.autoReplyCmd}
+                        onChange={(e) =>
+                          setMcConfig({
+                            ...mcConfig,
+                            autoReplyCmd: e.target.value === "reply" ? "reply" : "r",
+                          })
+                        }
+                      >
+                        <option value="r">/r</option>
+                        <option value="reply">/reply</option>
+                      </select>
+                    </BotField>
+                    <BotField label="Cooldown (sec)">
+                      <input
+                        type="number"
+                        min="3"
+                        max="120"
+                        className={`${fieldMonoClass} w-28`}
+                        value={mcConfig.autoReplyCooldownSec}
+                        onChange={(e) =>
+                          setMcConfig({ ...mcConfig, autoReplyCooldownSec: e.target.value })
+                        }
+                      />
+                    </BotField>
+                  </div>
+                  <BotField label="Reply messages (optional, one per line)">
+                    <textarea
+                      className={`${fieldMonoClass} resize-y min-h-[72px]`}
+                      rows={3}
+                      value={mcConfig.autoReplyMessages}
+                      onChange={(e) =>
+                        setMcConfig({ ...mcConfig, autoReplyMessages: e.target.value })
+                      }
+                      placeholder={"ty for the msg\nwhats up?"}
+                    />
+                  </BotField>
+                </>
+              )}
+            </div>
           </>
         )}
 
@@ -998,7 +1080,7 @@ function BotsPage() {
 
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">Your servers</div>
-              <div className="grid sm:grid-cols-[1fr_1fr_80px_auto] gap-2">
+              <div className="grid sm:grid-cols-[1fr_1fr_auto] gap-2">
                 <input
                   className={fieldControlClass}
                   placeholder="Label"
@@ -1010,12 +1092,6 @@ function BotsPage() {
                   placeholder="host"
                   value={newServer.host}
                   onChange={(e) => setNewServer({ ...newServer, host: e.target.value })}
-                />
-                <input
-                  className={fieldMonoClass}
-                  placeholder="port"
-                  value={newServer.port}
-                  onChange={(e) => setNewServer({ ...newServer, port: e.target.value })}
                 />
                 <DashButton size="sm" onClick={addServerToList}>
                   Add
@@ -1039,7 +1115,7 @@ function BotsPage() {
                           >
                             <div className="text-sm font-medium truncate">{s.label}</div>
                             <div className="text-[11px] font-mono text-muted-foreground truncate">
-                              {s.host}:{s.port}
+                              {s.host}
                             </div>
                           </button>
                           <button
@@ -1133,11 +1209,15 @@ function BotsPage() {
                   <select
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
                     value={form.auth_type}
-                    onChange={(e) => setForm({ ...form, auth_type: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        auth_type: e.target.value === "ssid" ? "ssid" : "microsoft",
+                      })
+                    }
                   >
                     <option value="microsoft">Microsoft (device code)</option>
                     <option value="ssid">SSID / access token (premium)</option>
-                    <option value="offline">Offline / Cracked (username only)</option>
                   </select>
                 </label>
                 {form.auth_type === "ssid" ? (
@@ -1192,7 +1272,7 @@ function BotsPage() {
                       users who already have a Minecraft access_token.
                     </p>
                   </div>
-                ) : form.auth_type === "microsoft" ? (
+                ) : (
                   <div className="md:col-span-2 space-y-2">
                     <label className="text-xs space-y-1 block">
                       <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
@@ -1212,18 +1292,6 @@ function BotsPage() {
                       approve. The worker caches the session for reconnects.
                     </p>
                   </div>
-                ) : (
-                  <label className="text-xs space-y-1 md:col-span-2">
-                    <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                      Username
-                    </span>
-                    <input
-                      className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                      value={form.username}
-                      onChange={(e) => setForm({ ...form, username: e.target.value })}
-                      placeholder="Steve"
-                    />
-                  </label>
                 )}
               </div>
               {error && <div className="text-xs text-destructive">{error}</div>}
@@ -1232,8 +1300,7 @@ function BotsPage() {
                   type="submit"
                   disabled={
                     saving ||
-                    (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim()) ||
-                    (form.auth_type === "offline" && !form.username.trim())
+                    (form.auth_type === "ssid" && !form.ssid.trim() && !form.refresh_token.trim())
                   }
                   className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold disabled:opacity-50 btn-premium"
                 >
@@ -1241,9 +1308,7 @@ function BotsPage() {
                     ? "Saving..."
                     : form.auth_type === "ssid"
                       ? "Save SSID account"
-                      : form.auth_type === "microsoft"
-                        ? "Save Microsoft account"
-                        : "Save account"}
+                      : "Save Microsoft account"}
                 </button>
                 <button
                   type="button"

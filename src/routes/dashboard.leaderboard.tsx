@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Crown,
-  Flame,
   Medal,
   RefreshCw,
   Search,
@@ -14,7 +13,6 @@ import {
   Trophy,
   Minus,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import { getLeaderboardBoard } from "@/lib/luaux.functions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,18 +33,6 @@ export const Route = createFileRoute("/dashboard/leaderboard")({
 
 type Period = "24h" | "7d" | "month" | "lifetime";
 
-type Achievement = {
-  id: string;
-  title: string;
-  description: string;
-  icon: "trophy" | "flame" | "crown" | "zap" | "medal" | "sparkles";
-  rarity: "common" | "rare" | "epic" | "legendary";
-  unlocked: boolean;
-  progress: number;
-  progressLabel: string | null;
-  progressTarget: number | null;
-};
-
 type Entry = {
   rank: number;
   discordId: string;
@@ -57,7 +43,6 @@ type Entry = {
   trend: "up" | "down" | "same" | "new";
   badge: "gold" | "silver" | "bronze" | null;
   isYou: boolean;
-  achievementIds?: string[];
 };
 
 type Board = {
@@ -79,43 +64,8 @@ type Board = {
     overallSuccessRate: number | null;
   };
   you: Entry | null;
-  youAchievements?: Achievement[];
   generatedAt: string;
 };
-
-const ACH_META: Record<
-  string,
-  { title: string; icon: Achievement["icon"]; rarity: Achievement["rarity"] }
-> = {
-  first_blood: { title: "First Blood", icon: "sparkles", rarity: "common" },
-  getting_started: { title: "Getting Started", icon: "medal", rarity: "common" },
-  operator: { title: "Operator", icon: "trophy", rarity: "rare" },
-  elite: { title: "Elite", icon: "crown", rarity: "legendary" },
-  hot_streak: { title: "Hot Streak", icon: "flame", rarity: "rare" },
-  on_fire: { title: "On Fire", icon: "zap", rarity: "epic" },
-  week_warrior: { title: "Week Warrior", icon: "medal", rarity: "rare" },
-  daily_ace: { title: "Daily Ace", icon: "crown", rarity: "epic" },
-  monthly_king: { title: "Monthly King", icon: "crown", rarity: "legendary" },
-  comeback: { title: "Comeback", icon: "trophy", rarity: "rare" },
-};
-
-function AchIcon({ icon, className }: { icon: Achievement["icon"]; className?: string }) {
-  if (icon === "flame") return <Flame className={className} />;
-  if (icon === "crown") return <Crown className={className} />;
-  if (icon === "zap") return <Zap className={className} />;
-  if (icon === "medal") return <Medal className={className} />;
-  if (icon === "sparkles") return <Sparkles className={className} />;
-  return <Trophy className={className} />;
-}
-
-function rarityClass(rarity: Achievement["rarity"], unlocked: boolean): string {
-  if (!unlocked) return "border-border/40 bg-muted/30 text-muted-foreground/50";
-  if (rarity === "legendary")
-    return "border-amber-400/50 bg-amber-400/15 text-amber-500 shadow-[0_0_12px_rgba(251,191,36,0.2)]";
-  if (rarity === "epic") return "border-violet-400/40 bg-violet-500/15 text-violet-400";
-  if (rarity === "rare") return "border-sky-400/40 bg-sky-500/10 text-sky-400";
-  return "border-primary/30 bg-primary/10 text-primary";
-}
 
 const PERIODS: { id: Period; label: string }[] = [
   { id: "24h", label: "24 hours" },
@@ -270,7 +220,7 @@ function LeaderboardPage() {
 
       {/* Your rank */}
       {board?.you && (
-        <Surface padded className="border-primary/25 bg-primary/5 space-y-3">
+        <Surface padded className="border-primary/25 bg-primary/5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <RankMedal rank={board.you.rank} badge={board.you.badge} />
@@ -292,94 +242,6 @@ function LeaderboardPage() {
               </div>
               <TrendIcon trend={board.you.trend} />
             </div>
-          </div>
-          {board.youAchievements && board.youAchievements.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1 border-t border-primary/10">
-              {board.youAchievements
-                .filter((a) => a.unlocked)
-                .slice(0, 8)
-                .map((a) => (
-                  <span
-                    key={a.id}
-                    title={a.description}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                      rarityClass(a.rarity, true),
-                    )}
-                  >
-                    <AchIcon icon={a.icon} className="h-3 w-3" />
-                    {a.title}
-                    {a.progressLabel ? (
-                      <span className="opacity-70 font-mono">{a.progressLabel}</span>
-                    ) : null}
-                  </span>
-                ))}
-              {board.youAchievements.filter((a) => a.unlocked).length === 0 && (
-                <span className="text-[11px] text-muted-foreground">
-                  Secure an account to unlock achievements
-                </span>
-              )}
-            </div>
-          )}
-        </Surface>
-      )}
-
-      {/* Achievements panel */}
-      {board?.youAchievements && board.youAchievements.length > 0 && (
-        <Surface padded>
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy className="h-4 w-4 text-primary" />
-            <div className="text-sm font-semibold">Achievements</div>
-            <div className="text-[11px] text-muted-foreground">
-              {board.youAchievements.filter((a) => a.unlocked).length}/
-              {board.youAchievements.length} unlocked
-            </div>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {board.youAchievements.map((a) => (
-              <div
-                key={a.id}
-                className={cn(
-                  "rounded-xl border px-3 py-2.5 flex items-start gap-2.5 transition-colors",
-                  a.unlocked
-                    ? rarityClass(a.rarity, true)
-                    : "border-border/40 bg-card/40 opacity-70",
-                )}
-              >
-                <div
-                  className={cn(
-                    "mt-0.5 h-8 w-8 rounded-lg border flex items-center justify-center shrink-0",
-                    a.unlocked ? "border-current/30 bg-background/40" : "border-border/40",
-                  )}
-                >
-                  <AchIcon icon={a.icon} className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold truncate">{a.title}</div>
-                  <div className="text-[10px] opacity-80 leading-snug">{a.description}</div>
-                  {!a.unlocked && a.progressLabel ? (
-                    <div className="mt-1.5">
-                      <div className="h-1 rounded-full bg-background/50 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-primary/60"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              a.progressTarget
-                                ? (a.progress / (a.progressTarget || 1)) * 100
-                                : 0,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="mt-0.5 text-[9px] font-mono opacity-70">
-                        {a.progressLabel}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ))}
           </div>
         </Surface>
       )}
@@ -458,29 +320,13 @@ function LeaderboardPage() {
                         <RankMedal rank={e.rank} badge={e.badge} />
                       </td>
                       <td className="px-5 py-3">
-                        <div className="font-medium flex flex-wrap items-center gap-1.5">
-                          <span>{e.username}</span>
+                        <div className="font-medium">
+                          {e.username}
                           {e.isYou ? (
-                            <span className="text-[10px] uppercase tracking-widest text-primary font-semibold">
+                            <span className="ml-2 text-[10px] uppercase tracking-widest text-primary font-semibold">
                               you
                             </span>
                           ) : null}
-                          {(e.achievementIds || []).map((id) => {
-                            const m = ACH_META[id];
-                            if (!m) return null;
-                            return (
-                              <span
-                                key={id}
-                                title={m.title}
-                                className={cn(
-                                  "inline-flex h-5 w-5 items-center justify-center rounded-full border",
-                                  rarityClass(m.rarity, true),
-                                )}
-                              >
-                                <AchIcon icon={m.icon} className="h-3 w-3" />
-                              </span>
-                            );
-                          })}
                         </div>
                       </td>
                       <td className="px-5 py-3 text-right font-mono font-semibold">{e.total}</td>
@@ -507,22 +353,9 @@ function LeaderboardPage() {
                 >
                   <RankMedal rank={e.rank} badge={e.badge} />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate flex items-center gap-1">
-                      <span className="truncate">
-                        {e.username}
-                        {e.isYou ? " · you" : ""}
-                      </span>
-                      {(e.achievementIds || []).slice(0, 2).map((id) => {
-                        const m = ACH_META[id];
-                        if (!m) return null;
-                        return (
-                          <AchIcon
-                            key={id}
-                            icon={m.icon}
-                            className="h-3 w-3 text-primary shrink-0"
-                          />
-                        );
-                      })}
+                    <div className="font-medium truncate">
+                      {e.username}
+                      {e.isYou ? " · you" : ""}
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       {formatRelative(e.lastActive)}

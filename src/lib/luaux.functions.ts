@@ -1469,6 +1469,132 @@ export const resetMyAccess = createServerFn({ method: "POST" }).handler(async ()
   return { ok: true };
 });
 
+/** Overview activity stats (plan + jobs + secured + plugins + payments) */
+export const getDashboardStats = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireUser, admin } = await import("./luaux-server.server");
+  const user = await requireUser();
+  const db = admin();
+  const uid = user.id;
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString();
+
+  const countJobs = async (statuses: string[]) => {
+    const { count } = await db
+      .from("bot_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("discord_id", uid)
+      .in("status", statuses);
+    return count ?? 0;
+  };
+
+  const [
+    activeBots,
+    jobsError,
+    jobsCompleted,
+    pluginsRes,
+    securedTotalRes,
+    securedWeekRes,
+    sessionsRes,
+    paymentsRes,
+    recentJobsRes,
+  ] = await Promise.all([
+    countJobs(["pending", "running", "paused", "stopping"]),
+    countJobs(["error"]),
+    countJobs(["completed", "stopped"]),
+    db
+      .from("verification_keys")
+      .select("id", { count: "exact", head: true })
+      .eq("discord_id", uid)
+      .gt("expires_at", new Date().toISOString()),
+    db
+      .from("secured_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("discord_id", uid),
+    db
+      .from("secured_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("discord_id", uid)
+      .gte("secured_at", weekAgo),
+    db
+      .from("verification_sessions")
+      .select("status")
+      .eq("discord_id", uid)
+      .limit(5000),
+    db
+      .from("payments")
+      .select("id, price_amount, status, fulfilled_at")
+      .eq("discord_id", uid)
+      .limit(500),
+    db
+      .from("bot_jobs")
+      .select("id, type, status, started_at, stopped_at, created_at, config")
+      .eq("discord_id", uid)
+      .gte("created_at", weekAgo)
+      .limit(500),
+  ]);
+
+  let sessionsSecured = 0;
+  let sessionsFailed = 0;
+  for (const s of sessionsRes.data || []) {
+    const st = String((s as { status?: string }).status || "");
+    if (st === "secured") sessionsSecured++;
+    else if (st === "failed") sessionsFailed++;
+  }
+  const sessionDone = sessionsSecured + sessionsFailed;
+  const successRate =
+    sessionDone > 0 ? Math.round((sessionsSecured / sessionDone) * 1000) / 10 : null;
+
+  let paymentsFulfilled = 0;
+  let paymentsSpentUsd = 0;
+  for (const p of paymentsRes.data || []) {
+    const row = p as { status?: string; fulfilled_at?: string | null; price_amount?: number };
+    if (row.fulfilled_at || row.status === "finished") {
+      paymentsFulfilled++;
+      paymentsSpentUsd += Number(row.price_amount) || 0;
+    }
+  }
+
+  // Estimated runtime hours from job windows (7d)
+  let runtimeMs = 0;
+  let mcJobs = 0;
+  let discordJobs = 0;
+  const now = Date.now();
+  for (const j of recentJobsRes.data || []) {
+    const row = j as {
+      type?: string;
+      status?: string;
+      started_at?: string | null;
+      stopped_at?: string | null;
+      config?: { subType?: string };
+    };
+    if (row.type === "mc") mcJobs++;
+    if (row.type === "discord") discordJobs++;
+    const start = row.started_at ? new Date(row.started_at).getTime() : 0;
+    if (!start) continue;
+    const end = row.stopped_at
+      ? new Date(row.stopped_at).getTime()
+      : ["running", "paused", "stopping"].includes(String(row.status))
+        ? now
+        : 0;
+    if (end > start) runtimeMs += Math.min(end - start, 7 * 24 * 60 * 60_000);
+  }
+  const runtimeHours7d = Math.round((runtimeMs / 3_600_000) * 10) / 10;
+
+  return {
+    activeBots,
+    jobsError,
+    jobsCompleted,
+    pluginsOwned: pluginsRes.count ?? 0,
+    securedTotal: securedTotalRes.count ?? 0,
+    securedWeek: securedWeekRes.count ?? 0,
+    successRate,
+    paymentsFulfilled,
+    paymentsSpentUsd: Math.round(paymentsSpentUsd * 100) / 100,
+    runtimeHours7d,
+    mcJobs7d: mcJobs,
+    discordJobs7d: discordJobs,
+  };
+});
+
 /** Global secured-account leaderboard */
 export const getLeaderboardBoard = createServerFn({ method: "GET" })
   .inputValidator((input) =>

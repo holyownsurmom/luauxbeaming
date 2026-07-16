@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "node --import tsx --test src/lib/plan-grant.test.ts src/lib/rate-limit.test.ts src/lib/bot-job-validate.test.ts src/lib/mc-ssid.test.ts src/lib/mc-refresh.test.ts",
+    "test": "node --import tsx --test src/lib/plan-grant.test.ts src/lib/rate-limit.test.ts src/lib/bot-job-validate.test.ts src/lib/mc-ssid.test.ts src/lib/mc-refresh.test.ts src/lib/leaderboard-achievements.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

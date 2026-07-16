@@ -15,7 +15,7 @@ import {
   Terminal,
   ShieldCheck,
 } from "lucide-react";
-import { getMyProfile } from "@/lib/luaux.functions";
+import { getDashboardStats, getMyProfile } from "@/lib/luaux.functions";
 
 export const Route = createFileRoute("/dashboard/")({
   component: Overview,
@@ -30,6 +30,21 @@ type Profile = {
   bot_hours_remaining: number;
 };
 type Plan = { id: string; name: string; max_bots: number; bot_hours: number };
+
+type DashStats = {
+  activeBots: number;
+  jobsError: number;
+  jobsCompleted: number;
+  pluginsOwned: number;
+  securedTotal: number;
+  securedWeek: number;
+  successRate: number | null;
+  paymentsFulfilled: number;
+  paymentsSpentUsd: number;
+  runtimeHours7d: number;
+  mcJobs7d: number;
+  discordJobs7d: number;
+};
 
 function AnimatedValue({ value, decimals = 0 }: { value: number; decimals?: number }) {
   const [display, setDisplay] = useState(0);
@@ -73,24 +88,30 @@ function AnimatedValue({ value, decimals = 0 }: { value: number; decimals?: numb
 
 function Overview() {
   const fetchProfile = useServerFn(getMyProfile);
+  const fetchStats = useServerFn(getDashboardStats);
   const [data, setData] = useState<{
     profile: Profile | null;
     plan: Plan | null;
     active: boolean;
     isAdmin?: boolean;
   } | null>(null);
+  const [stats, setStats] = useState<DashStats | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
     setLoadError(null);
-    fetchProfile()
-      .then((d) =>
+    Promise.all([
+      fetchProfile().then((d) =>
         setData(
           d as { profile: Profile | null; plan: Plan | null; active: boolean; isAdmin?: boolean },
         ),
-      )
+      ),
+      fetchStats()
+        .then((s) => setStats(s as DashStats))
+        .catch(() => setStats(null)),
+    ])
       .catch((e) => {
         setLoadError(e instanceof Error ? e.message : "Failed to load profile");
       })
@@ -99,7 +120,7 @@ function Overview() {
 
   useEffect(() => {
     load();
-  }, [fetchProfile]);
+  }, [fetchProfile, fetchStats]);
 
   const active = data?.active ?? false;
   const isAdmin = data?.isAdmin ?? false;
@@ -264,7 +285,62 @@ function Overview() {
         <StatCard icon={BotIcon} label="Max Bots" value={maxBots} hint={isAdmin ? "admin" : maxBots === 0 ? "no plan" : "concurrent"} locked={!active && !isAdmin} delay={0} />
         <StatCard icon={Clock} label="Bot Hours" value={botHours} suffix="h" decimals={1} hint={active || isAdmin ? "remaining" : "no plan"} locked={!active && !isAdmin} delay={1} />
         <StatCard icon={Calendar} label="Days Left" value={daysLeft} hint={isAdmin ? "admin" : active ? "until renewal" : "no plan"} locked={!active && !isAdmin} delay={2} />
-        <StatCard icon={Puzzle} label="Plugins" value={0} hint="owned" locked={false} delay={3} />
+        <StatCard
+          icon={Puzzle}
+          label="Plugins"
+          value={stats?.pluginsOwned ?? 0}
+          hint="owned"
+          locked={false}
+          delay={3}
+        />
+      </section>
+
+      {/* Activity */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <StatCard
+          icon={BotIcon}
+          label="Active bots"
+          value={stats?.activeBots ?? 0}
+          hint="live now"
+          locked={false}
+          delay={0}
+        />
+        <StatCard
+          icon={ShieldCheck}
+          label="Secured (7d)"
+          value={stats?.securedWeek ?? 0}
+          hint={
+            stats?.securedTotal != null
+              ? `${stats.securedTotal} lifetime`
+              : "this week"
+          }
+          locked={false}
+          delay={1}
+        />
+        <StatCard
+          icon={Sparkles}
+          label="Success rate"
+          value={stats?.successRate ?? 0}
+          suffix={stats?.successRate != null ? "%" : ""}
+          decimals={stats?.successRate != null ? 1 : 0}
+          hint={stats?.successRate != null ? "verification" : "no attempts"}
+          locked={false}
+          delay={2}
+        />
+        <StatCard
+          icon={Clock}
+          label="Runtime (7d)"
+          value={stats?.runtimeHours7d ?? 0}
+          suffix="h"
+          decimals={1}
+          hint={
+            stats
+              ? `${stats.mcJobs7d} MC · ${stats.discordJobs7d} Discord jobs`
+              : "estimated"
+          }
+          locked={false}
+          delay={3}
+        />
       </section>
 
       {/* Quick actions + plugins */}

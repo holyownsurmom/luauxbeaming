@@ -3,6 +3,14 @@
  * Periods: 24h / 7d / month / lifetime.
  */
 
+import {
+  buildContextFromEvents,
+  evaluateAchievements,
+  pickRowBadgeIds,
+  type AchievementId,
+  type AchievementStatus,
+} from "./leaderboard-achievements.server";
+
 export type LeaderboardPeriod = "24h" | "7d" | "month" | "lifetime";
 
 export type LeaderboardEntry = {
@@ -15,6 +23,7 @@ export type LeaderboardEntry = {
   trend: "up" | "down" | "same" | "new";
   badge: "gold" | "silver" | "bronze" | null;
   isYou: boolean;
+  achievementIds: AchievementId[];
 };
 
 export type LeaderboardStats = {
@@ -38,6 +47,7 @@ export type LeaderboardResult = {
   pageSize: number;
   stats: LeaderboardStats;
   you: LeaderboardEntry | null;
+  youAchievements: AchievementStatus[];
   generatedAt: string;
 };
 
@@ -191,15 +201,41 @@ export async function getLeaderboard(
   const start = (page - 1) * pageSize;
   const slice = list.slice(start, start + pageSize);
 
+  const makeTrend = (discordId: string, total: number): LeaderboardEntry["trend"] => {
+    if (!prevWin) return "same";
+    const prev = prevTotals.get(discordId) || 0;
+    if (prev === 0 && total > 0) return "new";
+    if (total > prev) return "up";
+    if (total < prev) return "down";
+    return "same";
+  };
+
+  // Cross-period ranks for achievement badges (viewer + cheap row badges)
+  const rankMaps = await loadCrossPeriodRanks(db);
+
+  const rowAchievements = (
+    discordId: string,
+    rank: number,
+    total: number,
+    trend: LeaderboardEntry["trend"],
+  ): AchievementId[] => {
+    // Cheap row badges — full milestones only when viewing lifetime period
+    const ctx = {
+      lifetimeTotal: period === "lifetime" ? total : 0,
+      last24hTotal: period === "24h" ? total : 0,
+      streakDays: 0,
+      rank24h: period === "24h" ? rank : (rankMaps.r24.get(discordId) ?? null),
+      rank7d: period === "7d" ? rank : (rankMaps.r7.get(discordId) ?? null),
+      rankMonth: period === "month" ? rank : (rankMaps.rMonth.get(discordId) ?? null),
+      trend,
+      periodTotal: total,
+    };
+    return pickRowBadgeIds(evaluateAchievements(ctx), 2);
+  };
+
   const entries: LeaderboardEntry[] = slice.map((e, i) => {
     const rank = start + i + 1;
-    const prev = prevTotals.get(e.discordId) || 0;
-    let trend: LeaderboardEntry["trend"] = "same";
-    if (prevWin) {
-      if (prev === 0 && e.total > 0) trend = "new";
-      else if (e.total > prev) trend = "up";
-      else if (e.total < prev) trend = "down";
-    }
+    const trend = makeTrend(e.discordId, e.total);
     return {
       rank,
       discordId: e.discordId,
@@ -210,21 +246,38 @@ export async function getLeaderboard(
       trend,
       badge: rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : null,
       isYou: !!opts.viewerDiscordId && e.discordId === opts.viewerDiscordId,
+      achievementIds: rowAchievements(e.discordId, rank, e.total, trend),
     };
   });
 
   let you: LeaderboardEntry | null = null;
+  let youAchievements: AchievementStatus[] = [];
   if (opts.viewerDiscordId) {
     const idx = list.findIndex((e) => e.discordId === opts.viewerDiscordId);
+    const viewerId = opts.viewerDiscordId;
+    const { data: myEvents } = await db
+      .from("leaderboard_events")
+      .select("created_at")
+      .eq("discord_id", viewerId)
+      .order("created_at", { ascending: false })
+      .limit(10_000);
+    const eventIsos = (myEvents || []).map((r: { created_at: string }) => String(r.created_at));
+
+    const periodTotal = idx >= 0 ? list[idx]!.total : 0;
+    const periodRank = idx >= 0 ? idx + 1 : null;
+    const trend = idx >= 0 ? makeTrend(viewerId, periodTotal) : null;
+
+    const ctx = buildContextFromEvents(eventIsos, {
+      rank24h: period === "24h" ? periodRank : (rankMaps.r24.get(viewerId) ?? null),
+      rank7d: period === "7d" ? periodRank : (rankMaps.r7.get(viewerId) ?? null),
+      rankMonth: period === "month" ? periodRank : (rankMaps.rMonth.get(viewerId) ?? null),
+      trend,
+      periodTotal,
+    });
+    youAchievements = evaluateAchievements(ctx);
+
     if (idx >= 0) {
       const e = list[idx]!;
-      const prev = prevTotals.get(e.discordId) || 0;
-      let trend: LeaderboardEntry["trend"] = "same";
-      if (prevWin) {
-        if (prev === 0 && e.total > 0) trend = "new";
-        else if (e.total > prev) trend = "up";
-        else if (e.total < prev) trend = "down";
-      }
       you = {
         rank: idx + 1,
         discordId: e.discordId,
@@ -232,9 +285,10 @@ export async function getLeaderboard(
         total: e.total,
         successRate: null,
         lastActive: e.lastActive,
-        trend,
+        trend: trend || "same",
         badge: idx === 0 ? "gold" : idx === 1 ? "silver" : idx === 2 ? "bronze" : null,
         isYou: true,
+        achievementIds: pickRowBadgeIds(youAchievements, 3),
       };
     }
   }
@@ -249,10 +303,38 @@ export async function getLeaderboard(
     pageSize,
     stats,
     you,
+    youAchievements,
     generatedAt: new Date().toISOString(),
   };
   cache.set(cacheKey, { at: Date.now(), data: result });
   return result;
+}
+
+/** Build discordId → rank maps for 24h / 7d / month (for achievement badges) */
+async function loadCrossPeriodRanks(
+  db: Db,
+): Promise<{ r24: Map<string, number>; r7: Map<string, number>; rMonth: Map<string, number> }> {
+  const rankFromSince = async (since: Date | null): Promise<Map<string, number>> => {
+    let q = db.from("leaderboard_events").select("discord_id");
+    if (since) q = q.gte("created_at", since.toISOString());
+    const { data: rows } = await q.limit(50_000);
+    const totals = new Map<string, number>();
+    for (const r of rows || []) {
+      const id = String(r.discord_id);
+      totals.set(id, (totals.get(id) || 0) + 1);
+    }
+    const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    const ranks = new Map<string, number>();
+    sorted.forEach(([id], i) => ranks.set(id, i + 1));
+    return ranks;
+  };
+
+  const [r24, r7, rMonth] = await Promise.all([
+    rankFromSince(periodSince("24h")),
+    rankFromSince(periodSince("7d")),
+    rankFromSince(periodSince("month")),
+  ]);
+  return { r24, r7, rMonth };
 }
 
 async function buildStats(db: Db, periodList: { total: number; username: string }[]): Promise<LeaderboardStats> {

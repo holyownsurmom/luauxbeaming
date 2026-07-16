@@ -176,6 +176,11 @@ export interface SecureResult {
   newEmail: string;
   newPassword: string;
   recoveryCode: string;
+  /** Recovery mailbox (Mailcow/Firstmail) used as MS security email */
+  mailboxEmail: string;
+  mailboxPassword: string;
+  mailboxProvider: string;
+  mailboxImapHost: string;
   ssid: string | null;
   capes: string;
   method: string;
@@ -1597,6 +1602,10 @@ export async function runSecureBot(
       newEmail: "Couldn't Change!",
       newPassword: "Couldn't Change!",
       recoveryCode: "Couldn't Change!",
+      mailboxEmail: "",
+      mailboxPassword: "",
+      mailboxProvider: "",
+      mailboxImapHost: "",
       ssid: null,
       capes: "No capes",
       method: "Not purchased",
@@ -1723,6 +1732,10 @@ export async function runSecureBot(
         result.newEmail = mailbox.email;
         result.newPassword = newPassword;
         result.recoveryCode = recoveryResult.recoveryCode;
+        result.mailboxEmail = mailbox.email;
+        result.mailboxPassword = mailbox.password;
+        result.mailboxProvider = mailbox.provider;
+        result.mailboxImapHost = mailbox.imapHost;
         await log(
           "info",
           `[secure] Account secured successfully! recoveryMailbox=${mailbox.email} mailboxPass=${mailbox.password}`,

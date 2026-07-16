@@ -128,7 +128,7 @@ function PurchasePage() {
     const r = addToCart({
       planId,
       name: `${selectedHours} bot hour${selectedHours === 1 ? "" : "s"}`,
-      priceUsd: selectedHours * 1.5,
+      priceUsd: selectedHours * 1,
       kind: "hours",
     });
     if (!r.ok) toast.message(r.reason || "Already in cart");
@@ -165,7 +165,7 @@ function PurchasePage() {
 
   const HOUR_OPTIONS = [1, 2, 5, 10, 24];
   const hourPlanId = `hours_${selectedHours}`;
-  const hourTotal = selectedHours * 1.5;
+  const hourTotal = selectedHours * 1;
 
   return (
     <div className="space-y-6 animate-page-in">
@@ -246,7 +246,7 @@ function PurchasePage() {
             <h3 className="font-display text-lg font-semibold">Purchase bot hours</h3>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {s.formatPrice(1.5)}/hr — extra runtime on top of your plan. No subscription needed.
+            {s.formatPrice(1)}/hr — extra runtime on top of your plan. No subscription needed.
           </p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
@@ -265,12 +265,12 @@ function PurchasePage() {
                         : "bg-secondary/40 hover:bg-secondary"
                     }`}
                   >
-                    {h}h — {s.formatPrice(h * 1.5)}
+                    {h}h — {s.formatPrice(h * 1)}
                   </button>
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
-                {s.formatPrice(1.5)} per hour · Max 24h · Expires at midnight UTC
+                {s.formatPrice(1)} per hour · Max 24h · Expires at midnight UTC
               </p>
             </div>
             <div className="rounded-xl brutal-border bg-card p-4 min-w-[180px]">

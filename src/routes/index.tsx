@@ -52,9 +52,9 @@ export const Route = createFileRoute("/")({
           description:
             "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
           offers: [
-            { "@type": "Offer", name: "Starter", price: "15", priceCurrency: "USD", description: "1 bot, 5 hours/day" },
-            { "@type": "Offer", name: "Pro", price: "25", priceCurrency: "USD", description: "5 bots, 7 hours/day" },
-            { "@type": "Offer", name: "Enterprise", price: "50", priceCurrency: "USD", description: "20 bots, 14 hours/day" },
+            { "@type": "Offer", name: "Starter", price: "7", priceCurrency: "USD", description: "1 bot, 5 hours/day" },
+            { "@type": "Offer", name: "Pro", price: "16", priceCurrency: "USD", description: "5 bots, 7 hours/day + Discord plugins" },
+            { "@type": "Offer", name: "Enterprise", price: "35", priceCurrency: "USD", description: "20 bots, 14 hours/day + Discord plugins" },
           ],
         }),
       },
@@ -122,7 +122,7 @@ const FEATURES = [
 const PLANS = [
   {
     name: "Starter",
-    price: 15,
+    price: 7,
     bots: 1,
     hours: 5,
     feats: [
@@ -136,30 +136,30 @@ const PLANS = [
   },
   {
     name: "Pro",
-    price: 25,
+    price: 16,
     bots: 5,
     hours: 7,
     feats: [
       "5 concurrent bots",
       "7 bot-hours / day",
+      "Discord Auto-Spam included",
+      "Discord Auto-Reply included",
       "Full analytics & live console",
-      "Advanced scanner + priority queue",
-      "Fast speed",
       "Priority Discord support",
     ],
     highlight: false,
   },
   {
     name: "Enterprise",
-    price: 50,
+    price: 35,
     bots: 20,
     hours: 14,
     feats: [
       "20 concurrent bots",
       "14 bot-hours / day",
+      "Discord Auto-Spam included",
+      "Discord Auto-Reply included",
       "Custom behaviors & API access",
-      "Maximum speed",
-      "Early access to features",
       "Dedicated 1:1 support",
     ],
     highlight: false,

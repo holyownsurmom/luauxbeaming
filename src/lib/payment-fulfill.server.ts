@@ -18,6 +18,9 @@ const PLUGIN_GRANTS: Record<string, string[]> = {
   "discord-spam": ["discord-spam"],
   "discord-autoreply": ["discord-autoreply"],
   "discord-bundle": ["discord-spam", "discord-autoreply"],
+  // MC plans that include Discord plugins
+  pro: ["discord-spam", "discord-autoreply"],
+  enterprise: ["discord-spam", "discord-autoreply"],
 };
 
 function randHex(n: number) {
@@ -377,12 +380,14 @@ export async function fulfillPayment(
     // single-plugin fallback by id
     if (PLUGIN_META[plan.id]) grantPluginIds = [plan.id];
   }
-  const isPlugin =
+  const isPluginOnly =
     grantPluginIds.length > 0 && (plan.kind === "plugin" || isPluginPlanId(plan.id));
+  // Pro/Enterprise: MC plan + Discord plugin keys
+  const isMcWithPlugins =
+    grantPluginIds.length > 0 && !isPluginOnly && (plan.id === "pro" || plan.id === "enterprise");
 
-  // Plugins: keys are idempotent via (source_payment_id, plugin_id) unique.
-  // Issue keys first so IPN retries always deliver even if claim already happened.
-  if (isPlugin) {
+  // Pure plugins: keys only
+  if (isPluginOnly) {
     const issued = await issuePluginKeys(db, pmt, plan, grantPluginIds);
     const productLabels = issued.map((i) => i.label);
 
@@ -427,8 +432,17 @@ export async function fulfillPayment(
           pmt.discord_id,
         );
         await grantMcPlanAccess(db, pmt.discord_id, plan);
+        if (isMcWithPlugins) {
+          const issued = await issuePluginKeys(db, pmt, plan, grantPluginIds);
+          await dmPluginKeys(pmt, plan, grantPluginIds, issued, db, opts);
+        }
         return { ok: true, already: false };
       }
+    }
+    // Already fulfilled — still ensure plugin keys for Pro/Enterprise if missing
+    if (isMcWithPlugins) {
+      const issued = await issuePluginKeys(db, pmt, plan, grantPluginIds);
+      await dmPluginKeys(pmt, plan, grantPluginIds, issued, db, opts);
     }
     return { ok: true, already: true };
   }
@@ -437,6 +451,13 @@ export async function fulfillPayment(
   const wonGrant = await tryBeginGrant(db, pmt, hoursToAdd);
   if (wonGrant) {
     await grantMcPlanAccess(db, pmt.discord_id, plan);
+  }
+
+  let pluginLabels: string[] = [];
+  if (isMcWithPlugins) {
+    const issued = await issuePluginKeys(db, pmt, plan, grantPluginIds);
+    pluginLabels = issued.map((i) => i.label);
+    await dmPluginKeys(pmt, plan, grantPluginIds, issued, db, opts);
   }
 
   const won = await claimPayment(db, pmt, opts);
@@ -455,7 +476,7 @@ export async function fulfillPayment(
       pay_address: pmt.pay_address || "",
       txid: opts?.txid || null,
       payment_id: pmt.id,
-      products: [plan.name],
+      products: pluginLabels.length ? [plan.name, ...pluginLabels] : [plan.name],
     });
   }
 

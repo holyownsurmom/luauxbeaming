@@ -48,7 +48,7 @@ VALUES
   (
     'starter',
     'Starter',
-    15.00,
+    7.00,
     1,
     150,
     30,
@@ -59,22 +59,22 @@ VALUES
   (
     'pro',
     'Pro',
-    25.00,
+    16.00,
     5,
     210,
     30,
-    '["5 concurrent bots","7 bot-hours / day","Full analytics & live console","Advanced scanner + priority queue","Fast speed","Priority Discord support"]'::jsonb,
+    '["5 concurrent bots","7 bot-hours / day","Discord Auto-Spam included","Discord Auto-Reply included","Full analytics & live console","Priority Discord support"]'::jsonb,
     2,
     'plan'
   ),
   (
     'enterprise',
     'Enterprise',
-    50.00,
+    35.00,
     20,
     420,
     30,
-    '["20 concurrent bots","14 bot-hours / day","Custom behaviors & API access","Maximum speed","Early access to features","Dedicated 1:1 support"]'::jsonb,
+    '["20 concurrent bots","14 bot-hours / day","Discord Auto-Spam included","Discord Auto-Reply included","Custom behaviors & API access","Dedicated 1:1 support"]'::jsonb,
     3,
     'plan'
   )
@@ -91,11 +91,11 @@ ON CONFLICT (id) DO UPDATE SET
 -- Hour top-ups used by purchase page (hours_1, hours_2, ...)
 INSERT INTO public.plans (id, name, price_usd, max_bots, bot_hours, duration_days, features, sort_order, kind)
 VALUES
-  ('hours_1',  '1 Bot Hour',  1.50, 0, 1,  1, '["Extra runtime"]'::jsonb, 50, 'plan'),
-  ('hours_2',  '2 Bot Hours', 3.00, 0, 2,  1, '["Extra runtime"]'::jsonb, 51, 'plan'),
-  ('hours_5',  '5 Bot Hours', 7.50, 0, 5,  1, '["Extra runtime"]'::jsonb, 52, 'plan'),
-  ('hours_10', '10 Bot Hours',15.00,0, 10, 1, '["Extra runtime"]'::jsonb, 53, 'plan'),
-  ('hours_24', '24 Bot Hours',36.00,0, 24, 1, '["Extra runtime"]'::jsonb, 54, 'plan')
+  ('hours_1',  '1 Bot Hour',  1.00, 0, 1,  1, '["Extra runtime"]'::jsonb, 50, 'plan'),
+  ('hours_2',  '2 Bot Hours', 2.00, 0, 2,  1, '["Extra runtime"]'::jsonb, 51, 'plan'),
+  ('hours_5',  '5 Bot Hours', 5.00, 0, 5,  1, '["Extra runtime"]'::jsonb, 52, 'plan'),
+  ('hours_10', '10 Bot Hours',10.00,0, 10, 1, '["Extra runtime"]'::jsonb, 53, 'plan'),
+  ('hours_24', '24 Bot Hours',24.00,0, 24, 1, '["Extra runtime"]'::jsonb, 54, 'plan')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   price_usd = EXCLUDED.price_usd,

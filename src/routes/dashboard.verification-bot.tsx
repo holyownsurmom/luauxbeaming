@@ -350,110 +350,47 @@ function VerificationBotPage() {
             ))}
           </div>
 
-          {/* Config Tab */}
           {activeTab === "config" && (
-            <div className="space-y-6 animate-tab-enter">
-              {/* Simple 3-step setup */}
-              <div className="rounded-2xl brutal-border bg-card p-5 space-y-4">
-                <div className="text-xs font-semibold uppercase tracking-widest text-primary">
-                  Simple setup (3 steps)
-                </div>
-                <ol className="space-y-3 text-sm">
-                  <li className="flex gap-3">
-                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
-                      1
-                    </span>
-                    <div className="flex-1 space-y-2">
-                      <div className="font-semibold">Invite LuauX bot to your server</div>
-                      {inviteUrl ? (
-                        <a
-                          href={inviteUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-semibold hover:opacity-90"
-                        >
-                          Invite bot <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">
-                          Invite link loading… (needs DISCORD_CLIENT_ID on server)
-                        </p>
-                      )}
-                      <p className="text-[11px] text-muted-foreground">
-                        Drag the bot role <strong>above</strong> your Verified role.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
-                      2
-                    </span>
-                    <div>
-                      <div className="font-semibold">Enable Developer Mode & copy 3 IDs</div>
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        Discord Settings → Advanced → Developer Mode. Then right-click: Server →
-                        Copy Server ID · Role → Copy Role ID · Channel → Copy Channel ID.
-                      </p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="shrink-0 h-6 w-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">
-                      3
-                    </span>
-                    <div>
-                      <div className="font-semibold">Paste IDs below → Save & Post</div>
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        No bot token. No public key. No Discord Developer Portal.
-                      </p>
-                    </div>
-                  </li>
-                </ol>
+            <div className="space-y-5">
+              <div className="rounded-lg border border-border/50 bg-card p-4 text-sm text-muted-foreground">
+                Need help? Open the <button type="button" onClick={() => setActiveTab("guide")} className="text-primary hover:underline font-medium">Guide</button> tab.
               </div>
 
-              <div className="rounded-2xl brutal-border bg-card panel-accent">
-                <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
-                  <Settings className="h-5 w-5 text-primary" />
-                  <div>
-                    <h3 className="font-semibold text-sm">Server settings</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Your bot token + public key + server IDs.
-                    </p>
-                  </div>
+              <div className="rounded-lg border border-border/50 bg-card">
+                <div className="px-4 py-3 border-b border-border/40">
+                  <h3 className="text-sm font-medium">Settings</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Bot token + server, role, and channel IDs.
+                  </p>
                 </div>
 
-                <form onSubmit={handleSave} className="p-6 space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
+                <form onSubmit={handleSave} className="p-4 space-y-3">
+                  <div className="grid md:grid-cols-2 gap-3">
                     <label className="text-xs space-y-1 md:col-span-2">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Bot Token
-                      </span>
+                      <span className="text-muted-foreground">Bot token</span>
                       <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
                         value={botToken}
                         onChange={(e) => setBotToken(e.target.value)}
-                        placeholder="Bot token from Developer Portal"
+                        placeholder="From Discord Developer Portal → Bot"
                         type="password"
                         autoComplete="off"
                         required
                       />
                     </label>
                     <label className="text-xs space-y-1 md:col-span-2">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Bot Public Key (optional — auto-filled from token)
-                      </span>
+                      <span className="text-muted-foreground">Public key (optional)</span>
                       <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
                         value={botPublicKey}
                         onChange={(e) => setBotPublicKey(e.target.value)}
-                        placeholder="Leave blank to auto-fetch from Discord"
+                        placeholder="Leave empty — we fill it from the token"
                       />
                     </label>
                     <label className="text-xs space-y-1">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Server ID
-                      </span>
+                      <span className="text-muted-foreground">Server ID</span>
                       <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
                         value={guildId}
                         onChange={(e) => setGuildId(e.target.value)}
                         placeholder="Server ID"
@@ -461,11 +398,9 @@ function VerificationBotPage() {
                       />
                     </label>
                     <label className="text-xs space-y-1">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Verified Role ID
-                      </span>
+                      <span className="text-muted-foreground">Verified role ID</span>
                       <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
                         value={verifiedRoleId}
                         onChange={(e) => setVerifiedRoleId(e.target.value)}
                         placeholder="Role ID"
@@ -473,51 +408,43 @@ function VerificationBotPage() {
                       />
                     </label>
                     <label className="text-xs space-y-1 md:col-span-2">
-                      <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                        Channel ID
-                      </span>
+                      <span className="text-muted-foreground">Channel ID</span>
                       <input
-                        className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                        className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm font-mono"
                         value={channelId}
                         onChange={(e) => setChannelId(e.target.value)}
-                        placeholder="Channel ID"
+                        placeholder="Channel for the Verify button"
                         required
                       />
                     </label>
                   </div>
 
-                  <details className="rounded-xl brutal-border bg-background/40 p-3">
-                    <summary className="text-xs font-semibold cursor-pointer">
-                      Optional: message text
+                  <details className="rounded-md border border-border/40 px-3 py-2">
+                    <summary className="text-xs cursor-pointer text-muted-foreground">
+                      Optional message text
                     </summary>
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-2 space-y-2">
                       <label className="text-xs space-y-1 block">
-                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
-                          Title
-                        </span>
+                        <span className="text-muted-foreground">Title</span>
                         <input
-                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+                          className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm"
                           value={messageTitle}
                           onChange={(e) => setMessageTitle(e.target.value)}
                         />
                       </label>
                       <label className="text-xs space-y-1 block">
-                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
-                          Description
-                        </span>
+                        <span className="text-muted-foreground">Description</span>
                         <textarea
-                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm resize-none"
+                          className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm resize-none"
                           rows={2}
                           value={messageDescription}
                           onChange={(e) => setMessageDescription(e.target.value)}
                         />
                       </label>
                       <label className="text-xs space-y-1 block">
-                        <span className="text-muted-foreground text-[10px] uppercase tracking-widest">
-                          Button text
-                        </span>
+                        <span className="text-muted-foreground">Button text</span>
                         <input
-                          className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+                          className="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm"
                           value={buttonText}
                           onChange={(e) => setButtonText(e.target.value)}
                         />
@@ -525,186 +452,160 @@ function VerificationBotPage() {
                     </div>
                   </details>
 
-                  {successMsg && (
-                    <div className="text-xs text-primary font-semibold">{successMsg}</div>
-                  )}
-                  {errorMsg && (
-                    <div className="text-xs text-destructive font-semibold">{errorMsg}</div>
-                  )}
+                  {successMsg && <div className="text-xs text-primary">{successMsg}</div>}
+                  {errorMsg && <div className="text-xs text-destructive">{errorMsg}</div>}
 
                   <button
                     type="submit"
                     disabled={saving}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
+                    className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium disabled:opacity-50"
                   >
-                    {saving ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    {saving ? "Posting…" : "Save & Post Verify button"}
+                    {saving ? "Saving…" : "Save & post Verify button"}
                   </button>
                 </form>
               </div>
             </div>
           )}
 
-          {/* Guide Tab */}
           {activeTab === "guide" && (
-            <div className="rounded-2xl brutal-border bg-card p-6 animate-tab-enter space-y-2 panel-accent">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="h-10 w-10 rounded-lg bg-primary/15 brutal-border flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-semibold">Setup Guide</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Step-by-step instructions to configure the Verification Bot.
-                  </p>
-                </div>
+            <div className="space-y-4 max-w-2xl">
+              <div>
+                <h3 className="text-base font-medium">Setup guide</h3>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Follow these steps in order. About 5 minutes.
+                </p>
               </div>
 
-              <GuideStep num={1} icon={<Globe className="h-4 w-4 text-primary" />} title="Create your Discord bot">
-                <p>
-                  Each user runs <strong>their own bot</strong> — not a shared central bot.
-                </p>
-                <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Open <InlineCode>https://discord.com/developers/applications</InlineCode></li>
-                  <li>New Application → Bot → Reset Token → copy <strong>Bot Token</strong></li>
-                  <li>Leave <strong>Interactions Endpoint URL</strong> empty</li>
-                  <li>OAuth2 → URL Generator → scopes: <InlineCode>bot</InlineCode> + <InlineCode>applications.commands</InlineCode></li>
-                  <li>Permissions: Send Messages, Embed Links, Manage Roles, View Channels, Read Message History</li>
-                  <li>Open the generated invite URL → pick your server → Authorize</li>
-                  <li>Move the bot role above your Verified role</li>
-                </ol>
-              </GuideStep>
-
-              <GuideStep num={2} icon={<Key className="h-4 w-4 text-primary" />} title="Paste Bot Token">
-                <p>
-                  In Config, paste your <strong>Bot Token</strong>, then Server / Role / Channel IDs.
-                </p>
-                <p className="mt-2 text-[11px]">
-                  Public Key is optional — leave blank to auto-fill from your token.
-                </p>
-              </GuideStep>
-
-              <GuideStep num={3} icon={<Users className="h-4 w-4 text-primary" />} title="Create a Verified Role">
-                <ol className="list-decimal list-inside space-y-1.5">
-                  <li>Open your Discord server and go to <strong className="text-foreground">Server Settings</strong></li>
-                  <li>Click <strong className="text-foreground">Roles</strong> then <strong className="text-foreground">Create Role</strong></li>
-                  <li>Name it something like <InlineCode>Verified</InlineCode></li>
-                  <li>Give it a color and set permissions as needed (e.g. access to channels)</li>
-                  <li><strong className="text-foreground">Important:</strong> The bot's role must be <strong className="text-foreground">above</strong> this role in the role list</li>
-                  <li>To get the Role ID: enable Developer Mode in Discord (Settings &gt; Advanced &gt; Developer Mode), then right-click the role and select <strong className="text-foreground">Copy Role ID</strong></li>
-                </ol>
-              </GuideStep>
-
-              <GuideStep num={4} icon={<MessageSquare className="h-4 w-4 text-primary" />} title="Choose a Verification Channel">
-                <ol className="list-decimal list-inside space-y-1.5">
-                  <li>Create or choose a channel for the verification button (e.g. <InlineCode>#verify</InlineCode>)</li>
-                  <li>Make sure the bot has <strong className="text-foreground">Send Messages</strong> and <strong className="text-foreground">Embed Links</strong> permissions in this channel</li>
-                  <li>Right-click the channel and select <strong className="text-foreground">Copy Channel ID</strong></li>
-                </ol>
-              </GuideStep>
-
-              <GuideStep num={5} icon={<ClipboardList className="h-4 w-4 text-primary" />} title="Get Your IDs (Summary)">
-                <p>At this point you should have:</p>
-                <div className="mt-2 p-3 rounded-lg bg-background/60 brutal-border space-y-2">
-                  <div className="flex items-center gap-3">
-                    <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[10px] font-bold uppercase">
-                      Guild ID
+              <ol className="space-y-3">
+                {[
+                  {
+                    t: "Create a Discord bot",
+                    b: (
+                      <>
+                        <p className="mb-2">You use <strong>your own bot</strong> (not a shared one).</p>
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                          <li>
+                            Go to{" "}
+                            <a
+                              href="https://discord.com/developers/applications"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              discord.com/developers/applications
+                            </a>
+                          </li>
+                          <li>
+                            <strong className="text-foreground">New Application</strong> → open{" "}
+                            <strong className="text-foreground">Bot</strong> →{" "}
+                            <strong className="text-foreground">Reset Token</strong> → copy the token
+                          </li>
+                          <li>
+                            Leave <strong className="text-foreground">Interactions Endpoint URL</strong> empty
+                          </li>
+                          <li>
+                            <strong className="text-foreground">OAuth2 → URL Generator</strong>: scopes{" "}
+                            <code className="text-[11px] bg-secondary/50 px-1 rounded">bot</code> +{" "}
+                            <code className="text-[11px] bg-secondary/50 px-1 rounded">applications.commands</code>
+                          </li>
+                          <li>
+                            Permissions: Send Messages, Embed Links, Manage Roles, View Channels, Read Message History
+                          </li>
+                          <li>Open the invite link → pick your server → Authorize</li>
+                        </ol>
+                      </>
+                    ),
+                  },
+                  {
+                    t: "Turn on Developer Mode",
+                    b: (
+                      <p className="text-muted-foreground">
+                        Discord app → <strong className="text-foreground">User Settings → Advanced → Developer Mode</strong> (on).
+                        This lets you copy Server / Role / Channel IDs.
+                      </p>
+                    ),
+                  },
+                  {
+                    t: "Make a Verified role",
+                    b: (
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>Server Settings → Roles → Create Role (e.g. <code className="text-[11px] bg-secondary/50 px-1 rounded">Verified</code>)</li>
+                        <li>
+                          Put the <strong className="text-foreground">bot’s role above</strong> this role
+                        </li>
+                        <li>Right-click the role → <strong className="text-foreground">Copy Role ID</strong></li>
+                      </ol>
+                    ),
+                  },
+                  {
+                    t: "Pick a verify channel",
+                    b: (
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>Use or create a channel (e.g. #verify)</li>
+                        <li>Bot needs Send Messages + Embed Links there</li>
+                        <li>Right-click channel → <strong className="text-foreground">Copy Channel ID</strong></li>
+                        <li>Right-click server name → <strong className="text-foreground">Copy Server ID</strong></li>
+                      </ol>
+                    ),
+                  },
+                  {
+                    t: "Fill Config and save",
+                    b: (
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>
+                          Open the{" "}
+                          <button type="button" onClick={() => setActiveTab("config")} className="text-primary hover:underline font-medium">
+                            Config
+                          </button>{" "}
+                          tab
+                        </li>
+                        <li>Paste bot token, Server ID, Role ID, Channel ID</li>
+                        <li>Public key: leave blank (auto)</li>
+                        <li>
+                          Click <strong className="text-foreground">Save & post Verify button</strong>
+                        </li>
+                      </ol>
+                    ),
+                  },
+                  {
+                    t: "Test it",
+                    b: (
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>In Discord, click <strong className="text-foreground">Verify</strong></li>
+                        <li>Enter Minecraft username + Microsoft email</li>
+                        <li>Enter the code Microsoft sends to that email</li>
+                        <li>
+                          When done, check{" "}
+                          <button type="button" onClick={() => setActiveTab("accounts")} className="text-primary hover:underline font-medium">
+                            Accounts
+                          </button>{" "}
+                          for credentials (not in Discord chat)
+                        </li>
+                      </ol>
+                    ),
+                  },
+                ].map((step, i) => (
+                  <li
+                    key={step.t}
+                    className="rounded-lg border border-border/50 bg-card p-4 list-none flex gap-3"
+                  >
+                    <span className="shrink-0 h-7 w-7 rounded-full bg-secondary/60 text-sm font-medium flex items-center justify-center">
+                      {i + 1}
                     </span>
-                    <span className="text-muted-foreground">Right-click server icon &gt; Copy Server ID</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[10px] font-bold uppercase">
-                      Role ID
-                    </span>
-                    <span className="text-muted-foreground">Right-click role &gt; Copy Role ID</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[10px] font-bold uppercase">
-                      Channel ID
-                    </span>
-                    <span className="text-muted-foreground">Right-click channel &gt; Copy Channel ID</span>
-                  </div>
-                </div>
-                <p>Enable Developer Mode in Discord (Settings &gt; Advanced &gt; Developer Mode) to make the Copy ID options appear.</p>
-              </GuideStep>
+                    <div className="min-w-0 flex-1 text-sm">
+                      <div className="font-medium mb-1.5">{step.t}</div>
+                      {step.b}
+                    </div>
+                  </li>
+                ))}
+              </ol>
 
-              <GuideStep num={6} icon={<Server className="h-4 w-4 text-primary" />} title="Configure in LuauX Dashboard">
-                <ol className="list-decimal list-inside space-y-1.5">
-                  <li>Go to the <strong className="text-foreground">Configuration</strong> tab above</li>
-                  <li>Paste your <strong className="text-foreground">Guild ID</strong>, <strong className="text-foreground">Verified Role ID</strong>, and <strong className="text-foreground">Channel ID</strong></li>
-                  <li>Customize the embed title, description, and button text if desired</li>
-                  <li>Click <strong className="text-foreground">Save &amp; Post Verification Button</strong></li>
-                </ol>
-                <p>This will save your settings and post the verification embed to your channel.</p>
-              </GuideStep>
-
-              <GuideStep num={7} icon={<ShieldCheck className="h-4 w-4 text-primary" />} title="Test Verify">
-                <p>Once configured, test the full flow:</p>
-                <ol className="list-decimal list-inside space-y-1.5 mt-2">
-                  <li>Go to your verification channel and click the <strong className="text-foreground">Verify</strong> button</li>
-                  <li>A modal appears — enter your <strong className="text-foreground">Minecraft username</strong> and <strong className="text-foreground">email</strong> (the email linked to your MC account)</li>
-                  <li>The bot sends an OTP code to your security email — check your inbox</li>
-                  <li>A second modal appears — enter the <strong className="text-foreground">6-digit code</strong></li>
-                  <li>The bot auto-secures the account: removes 2FA, changes email &amp; password, generates a recovery code</li>
-                  <li>The bot assigns the Verified role and posts a simple success message (no secrets in Discord)</li>
-                  <li>Full credentials appear only in your LuauX <strong className="text-foreground">Secured Accounts</strong> tab</li>
-                </ol>
-                <div className="mt-4 p-3 rounded-lg bg-background/60 brutal-border">
-                  <p className="text-[11px] font-semibold text-foreground mb-1">What the bot does to your account:</p>
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Removes 2FA authentication</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Changes security email</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Resets password</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Generates recovery code</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Removes all proofs/services</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Check className="h-3 w-3 text-primary" />
-                      <span>Logs out all sessions</span>
-                    </div>
-                  </div>
-                </div>
-              </GuideStep>
-
-              <div className="mt-6 p-4 rounded-lg bg-secondary/30 brutal-border">
-                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-primary" /> Important Notes
-                </h4>
-                <ul className="space-y-1.5 text-xs text-muted-foreground">
-                  <li className="flex gap-2">
-                    <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    The bot uses disposable email accounts for security email changes — your real email is not stored
-                  </li>
-                  <li className="flex gap-2">
-                    <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    Credentials are <strong className="text-foreground">never</strong> posted in Discord channels or DMs — only in the dashboard
-                  </li>
-                  <li className="flex gap-2">
-                    <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    Open the <strong className="text-foreground">Secured Accounts</strong> tab to view email, password, and recovery code
-                  </li>
-                  <li className="flex gap-2">
-                    <ChevronRight className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-                    The verification license costs <strong className="text-foreground">$10/month</strong> (LTC/SOL). Lifetime only via admin-issued keys
-                  </li>
+              <div className="rounded-lg border border-border/50 bg-card p-4 text-sm space-y-2">
+                <div className="font-medium">Good to know</div>
+                <ul className="text-muted-foreground space-y-1 text-xs list-disc list-inside">
+                  <li>Passwords and recovery codes only show in Accounts — never in Discord.</li>
+                  <li>Each secure creates a recovery mailbox you can open from Accounts.</li>
+                  <li>Bot must stay online (worker running) for Verify clicks to work.</li>
                 </ul>
               </div>
             </div>

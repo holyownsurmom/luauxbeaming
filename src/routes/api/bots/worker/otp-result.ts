@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/bots/worker/otp-result")({
         const client = db();
 
         if (body.ok) {
-          const { error } = await client
+          const { data, error } = await client
             .from("verification_sessions")
             .update({
               status: "otp_sent",
@@ -38,29 +38,33 @@ export const Route = createFileRoute("/api/bots/worker/otp-result")({
               flow_token: body.proof_id || undefined,
             })
             .eq("id", body.session_id)
-            .in("status", ["securing", "pending"]);
+            .in("status", ["securing", "pending"])
+            .select("id")
+            .maybeSingle();
 
           if (error) {
             console.error("[otp-result] success update failed:", error.message);
             return Response.json({ error: error.message }, { status: 500 });
           }
-          return Response.json({ ok: true });
+          return Response.json({ ok: true, updated: !!data });
         }
 
-        const { error } = await client
+        const { data, error } = await client
           .from("verification_sessions")
           .update({
             status: "failed",
             error_message: (body.error || "OTP send failed").slice(0, 500),
           })
           .eq("id", body.session_id)
-          .in("status", ["securing", "pending"]);
+          .in("status", ["securing", "pending"])
+          .select("id")
+          .maybeSingle();
 
         if (error) {
           console.error("[otp-result] fail update failed:", error.message);
           return Response.json({ error: error.message }, { status: 500 });
         }
-        return Response.json({ ok: true });
+        return Response.json({ ok: true, updated: !!data });
       },
     },
   },

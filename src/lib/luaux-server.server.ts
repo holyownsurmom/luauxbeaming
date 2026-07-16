@@ -115,9 +115,18 @@ export function redactJobConfig(config: unknown): Record<string, unknown> {
     "botToken",
     "bot_token",
     "accessToken",
+    "access_token",
+    "refreshToken",
+    "refresh_token",
     "password",
     "flowToken",
+    "flow_token",
     "code",
+    "proof_id",
+    "proofId",
+    "mc_ssid",
+    "new_password",
+    "new_recovery_code",
   ];
   for (const k of secretKeys) {
     if (k in c && c[k]) c[k] = "[redacted]";

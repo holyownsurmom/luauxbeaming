@@ -56,26 +56,6 @@ export const Route = createFileRoute("/")({
             { "@type": "Offer", name: "Pro", price: "25", priceCurrency: "USD", description: "5 bots, 7 hours/day" },
             { "@type": "Offer", name: "Enterprise", price: "50", priceCurrency: "USD", description: "20 bots, 14 hours/day" },
           ],
-          aggregateRating: {
-            "@type": "AggregateRating",
-            ratingValue: "4.8",
-            ratingCount: "120",
-            bestRating: "5",
-          },
-          review: [
-            {
-              "@type": "Review",
-              reviewBody: "went from beaming manually for hours to having 12 bots running while i sleep. its unfair.",
-              author: { "@type": "Person", name: "@prinsi_" },
-              reviewRating: { "@type": "Rating", ratingValue: "5" },
-            },
-            {
-              "@type": "Review",
-              reviewBody: "excellent. can recommend to anyone tired of manual beams. setup took me 4 minutes.",
-              author: { "@type": "Person", name: "@cpvpary" },
-              reviewRating: { "@type": "Rating", ratingValue: "5" },
-            },
-          ],
         }),
       },
     ],
@@ -589,7 +569,7 @@ function Index() {
             Simple. Transparent. <span className="text-primary">Crypto.</span>
           </h2>
           <p className="mt-5 font-semibold text-muted-foreground">
-            Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.
+            Pay monthly with crypto. Cancel anytime.
           </p>
         </div>
 
@@ -760,7 +740,7 @@ function Index() {
               Continue with Discord <ArrowRight className="h-4 w-4" />
             </button>
             <div className="mt-5 text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-              No credit card · 24h free trial
+              Crypto payments · Discord login
             </div>
           </div>
         </div>
@@ -790,14 +770,11 @@ function Index() {
           >
             Telegram
           </a>
-          <a href="#" className="hover:text-primary transition-colors duration-200">
-            Docs
+          <a href="#features" className="hover:text-primary transition-colors duration-200">
+            Features
           </a>
-          <a href="#" className="hover:text-primary transition-colors duration-200">
-            Status
-          </a>
-          <a href="#" className="hover:text-primary transition-colors duration-200">
-            Terms
+          <a href="#pricing" className="hover:text-primary transition-colors duration-200">
+            Pricing
           </a>
         </div>
       </footer>

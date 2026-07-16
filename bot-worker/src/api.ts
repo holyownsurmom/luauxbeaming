@@ -1,4 +1,4 @@
-const SITE_URL = process.env.SITE_URL!;
+const SITE_URL = (process.env.SITE_URL || "").replace(/\/+$/, "");
 const WORKER_SECRET = process.env.WORKER_SECRET!;
 /** Single source of truth — index.ts must use the same value via env WORKER_ID */
 export const WORKER_ID = process.env.WORKER_ID || "worker-1";
@@ -94,8 +94,20 @@ export async function fetchPresenceTokens(): Promise<
       method: "GET",
       headers,
     });
-    if (!res.ok) return [];
-    const data = await res.json();
+    if (!res.ok) {
+      console.error(`[worker] fetchPresenceTokens HTTP ${res.status}`);
+      return [];
+    }
+    const text = await res.text();
+    let data: { bots?: Array<{ bot_token: string; guild_id: string; label?: string }> };
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error(
+        `[worker] fetchPresenceTokens non-json (ct=${res.headers.get("content-type") || "?"}): ${text.slice(0, 80)}`,
+      );
+      return [];
+    }
     return data.bots ?? [];
   } catch (e) {
     console.error("[worker] fetchPresenceTokens failed:", e);

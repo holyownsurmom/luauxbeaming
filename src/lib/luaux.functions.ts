@@ -654,10 +654,15 @@ export const getVerificationSettings = createServerFn({ method: "GET" }).handler
   const user = await requireUser();
   const { data } = await admin()
     .from("verification_settings")
-    .select("*")
+    .select(
+      "discord_id, guild_id, verified_role_id, channel_id, message_title, message_description, button_text, bot_public_key, last_message_id, bot_token",
+    )
     .eq("discord_id", user.id)
     .maybeSingle();
-  return data;
+  if (!data) return null;
+  const hasToken = typeof data.bot_token === "string" && data.bot_token.trim().length > 20;
+  const { bot_token: _t, ...rest } = data as Record<string, unknown> & { bot_token?: string | null };
+  return { ...rest, has_bot_token: hasToken, bot_token: hasToken ? "••••••••" : "" };
 });
 
 export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(async () => {
@@ -682,7 +687,7 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
         message_title: z.string().min(1).max(100),
         message_description: z.string().min(1).max(2000),
         button_text: z.string().min(1).max(50),
-        bot_token: z.string().min(20).max(200),
+        bot_token: z.string().max(200).optional().default(""),
         // Optional — we auto-fetch verify_key from Discord when possible
         bot_public_key: z.string().max(128).optional().default(""),
       })
@@ -707,7 +712,18 @@ export const saveVerificationSettings = createServerFn({ method: "POST" })
       throw new Error("No active Verification Bot license — purchase or redeem a key first");
     }
 
-    const botTokenToUse = data.bot_token.trim();
+    let botTokenToUse = data.bot_token.trim();
+    // Masked placeholder or empty → keep existing token on file
+    if (!botTokenToUse || botTokenToUse.includes("•") || botTokenToUse.length < 20) {
+      const { data: existing } = await db
+        .from("verification_settings")
+        .select("bot_token")
+        .eq("discord_id", user.id)
+        .maybeSingle();
+      const prev = typeof existing?.bot_token === "string" ? existing.bot_token.trim() : "";
+      if (prev.length >= 20) botTokenToUse = prev;
+      else throw new Error("Bot Token is required");
+    }
     let botPublicKey = (data.bot_public_key || "")
       .replace(/\s+/g, "")
       .replace(/^0x/i, "")

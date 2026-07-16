@@ -9,7 +9,7 @@ const GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json";
 // Guilds + no privileged intents needed for INTERACTION_CREATE
 const INTENTS = 1; // GUILDS
 const MAX_RECONNECT_MS = 60_000;
-const SITE_URL = process.env.SITE_URL || "";
+const SITE_URL = (process.env.SITE_URL || "").replace(/\/+$/, "");
 const WORKER_SECRET = process.env.WORKER_SECRET || "";
 
 type PresenceBot = {
@@ -343,7 +343,7 @@ async function handleInteraction(bot: PresenceBot, d: Record<string, unknown>) {
       await editInteraction(appId, token, {
         embeds: [
           successEmbed(
-            "✅ Code accepted! Securing your account (30–90s). Results post in this channel when done.",
+            "✅ Code accepted! Securing your account (1–3 min). Results post in this channel when done.",
           ),
         ],
         components: [],

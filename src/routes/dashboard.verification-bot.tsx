@@ -149,6 +149,7 @@ function VerificationBotPage() {
             message_description: string;
             button_text: string;
             bot_token?: string | null;
+            has_bot_token?: boolean;
             bot_public_key?: string | null;
           };
           setGuildId(settings.guild_id || "");
@@ -160,7 +161,7 @@ function VerificationBotPage() {
               "Click the button below to verify your account and gain access to the server.",
           );
           setButtonText(settings.button_text || "Verify");
-          setBotToken(settings.bot_token || "");
+          setBotToken(settings.has_bot_token ? "••••••••" : "");
           setBotPublicKey(settings.bot_public_key || "");
         }
       })
@@ -213,6 +214,7 @@ function VerificationBotPage() {
     }
 
     try {
+      const tokenToSend = botToken.includes("•") ? "" : botToken.trim();
       await saveSettings({
         data: {
           guild_id: guildId.trim(),
@@ -223,7 +225,7 @@ function VerificationBotPage() {
             messageDescription.trim() ||
             "Click the button below to verify your account and gain access to the server.",
           button_text: buttonText.trim() || "Verify",
-          bot_token: botToken.trim(),
+          bot_token: tokenToSend,
           bot_public_key: botPublicKey.trim(),
         },
       });

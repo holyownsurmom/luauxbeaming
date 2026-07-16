@@ -20,7 +20,19 @@ export const Route = createFileRoute("/api/bots/worker/otp-pending")({
         const client = db();
         const limit = Math.min(Math.max(body.limit || 3, 1), 10);
 
-        // Claim oldest pending OTP-send sessions (status=pending, no error yet)
+        // Reclaim stuck OTP claims (worker died mid-send)
+        const stuckBefore = new Date(Date.now() - 3 * 60_000).toISOString();
+        await client
+          .from("verification_sessions")
+          .update({
+            status: "failed",
+            error_message: "OTP send timed out (stuck securing) — try again",
+          })
+          .eq("status", "securing")
+          .eq("error_message", "otp_sending")
+          .lt("created_at", stuckBefore);
+
+        // Claim oldest pending OTP-send sessions (HTTP path only; gateway uses securing+gateway_otp)
         const { data: pending, error: listErr } = await client
           .from("verification_sessions")
           .select(

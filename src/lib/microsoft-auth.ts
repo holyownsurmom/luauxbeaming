@@ -360,8 +360,7 @@ export async function sendOtt(
       }),
     });
 
-    const body = await otpRes.text().catch(() => "");
-    console.log("[sendOtt] Status:", otpRes.status, body.slice(0, 200));
+    await otpRes.text().catch(() => "");
     return otpRes.status === 200;
   } catch (e) {
     console.error("[sendOtt] Error:", e);

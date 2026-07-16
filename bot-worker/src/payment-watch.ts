@@ -2,7 +2,7 @@
  * Watch fixed LTC/SOL wallets for matching invoice amounts and auto-confirm.
  */
 
-const SITE_URL = process.env.SITE_URL!;
+const SITE_URL = (process.env.SITE_URL || "").replace(/\/+$/, "");
 const WORKER_SECRET = process.env.WORKER_SECRET!;
 const SOL_RPC =
   process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
@@ -37,7 +37,15 @@ async function fetchPending(): Promise<PendingPayment[]> {
     headers,
   });
   if (!res.ok) throw new Error(`payments-pending ${res.status}`);
-  const data = (await res.json()) as { payments?: PendingPayment[] };
+  const text = await res.text();
+  let data: { payments?: PendingPayment[] };
+  try {
+    data = JSON.parse(text) as { payments?: PendingPayment[] };
+  } catch {
+    throw new Error(
+      `payments-pending non-json (ct=${res.headers.get("content-type") || "?"}): ${text.slice(0, 80)}`,
+    );
+  }
   return data.payments ?? [];
 }
 

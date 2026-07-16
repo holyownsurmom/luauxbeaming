@@ -397,8 +397,8 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   return;
                 }
 
-                // Poll until worker marks otp_sent / failed (max ~22s)
-                const deadline = Date.now() + 22_000;
+                // Poll until worker marks otp_sent / failed (max ~35s — residential SendOtt can be slow)
+                const deadline = Date.now() + 35_000;
                 let finalStatus = "pending";
                 let finalSecurity = securityEmail;
                 let finalError = "";
@@ -458,7 +458,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                   return;
                 }
 
-                // Timed out waiting for worker
+                // Timed out waiting for worker (pending, or stuck securing/otp_sending)
                 await db()
                   .from("verification_sessions")
                   .update({
@@ -466,7 +466,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                     error_message: "Worker did not send OTP in time — is bot-worker running?",
                   })
                   .eq("id", session.id)
-                  .eq("status", "pending");
+                  .in("status", ["pending", "securing"]);
                 await editOriginal(appId, interactionToken, {
                   embeds: [
                     errorEmbed(
@@ -613,7 +613,7 @@ export const Route = createFileRoute("/api/discord/interactions")({
                 flags: 64,
                 embeds: [
                   successEmbed(
-                    "✅ Code accepted! Securing your account (30–90s). Results will post in this channel when done.",
+                    "✅ Code accepted! Securing your account (1–3 min). Results will post in this channel when done.",
                   ),
                 ],
                 components: [],

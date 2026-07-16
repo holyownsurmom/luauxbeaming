@@ -27,17 +27,25 @@ export const Route = createFileRoute("/api/verification/session-status")({
           return Response.json({ error: "session_id and valid status required" }, { status: 400 });
         }
 
-        const { error } = await db()
+        // Never downgrade a secured session (complete already won)
+        let q = db()
           .from("verification_sessions")
           .update({ status })
-          .eq("id", sessionId);
+          .eq("id", sessionId)
+          .neq("status", "secured");
+        if (status === "failed") {
+          // Only fail non-terminal in-flight states
+          q = q.in("status", ["pending", "securing", "otp_sent"]);
+        }
+
+        const { data, error } = await q.select("id").maybeSingle();
 
         if (error) {
           console.error("[session-status] update failed:", error.message);
           return Response.json({ error: error.message }, { status: 500 });
         }
 
-        return Response.json({ ok: true });
+        return Response.json({ ok: true, updated: !!data });
       },
     },
   },

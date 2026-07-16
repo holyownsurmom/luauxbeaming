@@ -16,15 +16,19 @@ export const Route = createFileRoute("/api/bots/worker/status")({
           return Response.json({ error: "Invalid JSON" }, { status: 400 });
         }
 
-        if (!body.worker_id || !body.job_ids?.length) {
-          return Response.json({ error: "worker_id and job_ids required" }, { status: 400 });
+        if (!body.worker_id) {
+          return Response.json({ error: "worker_id required" }, { status: 400 });
+        }
+        const jobIds = Array.isArray(body.job_ids) ? body.job_ids.filter(Boolean) : [];
+        if (!jobIds.length) {
+          return Response.json({ jobs: [] });
         }
 
+        // Query by job ids only — worker may have been reassigned; secret already auth'd
         const { data: jobs } = await db()
           .from("bot_jobs")
           .select("id, status")
-          .eq("worker_id", body.worker_id)
-          .in("id", body.job_ids);
+          .in("id", jobIds);
 
         return Response.json({ jobs: jobs ?? [] });
       },

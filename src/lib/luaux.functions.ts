@@ -676,25 +676,190 @@ export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(asyn
     .eq("discord_id", user.id)
     .order("secured_at", { ascending: false })
     .limit(50);
+
+  const mapRow = (row: Record<string, unknown>) => {
+    const mailboxEmail =
+      (typeof row.mailbox_email === "string" && row.mailbox_email) ||
+      (typeof row.new_email === "string" && row.new_email) ||
+      null;
+    const hasMailbox = !!(
+      mailboxEmail &&
+      typeof row.mailbox_password === "string" &&
+      row.mailbox_password.length > 0
+    );
+    // Never send mailbox_password to the browser — inbox is opened server-side
+    const { mailbox_password: _pw, ...rest } = row;
+    return {
+      ...rest,
+      mailbox_email: mailboxEmail,
+      has_mailbox: hasMailbox,
+    };
+  };
+
   if (error) {
-    // Older schema without mailbox_* columns
     const { data: fallback } = await admin()
       .from("secured_accounts")
       .select("*")
       .eq("discord_id", user.id)
       .order("secured_at", { ascending: false })
       .limit(50);
-    return (fallback ?? []).map((row) => ({
-      ...row,
-      mailbox_email: (row as { mailbox_email?: string }).mailbox_email || (row as { new_email?: string }).new_email || null,
-      mailbox_password: (row as { mailbox_password?: string }).mailbox_password || null,
-    }));
+    return (fallback ?? []).map((row) => mapRow(row as Record<string, unknown>));
   }
-  return (data ?? []).map((row) => ({
-    ...row,
-    mailbox_email: row.mailbox_email || row.new_email || null,
-  }));
+  return (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
 });
+
+/** Open recovery mailbox inbox (IMAP) for a secured account — owner only */
+export const getSecuredMailboxInbox = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z.object({ secured_id: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin, envStr } = await import("./luaux-server.server");
+    const user = await requireUser();
+    const db = admin();
+
+    const { data: row, error } = await db
+      .from("secured_accounts")
+      .select(
+        "id, discord_id, mailbox_email, mailbox_password, mailbox_imap_host, mailbox_provider, new_email",
+      )
+      .eq("id", data.secured_id)
+      .eq("discord_id", user.id)
+      .maybeSingle();
+
+    if (error || !row) throw new Error("Secured account not found");
+
+    const email =
+      (typeof row.mailbox_email === "string" && row.mailbox_email.trim()) ||
+      (typeof row.new_email === "string" && row.new_email.trim()) ||
+      "";
+    const password =
+      typeof row.mailbox_password === "string" ? row.mailbox_password.trim() : "";
+    if (!email || !password) {
+      throw new Error(
+        "No recovery mailbox credentials stored for this account. Re-secure after the latest worker update.",
+      );
+    }
+
+    const host =
+      (typeof row.mailbox_imap_host === "string" && row.mailbox_imap_host.trim()) ||
+      envStr("MAILCOW_IMAP_HOST") ||
+      envStr("MAIL_IMAP_HOST") ||
+      "mail.luaux.wtf";
+    const port = parseInt(envStr("MAILCOW_IMAP_PORT") || envStr("MAIL_IMAP_PORT") || "993", 10) || 993;
+    // Default insecure for Mailcow self-signed until LE; set MAIL_TLS_INSECURE=0 after real certs
+    const tlsEnv = (envStr("MAIL_TLS_INSECURE") || "1").trim();
+    const tlsInsecure = !/^(0|false|no)$/i.test(tlsEnv);
+
+    const { ImapFlow } = await import("imapflow");
+    const client = new ImapFlow({
+      host,
+      port,
+      secure: true,
+      auth: { user: email, pass: password },
+      logger: false,
+      tls: { rejectUnauthorized: !tlsInsecure },
+    });
+
+    type MailMsg = {
+      uid: number;
+      from: string;
+      subject: string;
+      date: string | null;
+      snippet: string;
+      body: string;
+    };
+    const messages: MailMsg[] = [];
+
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock("INBOX");
+      try {
+        const mb = client.mailbox;
+        const exists = mb && typeof mb === "object" ? Number(mb.exists || 0) : 0;
+        if (exists > 0) {
+          const from = Math.max(1, exists - 24);
+          for await (const msg of client.fetch(`${from}:*`, {
+            uid: true,
+            envelope: true,
+            source: true,
+          })) {
+            const source = msg.source?.toString("utf8") || "";
+            const env = msg.envelope;
+            const fromAddr =
+              env?.from
+                ?.map((a) =>
+                  a.address
+                    ? `${a.name ? a.name + " " : ""}${a.address}`
+                    : a.name || "",
+                )
+                .filter(Boolean)
+                .join(", ") ||
+              source.match(/^From:\s*(.+)$/im)?.[1]?.trim() ||
+              "unknown";
+            const subject =
+              env?.subject ||
+              source.match(/^Subject:\s*(.+)$/im)?.[1]?.trim() ||
+              "(no subject)";
+            const date =
+              env?.date?.toISOString?.() ||
+              source.match(/^Date:\s*(.+)$/im)?.[1]?.trim() ||
+              null;
+
+            // Prefer text body; strip headers
+            let body = source;
+            const parts = source.split(/\r?\n\r?\n/);
+            if (parts.length > 1) body = parts.slice(1).join("\n\n");
+            body = body
+              .replace(/=\r?\n/g, "")
+              .replace(/=([0-9A-F]{2})/gi, (_, h) =>
+                String.fromCharCode(parseInt(h, 16)),
+              )
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 4000);
+            const snippet = body.slice(0, 180);
+
+            messages.push({
+              uid: msg.uid,
+              from: fromAddr.slice(0, 200),
+              subject: String(subject).slice(0, 300),
+              date,
+              snippet,
+              body,
+            });
+          }
+        }
+      } finally {
+        lock.release();
+      }
+    } catch (e) {
+      throw new Error(
+        `Mailbox open failed: ${e instanceof Error ? e.message : String(e)}. Check Mailcow IMAP from Vercel (MAIL_TLS_INSECURE=1).`,
+      );
+    } finally {
+      try {
+        await client.logout();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    messages.sort((a, b) => {
+      const ta = a.date ? new Date(a.date).getTime() : 0;
+      const tb = b.date ? new Date(b.date).getTime() : 0;
+      return tb - ta;
+    });
+
+    return {
+      email,
+      host,
+      provider: (row.mailbox_provider as string) || "mailcow",
+      count: messages.length,
+      messages: messages.slice(0, 25),
+    };
+  });
 
 export const saveVerificationSettings = createServerFn({ method: "POST" })
   .inputValidator((input) =>

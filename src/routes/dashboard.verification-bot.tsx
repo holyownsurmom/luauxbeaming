@@ -15,9 +15,28 @@ import {
   getSecuredMailboxInbox,
   resendKey,
   getVerificationBotInvite,
+  createInvoice,
+  getPayment,
 } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { adminBypassesPaywall, getAdminShowPaywalls } from "@/lib/admin-preview";
+
+const PAY_CURRENCIES = [
+  { code: "ltc" as const, label: "Litecoin (LTC)" },
+  { code: "sol" as const, label: "Solana (SOL)" },
+];
+
+type PaymentState = {
+  id: string;
+  pay_address: string;
+  pay_amount: number;
+  pay_currency: string;
+  status: string;
+  confirmations: number;
+  required_confirmations: number;
+  fulfilled_at?: string | null;
+  price_amount?: number;
+};
 
 export const Route = createFileRoute("/dashboard/verification-bot")({
   head: () => ({ meta: [{ title: "Verification Bot — LuauX" }] }),
@@ -99,6 +118,8 @@ function VerificationBotPage() {
   const saveSettings = useServerFn(saveVerificationSettings);
   const fetchSecuredAccounts = useServerFn(getSecuredAccounts);
   const openMailboxInbox = useServerFn(getSecuredMailboxInbox);
+  const invoice = useServerFn(createInvoice);
+  const getPay = useServerFn(getPayment);
 
   const [keys, setKeys] = useState<KeyRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -106,6 +127,10 @@ function VerificationBotPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [securedAccounts, setSecuredAccounts] = useState<Array<Record<string, unknown>>>([]);
+  const [payCurrency, setPayCurrency] = useState<"ltc" | "sol">("ltc");
+  const [creatingPay, setCreatingPay] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payment, setPayment] = useState<PaymentState | null>(null);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [mailboxOpenId, setMailboxOpenId] = useState<string | null>(null);
   const [mailboxLoading, setMailboxLoading] = useState(false);
@@ -200,6 +225,24 @@ function VerificationBotPage() {
     };
   }, []);
 
+  // Poll verification license payment until key is issued
+  useEffect(() => {
+    if (!payment || payment.fulfilled_at || payment.status === "finished") return;
+    const t = setInterval(async () => {
+      try {
+        const p = (await getPay({ data: { id: payment.id } })) as PaymentState;
+        setPayment(p);
+        if (p.fulfilled_at || p.status === "finished") {
+          clearInterval(t);
+          fetchKeys().then((k) => setKeys(k as KeyRow[]));
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 8000);
+    return () => clearInterval(t);
+  }, [payment, getPay, fetchKeys]);
+
   const activeKey = adminBypassesPaywall(isAdmin)
     ? { key: "ADMIN", expires_at: "2099-12-31", created_at: "" }
     : keys.find((k) => new Date(k.expires_at).getTime() > Date.now());
@@ -209,6 +252,28 @@ function VerificationBotPage() {
     await navigator.clipboard.writeText(v);
     setCopied(v);
     setTimeout(() => setCopied(null), 1500);
+  };
+
+  const startVerificationCheckout = async () => {
+    setPayError(null);
+    setCreatingPay(true);
+    try {
+      const p = (await invoice({
+        data: {
+          plan_id: "verification",
+          pay_currency: payCurrency,
+        },
+      })) as PaymentState;
+      if (p.pay_currency === "admin" && p.status === "finished") {
+        fetchKeys().then((k) => setKeys(k as KeyRow[]));
+        return;
+      }
+      setPayment(p);
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Failed to create invoice");
+    } finally {
+      setCreatingPay(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -311,17 +376,120 @@ function VerificationBotPage() {
       )}
 
       {!activeKey && !isAdmin && (
-        <div className="rounded-xl border border-border/60 bg-card p-6 text-center space-y-3">
-          <h2 className="text-lg font-semibold">No license yet</h2>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Buy a plan or redeem a key in Settings to use Verification Bot.
-          </p>
-          <a
-            href="/dashboard/purchase"
-            className="inline-flex rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
-          >
-            Purchase
-          </a>
+        <div className="max-w-md mx-auto rounded-xl border border-border/60 bg-card p-6 space-y-5">
+          <div className="text-center space-y-1">
+            <h2 className="text-lg font-semibold">Verification Bot</h2>
+            <p className="text-sm text-muted-foreground">
+              Monthly license · verify members and secure MC accounts
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border/50 bg-secondary/20 p-4 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-3xl font-semibold tracking-tight">$10</div>
+              <div className="text-xs text-muted-foreground mt-0.5">per 30 days</div>
+            </div>
+            <div className="text-[11px] text-muted-foreground">LTC / SOL</div>
+          </div>
+
+          <ul className="text-sm text-muted-foreground space-y-1.5">
+            {[
+              "Your own Discord bot",
+              "Member verify + secure flow",
+              "Credentials in dashboard only",
+              "Recovery mailbox inbox on-site",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-2">
+                <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+
+          {payment && !(payment.fulfilled_at || payment.status === "finished") ? (
+            <div className="space-y-3 rounded-lg border border-border/50 p-4">
+              <div className="text-sm font-medium">Pay with crypto</div>
+              <div className="text-xs text-muted-foreground">
+                Send exactly{" "}
+                <strong className="text-foreground font-mono">
+                  {payment.pay_amount} {payment.pay_currency.toUpperCase()}
+                </strong>
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Address
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono break-all rounded-md bg-background border border-border/50 px-2 py-1.5">
+                    {payment.pay_address}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => copy(payment.pay_address)}
+                    className="text-xs text-primary shrink-0"
+                  >
+                    {copied === payment.pay_address ? "Copied" : "Copy"}
+                  </button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Status: {payment.status}
+                {typeof payment.confirmations === "number"
+                  ? ` · ${payment.confirmations}/${payment.required_confirmations || 1} conf`
+                  : ""}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPayment(null)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel / change coin
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
+                  Pay with
+                </div>
+                <div className="flex gap-2">
+                  {PAY_CURRENCIES.map((c) => (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => setPayCurrency(c.code)}
+                      className={`flex-1 rounded-md border px-3 py-2 text-xs font-medium ${
+                        payCurrency === c.code
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border/50 text-muted-foreground hover:bg-secondary/30"
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {payError && <p className="text-xs text-destructive">{payError}</p>}
+              <button
+                type="button"
+                disabled={creatingPay}
+                onClick={() => void startVerificationCheckout()}
+                className="w-full rounded-md bg-primary text-primary-foreground px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+              >
+                {creatingPay ? "Creating invoice…" : "Buy Verification Bot — $10"}
+              </button>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-border/40 space-y-2">
+            <p className="text-xs text-muted-foreground text-center">Or redeem a key</p>
+            <RedeemKeyForm
+              expectedPlugin="verification"
+              onSuccess={() => {
+                fetchKeys().then((k) => setKeys(k as KeyRow[]));
+              }}
+            />
+          </div>
         </div>
       )}
 

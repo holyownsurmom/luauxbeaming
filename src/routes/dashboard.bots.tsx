@@ -17,7 +17,21 @@ import {
   ChevronDown,
   ChevronUp,
   Wifi,
+  Star,
+  Bookmark,
+  List,
 } from "lucide-react";
+import {
+  BUILTIN_SERVERS,
+  addUserServer,
+  listLaunchPresets,
+  listUserServers,
+  removeLaunchPreset,
+  removeUserServer,
+  saveLaunchPreset,
+  type McLaunchPreset,
+  type McServerEntry,
+} from "@/lib/mc-presets";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
@@ -41,6 +55,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  AdminBadge,
+  BotField,
+  BotPageHeader,
+  BotPanel,
+  BotTabBar,
+  DashButton,
+  fieldControlClass,
+  fieldMonoClass,
+  PageShell,
+} from "@/components/dashboard-ui";
 
 export const Route = createFileRoute("/dashboard/bots")({
   head: () => ({ meta: [{ title: "MC Auto-Message — LuauX" }] }),
@@ -114,9 +139,81 @@ function BotsPage() {
     messages: "" as string,
     interval: "5",
   });
+  const [mcTab, setMcTab] = useState<"launch" | "presets">("launch");
+  const [userServers, setUserServers] = useState<McServerEntry[]>([]);
+  const [launchPresets, setLaunchPresets] = useState<McLaunchPreset[]>([]);
+  const [newServer, setNewServer] = useState({ label: "", host: "", port: "25565" });
+  const [presetName, setPresetName] = useState("");
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const refreshMcPresets = useCallback(() => {
+    setUserServers(listUserServers());
+    setLaunchPresets(listLaunchPresets());
+  }, []);
+
+  useEffect(() => {
+    refreshMcPresets();
+    const on = () => refreshMcPresets();
+    window.addEventListener("luaux-mc-presets", on);
+    return () => window.removeEventListener("luaux-mc-presets", on);
+  }, [refreshMcPresets]);
+
+  const applyServer = (s: { host: string; port?: number }) => {
+    setMcConfig((c) => ({
+      ...c,
+      serverHost: s.host,
+      serverPort: String(s.port && s.port > 0 ? s.port : 25565),
+    }));
+    setMcTab("launch");
+    toast.success(`Server set to ${s.host}`);
+  };
+
+  const applyPreset = (p: McLaunchPreset) => {
+    setMcConfig({
+      serverHost: p.serverHost,
+      serverPort: p.serverPort || "25565",
+      messages: p.messages,
+      interval: p.interval || "5",
+    });
+    setMcTab("launch");
+    toast.success(`Loaded “${p.name}”`);
+  };
+
+  const saveCurrentAsPreset = () => {
+    if (!mcConfig.serverHost.trim()) {
+      toast.error("Set a server first");
+      return;
+    }
+    const name = presetName.trim() || `${mcConfig.serverHost} · ${new Date().toLocaleDateString()}`;
+    saveLaunchPreset({
+      name,
+      serverHost: mcConfig.serverHost,
+      serverPort: mcConfig.serverPort,
+      messages: mcConfig.messages,
+      interval: mcConfig.interval,
+    });
+    setPresetName("");
+    refreshMcPresets();
+    toast.success("Launch preset saved");
+  };
+
+  const addServerToList = () => {
+    const host = newServer.host.trim();
+    if (!host) {
+      toast.error("Host required");
+      return;
+    }
+    addUserServer({
+      label: newServer.label.trim() || host,
+      host,
+      port: parseInt(newServer.port, 10) || 25565,
+    });
+    setNewServer({ label: "", host: "", port: "25565" });
+    refreshMcPresets();
+    toast.success("Server added to your list");
+  };
 
   const [showMCPanel, setShowMCPanel] = useState(true);
   const [pingResult, setPingResult] = useState<{
@@ -741,188 +838,278 @@ function BotsPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <div className="space-y-6 animate-page-in">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
-            MC Auto-Message
-            {isAdmin && (
-              <span className="ml-3 inline-flex items-center rounded-full border border-primary/25 bg-primary/15 text-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-widest">
-                ADMIN
-              </span>
+    <PageShell>
+      <BotPageHeader
+        title="Minecraft bots"
+        description="Server, messages, accounts."
+        badge={isAdmin ? <AdminBadge /> : null}
+        actions={
+          <>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {accounts.length}/{maxBots} slots
+            </span>
+            {runningBots.some((b) =>
+              ["pending", "running", "paused", "stopping"].includes(b.status),
+            ) && (
+              <DashButton
+                variant="danger"
+                size="sm"
+                onClick={stopAndClearAll}
+                disabled={stoppingId === "all"}
+              >
+                Stop all
+              </DashButton>
             )}
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Join any Minecraft server and auto-message with your accounts.
-          </p>
-        </div>
-        <div className="text-right text-xs">
-          <div className="text-muted-foreground uppercase tracking-widest text-[10px]">Slots</div>
-          <div className="font-mono text-lg">
-            {accounts.length} / {maxBots}
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      {/* Server Config Panel */}
-      <div className="rounded-2xl border border-border/50 bg-card/70 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setShowMCPanel(!showMCPanel)}
-          className="w-full flex items-center justify-between p-5 hover:bg-primary/[0.02] transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Globe className="h-5 w-5 text-primary" />
-            </div>
-            <div className="text-left">
-              <div className="font-semibold text-sm">Server Configuration</div>
-              <div className="text-xs text-muted-foreground">
-                {mcConfig.serverHost || "No server set"}:{mcConfig.serverPort}
-              </div>
-            </div>
-          </div>
-          {showMCPanel ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
+      <BotPanel
+        title="Server"
+        subtitle={
+          mcConfig.serverHost
+            ? `${mcConfig.serverHost}:${mcConfig.serverPort}`
+            : "not set"
+        }
+      >
+        <BotTabBar
+          value={mcTab}
+          onChange={(id) => setMcTab(id as "launch" | "presets")}
+          tabs={[
+            { id: "launch", label: "Setup" },
+            { id: "presets", label: "Presets" },
+          ]}
+        />
 
-        {showMCPanel && (
-          <div className="px-5 pb-5 space-y-4 border-t border-border/60 pt-4">
-            <div className="grid md:grid-cols-3 gap-3">
-              <label className="text-xs space-y-1 md:col-span-2">
-                <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                  Server IP
-                </span>
+        {mcTab === "launch" && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px] gap-3">
+              <BotField label="Host">
                 <input
-                  className="w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:border-primary/40"
+                  className={fieldMonoClass}
                   value={mcConfig.serverHost}
                   onChange={(e) => setMcConfig({ ...mcConfig, serverHost: e.target.value })}
                   placeholder="mc.hypixel.net"
                 />
-              </label>
-              <label className="text-xs space-y-1">
-                <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                  Port
-                </span>
+              </BotField>
+              <BotField label="Port">
                 <input
-                  className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                  className={fieldMonoClass}
                   value={mcConfig.serverPort}
                   onChange={(e) => setMcConfig({ ...mcConfig, serverPort: e.target.value })}
                   placeholder="25565"
                 />
-              </label>
+              </BotField>
             </div>
 
-            <div className="space-y-1.5">
-              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                Recommended Servers
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { host: "donutsmp.net", label: "DonutSMP" },
-                  { host: "catpvp.com", label: "CatPVP" },
-                  { host: "hugosmp.com", label: "HugoSMP" },
-                  { host: "minemen.club", label: "Minemen EU" },
-                  { host: "na.mcpvp.club", label: "MCPVP NA" },
-                  { host: "eu.mcpvp.club", label: "MCPVP EU" },
-                ].map((s) => (
+            <div className="flex flex-wrap gap-1.5">
+              {[...BUILTIN_SERVERS.slice(0, 6), ...userServers.slice(0, 4)].map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => applyServer(s)}
+                  className={`rounded-md border px-2 py-1 text-xs font-mono ${
+                    mcConfig.serverHost === s.host
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <DashButton
+                variant="secondary"
+                size="sm"
+                onClick={pingServer}
+                disabled={pinging || !mcConfig.serverHost.trim()}
+              >
+                {pinging ? "Pinging…" : "Ping"}
+              </DashButton>
+              {pingResult && (
+                <span className={`text-xs ${pingResult.online ? "text-primary" : "text-destructive"}`}>
+                  {pingResult.online
+                    ? `Online · ${pingResult.players?.online ?? "?"}/${pingResult.players?.max ?? "?"} · ${pingResult.latency ?? "?"}ms`
+                    : "Offline"}
+                </span>
+              )}
+            </div>
+
+            <BotField label="Messages (one per line)">
+              <textarea
+                className={`${fieldMonoClass} resize-y min-h-[96px]`}
+                rows={4}
+                value={mcConfig.messages}
+                onChange={(e) => setMcConfig({ ...mcConfig, messages: e.target.value })}
+                placeholder={"gg everyone\n888 to join"}
+              />
+            </BotField>
+
+            <div className="flex flex-wrap items-end gap-3">
+              <BotField label="Interval (sec)">
+                <input
+                  type="number"
+                  min="1"
+                  className={`${fieldMonoClass} w-28`}
+                  value={mcConfig.interval}
+                  onChange={(e) => setMcConfig({ ...mcConfig, interval: e.target.value })}
+                />
+              </BotField>
+              <div className="flex gap-2 flex-1 min-w-[180px]">
+                <input
+                  className={fieldControlClass}
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="Preset name"
+                />
+                <DashButton variant="secondary" size="sm" onClick={saveCurrentAsPreset}>
+                  Save
+                </DashButton>
+              </div>
+            </div>
+          </>
+        )}
+
+        {mcTab === "presets" && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">Popular</div>
+              <div className="grid sm:grid-cols-2 gap-1.5">
+                {BUILTIN_SERVERS.map((s) => (
                   <button
-                    key={s.host}
+                    key={s.id}
                     type="button"
-                    onClick={() => setMcConfig({ ...mcConfig, serverHost: s.host })}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-mono transition-all duration-200 ${
-                      mcConfig.serverHost === s.host
-                        ? "bg-primary/15 border-primary/30 text-primary"
-                        : "bg-background border-border/60 text-muted-foreground hover:border-primary/20 hover:text-foreground"
-                    }`}
+                    onClick={() => applyServer(s)}
+                    className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left hover:bg-secondary/50"
                   >
-                    {s.label}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{s.label}</div>
+                      <div className="text-xs font-mono text-muted-foreground truncate">
+                        {s.host}
+                      </div>
+                    </div>
+                    <span className="text-xs text-primary shrink-0">Use</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={pingServer}
-                disabled={pinging || !mcConfig.serverHost.trim()}
-                className="inline-flex items-center gap-2 rounded-full brutal-border bg-secondary/40 hover:bg-secondary px-4 py-2 text-xs font-semibold disabled:opacity-50"
-              >
-                {pinging ? (
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Wifi className="h-3.5 w-3.5" />
-                )}
-                {pinging ? "Pinging..." : "Ping Server"}
-              </button>
-              {pingResult && (
-                <div
-                  className={`text-xs ${pingResult.online ? "text-primary" : "text-destructive"}`}
-                >
-                  {pingResult.online ? (
-                    <>
-                      Online -- v{pingResult.version} -- {pingResult.players?.online}/
-                      {pingResult.players?.max} players
-                      {pingResult.latency ? ` -- ${pingResult.latency}ms` : ""}
-                    </>
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">Your servers</div>
+              <div className="grid sm:grid-cols-[1fr_1fr_80px_auto] gap-2">
+                <input
+                  className={fieldControlClass}
+                  placeholder="Label"
+                  value={newServer.label}
+                  onChange={(e) => setNewServer({ ...newServer, label: e.target.value })}
+                />
+                <input
+                  className={fieldMonoClass}
+                  placeholder="host"
+                  value={newServer.host}
+                  onChange={(e) => setNewServer({ ...newServer, host: e.target.value })}
+                />
+                <input
+                  className={fieldMonoClass}
+                  placeholder="port"
+                  value={newServer.port}
+                  onChange={(e) => setNewServer({ ...newServer, port: e.target.value })}
+                />
+                <DashButton size="sm" onClick={addServerToList}>
+                  Add
+                </DashButton>
+              </div>
+                  {userServers.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      No custom servers yet. Add hosts you use often.
+                    </p>
                   ) : (
-                    "Offline or unreachable"
+                    <div className="space-y-1.5">
+                      {userServers.map((s) => (
+                        <div
+                          key={s.id}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border/40 px-3 py-2"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => applyServer(s)}
+                            className="text-left min-w-0 flex-1 hover:text-primary"
+                          >
+                            <div className="text-sm font-medium truncate">{s.label}</div>
+                            <div className="text-[11px] font-mono text-muted-foreground truncate">
+                              {s.host}:{s.port}
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeUserServer(s.id);
+                              refreshMcPresets();
+                            }}
+                            className="text-destructive/80 hover:text-destructive p-1"
+                            aria-label="Remove server"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  {"error" in (pingResult ?? {}) && (
-                    <span className="text-muted-foreground ml-1">
-                      ({(pingResult as { error?: string }).error})
-                    </span>
-                  )}
+                </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">Saved presets</div>
+              {launchPresets.length === 0 ? (
+                <p className="text-xs text-muted-foreground">None yet. Save from Setup tab.</p>
+              ) : (
+                <div className="space-y-1">
+                  {launchPresets.map((p) => (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => applyPreset(p)}
+                        className="text-left min-w-0 flex-1 hover:text-primary"
+                      >
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-xs font-mono text-muted-foreground truncate">
+                          {p.serverHost} · {p.interval}s
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeLaunchPreset(p.id);
+                          refreshMcPresets();
+                        }}
+                        className="text-destructive p-1"
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-
-            <label className="text-xs space-y-1">
-              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                Messages (one per line)
-              </span>
-              <textarea
-                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono resize-none"
-                rows={4}
-                value={mcConfig.messages}
-                onChange={(e) => setMcConfig({ ...mcConfig, messages: e.target.value })}
-                placeholder={"gg everyone\n888 to join\nhello world"}
-              />
-            </label>
-
-            <label className="text-xs space-y-1">
-              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                Interval (seconds)
-              </span>
-              <input
-                type="number"
-                min="1"
-                className="w-32 rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                value={mcConfig.interval}
-                onChange={(e) => setMcConfig({ ...mcConfig, interval: e.target.value })}
-              />
-            </label>
           </div>
         )}
-      </div>
+      </BotPanel>
 
-      {/* Accounts */}
-      <div className="rounded-2xl animated-border bg-card/60 noise-texture">
-        <div className="p-4 border-b border-border/60 flex items-center justify-between">
-          <div className="text-xs uppercase tracking-widest text-muted-foreground">
-            Minecraft Accounts
-          </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            disabled={atLimit}
-            className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-1.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed btn-premium"
-          >
-            <Plus className="h-3.5 w-3.5" /> {atLimit ? "Limit reached" : "Add"}
-          </button>
-        </div>
+      <BotPanel
+        title="Accounts"
+        subtitle={`${accounts.length} / ${maxBots}`}
+        actions={
+          <DashButton size="sm" onClick={() => setShowForm(!showForm)} disabled={atLimit}>
+            {atLimit ? "Full" : "Add"}
+          </DashButton>
+        }
+        bodyClassName="!p-0 !space-y-0"
+      >
 
         {showForm && (
           <div className="p-4 border-b border-border/60 bg-secondary/20">
@@ -1183,47 +1370,43 @@ function BotsPage() {
             })}
           </ul>
         )}
-      </div>
+      </BotPanel>
 
       {/* Live Console */}
       {selectedBotId && (
-        <div className="rounded-2xl animated-border bg-card/60 p-5 space-y-3 noise-texture">
-          <div className="flex items-center justify-between">
+        <BotPanel
+          icon={MessageSquare}
+          title="Live console"
+          subtitle={activeBot?.label || selectedBotId}
+          actions={
+            <DashButton
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedBotId(null);
+                setConsoleEntries([]);
+              }}
+            >
+              Close
+            </DashButton>
+          }
+          bodyClassName="!pt-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <div
                 className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
               />
-              <span className="text-xs font-semibold uppercase tracking-widest">Console</span>
-              <span className="text-xs text-muted-foreground">
-                {activeBot?.label || selectedBotId}
+              <span className="text-xs font-extrabold uppercase tracking-widest">
+                {activeBot?.status || "idle"}
               </span>
-            </div>
-            <div className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground font-mono">
                 {consoleEntries.length} lines
               </span>
-              <button
-                onClick={() => setConsoleEntries([])}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Clear
-              </button>
-              <button
-                onClick={() => {
-                  setConsoleEntries([]);
-                  toast.success("Console cleared");
-                }}
-                className="text-xs rounded-full bg-secondary/60 hover:bg-secondary px-2.5 py-1 font-semibold text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear All Consoles
-              </button>
-              <button
-                onClick={() => setSelectedBotId(null)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Close
-              </button>
             </div>
+            <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
+              Clear
+            </DashButton>
           </div>
           <BotConsole
             entries={consoleEntries}
@@ -1258,66 +1441,63 @@ function BotsPage() {
               }
             }}
           />
-        </div>
+        </BotPanel>
       )}
 
-      {/* Running Bots Summary */}
       {runningBots.length > 0 && (
-        <div className="rounded-2xl animated-border bg-card/60 p-5 space-y-3 noise-texture">
-          <div className="flex items-center justify-between">
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Active Bots</div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setConsoleEntries([]);
-                  toast.success("All consoles cleared");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-full bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground px-3 py-1.5 text-xs font-semibold transition-all duration-200"
-              >
-                Clear All Consoles
-              </button>
-              <button
-                onClick={stopAndClearAll}
-                disabled={stoppingId !== null}
-                className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
-              >
-                <Square className="h-3 w-3" /> Stop & Clear All
-              </button>
-            </div>
-          </div>
-          {runningBots.map((bot) => (
-            <div
-              key={bot.id}
-              className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-2"
+        <BotPanel
+          title="Active jobs"
+          subtitle={`${runningBots.length} running`}
+          actions={
+            <DashButton
+              variant="danger"
+              size="sm"
+              onClick={stopAndClearAll}
+              disabled={stoppingId !== null}
             >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`h-2 w-2 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
-                />
-                <span className="text-sm font-semibold">{bot.label}</span>
-                <span className="text-xs text-muted-foreground capitalize">{bot.status}</span>
+              <Square className="h-3 w-3" /> Stop all
+            </DashButton>
+          }
+        >
+          <div className="space-y-2">
+            {runningBots.map((bot) => (
+              <div
+                key={bot.id}
+                className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div
+                    className={`h-2 w-2 shrink-0 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
+                  />
+                  <span className="text-sm font-extrabold truncate">{bot.label}</span>
+                  <span className="text-xs font-semibold text-muted-foreground capitalize">
+                    {bot.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBotId(bot.id);
+                      setConsoleEntries([]);
+                    }}
+                    className="text-xs font-extrabold text-primary hover:underline"
+                  >
+                    Console
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stopBot(bot.id)}
+                    disabled={stoppingId === bot.id}
+                    className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setSelectedBotId(bot.id);
-                    setConsoleEntries([]);
-                  }}
-                  className="text-xs text-primary hover:underline"
-                >
-                  View console
-                </button>
-                <button
-                  onClick={() => stopBot(bot.id)}
-                  disabled={stoppingId === bot.id}
-                  className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </BotPanel>
       )}
 
       {/* Portal to body so parent overflow/transform cannot bury the modal */}
@@ -1549,6 +1729,6 @@ function BotsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageShell>
   );
 }

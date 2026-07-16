@@ -10,7 +10,7 @@ import {
 
 export type Language = "en" | "es" | "fr" | "de" | "pt";
 export type Currency = "usd" | "eur" | "gbp" | "cad" | "aud";
-export type Theme = "gold" | "blue";
+export type Theme = "red" | "gold" | "blue";
 export type Mode = "dark" | "light";
 
 type SettingsState = {
@@ -27,7 +27,7 @@ type SettingsState = {
 const DEFAULTS: SettingsState = {
   language: "en",
   currency: "usd",
-  theme: "gold",
+  theme: "red",
   mode: "dark",
   notifyDeploys: true,
   notifyPayments: true,
@@ -80,6 +80,7 @@ const DICT: Record<Language, Record<string, string>> = {
     mode_hint: "Switch between dark and light interface.",
     dark: "Dark",
     light: "Light",
+    red: "Red",
     gold: "Gold",
     blue: "Blue",
   },
@@ -110,6 +111,7 @@ const DICT: Record<Language, Record<string, string>> = {
     mode_hint: "Cambia entre interfaz oscura y clara.",
     dark: "Oscuro",
     light: "Claro",
+    red: "Rojo",
     gold: "Dorado",
     blue: "Azul",
   },
@@ -140,6 +142,7 @@ const DICT: Record<Language, Record<string, string>> = {
     mode_hint: "Basculer entre les interfaces sombre et claire.",
     dark: "Sombre",
     light: "Clair",
+    red: "Rouge",
     gold: "Or",
     blue: "Bleu",
   },
@@ -170,6 +173,7 @@ const DICT: Record<Language, Record<string, string>> = {
     mode_hint: "Zwischen dunkler und heller Oberfläche wechseln.",
     dark: "Dunkel",
     light: "Hell",
+    red: "Rot",
     gold: "Gold",
     blue: "Blau",
   },
@@ -200,6 +204,7 @@ const DICT: Record<Language, Record<string, string>> = {
     mode_hint: "Alternar entre interface escura e clara.",
     dark: "Escuro",
     light: "Claro",
+    red: "Vermelho",
     gold: "Dourado",
     blue: "Azul",
   },
@@ -222,7 +227,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem("luaux_settings");
       if (raw) {
-        const saved = JSON.parse(raw);
+        const saved = JSON.parse(raw) as Partial<SettingsState>;
+        const themes: Theme[] = ["red", "gold", "blue"];
+        if (saved.theme && !themes.includes(saved.theme as Theme)) {
+          saved.theme = "red";
+        }
         setState((s) => ({ ...s, ...saved }));
       }
     } catch {

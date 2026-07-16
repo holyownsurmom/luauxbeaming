@@ -43,18 +43,26 @@ export const Route = createFileRoute("/dashboard/settings")({
 });
 
 type Tab =
-  "profile" | "subscription" | "bot-hours" | "notifications" | "appearance" | "language" | "admin";
+  | "profile"
+  | "subscription"
+  | "bot-hours"
+  | "sessions"
+  | "notifications"
+  | "appearance"
+  | "language"
+  | "admin";
 
 const ACCOUNT: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "profile", label: "Profile", icon: User },
   { id: "subscription", label: "Subscription", icon: CreditCard },
   { id: "bot-hours", label: "Bot hours & keys", icon: Clock },
+  { id: "sessions", label: "Sessions", icon: ShieldCheck },
 ];
 const WORKSPACE: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "language", label: "Language & currency", icon: Languages },
-  { id: "admin", label: "Admin", icon: ShieldCheck },
+  { id: "admin", label: "Admin", icon: Settings2 },
 ];
 
 function SettingsPage() {
@@ -116,6 +124,7 @@ function SettingsPage() {
     profile: s.t("profile"),
     subscription: s.t("subscription"),
     "bot-hours": s.t("bot_hours"),
+    sessions: "Sessions",
   };
   const WORKSPACE_LABELS: Record<string, string> = {
     notifications: s.t("notifications"),
@@ -127,8 +136,8 @@ function SettingsPage() {
   return (
     <div className="space-y-6 animate-page-in">
       <header>
-        <h1 className="font-display text-4xl font-semibold tracking-tight">{s.t("settings")}</h1>
-        <p className="mt-2 text-muted-foreground">{s.t("settings_sub")}</p>
+        <h1 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight">{s.t("settings")}</h1>
+        <p className="mt-2.5 text-sm font-semibold text-muted-foreground">{s.t("settings_sub")}</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
@@ -240,6 +249,8 @@ function SettingsPage() {
             </>
           )}
 
+          {tab === "sessions" && <SessionsPanel />}
+
           {tab === "notifications" && (
             <Panel title={s.t("notifications")} subtitle="Choose what LuauX pings you about.">
               <Toggle
@@ -315,41 +326,33 @@ function SettingsPage() {
                   {s.t("theme")}
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">{s.t("theme_hint")}</p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => s.set("theme", "gold")}
-                    className={`flex-1 flex items-center gap-3 rounded-xl py-3 px-4 text-xs font-semibold transition-all duration-300 border ${
-                      s.theme === "gold"
-                        ? "bg-primary/15 text-primary border-primary/30"
-                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
-                    }`}
-                  >
-                    <span
-                      className="h-8 w-8 rounded-lg shrink-0 border border-border/40"
-                      style={{ backgroundColor: "oklch(0.79 0.16 85)" }}
-                    />
-                    <div className="text-left">
-                      <div>{s.t("gold")}</div>
-                      <div className="text-[10px] text-muted-foreground font-normal mt-0.5">Premium gold accents</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => s.set("theme", "blue")}
-                    className={`flex-1 flex items-center gap-3 rounded-xl py-3 px-4 text-xs font-semibold transition-all duration-300 border ${
-                      s.theme === "blue"
-                        ? "bg-primary/15 text-primary border-primary/30"
-                        : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
-                    }`}
-                  >
-                    <span
-                      className="h-8 w-8 rounded-lg shrink-0 border border-border/40"
-                      style={{ backgroundColor: "oklch(0.55 0.2 250)" }}
-                    />
-                    <div className="text-left">
-                      <div>{s.t("blue")}</div>
-                      <div className="text-[10px] text-muted-foreground font-normal mt-0.5">Royal blue accents</div>
-                    </div>
-                  </button>
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: "red" as const, swatch: "oklch(0.68 0.22 25)", hint: "Bold crimson accents" },
+                      { id: "gold" as const, swatch: "oklch(0.79 0.16 85)", hint: "Premium gold accents" },
+                      { id: "blue" as const, swatch: "oklch(0.55 0.2 250)", hint: "Royal blue accents" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => s.set("theme", opt.id)}
+                      className={`flex items-center gap-3 rounded-xl py-3 px-4 text-xs font-semibold transition-all duration-300 border fluid-surface ${
+                        s.theme === opt.id
+                          ? "bg-primary/15 text-primary border-primary/30"
+                          : "bg-card/60 text-foreground/60 border-border/40 hover:border-primary/20 hover:text-foreground/80"
+                      }`}
+                    >
+                      <span
+                        className="h-8 w-8 rounded-lg shrink-0 border border-border/40"
+                        style={{ backgroundColor: opt.swatch }}
+                      />
+                      <div className="text-left">
+                        <div>{s.t(opt.id)}</div>
+                        <div className="text-[10px] text-muted-foreground font-normal mt-0.5">{opt.hint}</div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
             </Panel>
@@ -1144,6 +1147,124 @@ function SideItem({
   );
 }
 
+function SessionsPanel() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<
+    {
+      id: string;
+      current: boolean;
+      label: string;
+      browser: string;
+      os: string;
+      username: string;
+      isAdmin: boolean;
+      startedAt: number | null;
+      maxAgeDays: number;
+    }[]
+  >([]);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    fetch("/api/sessions")
+      .then(async (r) => {
+        const d = (await r.json()) as {
+          ok?: boolean;
+          error?: string;
+          sessions?: typeof sessions;
+        };
+        if (!r.ok || !d.ok) throw new Error(d.error || "Failed to load sessions");
+        setSessions(d.sessions || []);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const logoutAll = async () => {
+    if (!window.confirm("Sign out this browser session? You’ll need to log in with Discord again.")) {
+      return;
+    }
+    setLoggingOut(true);
+    try {
+      const res = await fetch("/api/sessions", { method: "DELETE" });
+      if (!res.ok) throw new Error("Logout failed");
+      window.location.href = "/";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Logout failed");
+      setLoggingOut(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Sessions"
+      subtitle="Devices signed into LuauX. Cookie sessions last up to 90 days."
+    >
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full rounded-xl" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-xs text-destructive">
+          {error}
+          <button type="button" onClick={load} className="ml-2 underline font-semibold">
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {sessions.map((s) => (
+            <div
+              key={s.id}
+              className="rounded-xl brutal-border bg-background/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold">{s.label}</span>
+                  {s.current && (
+                    <span className="rounded-full bg-primary/15 text-primary text-[10px] font-semibold px-2 py-0.5 uppercase tracking-wider">
+                      This device
+                    </span>
+                  )}
+                  {s.isAdmin && (
+                    <span className="rounded-full bg-secondary text-muted-foreground text-[10px] font-semibold px-2 py-0.5">
+                      Admin
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {s.username} · {s.browser} / {s.os}
+                  {s.startedAt
+                    ? ` · since ${new Date(s.startedAt).toLocaleString()}`
+                    : " · session age unknown (re-login to track)"}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground/80">
+                  Max age {s.maxAgeDays} days · single signed-in browser cookie
+                </div>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={logoutAll}
+            disabled={loggingOut}
+            className="inline-flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive px-4 py-2.5 text-xs font-semibold hover:bg-destructive/15 disabled:opacity-50"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            {loggingOut ? "Signing out…" : "Sign out this session"}
+          </button>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function Panel({
   title,
   subtitle,
@@ -1156,8 +1277,8 @@ function Panel({
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="font-display text-2xl font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">{title}</h2>
+        <p className="text-sm font-semibold text-muted-foreground">{subtitle}</p>
       </div>
       <div className="space-y-3">{children}</div>
     </div>

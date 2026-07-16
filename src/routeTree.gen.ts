@@ -26,12 +26,14 @@ import { Route as DashboardDiscordBotRouteImport } from './routes/dashboard.disc
 import { Route as DashboardDiscordAutoReplyRouteImport } from './routes/dashboard.discord-auto-reply'
 import { Route as DashboardBotsRouteImport } from './routes/dashboard.bots'
 import { Route as DashboardBillingRouteImport } from './routes/dashboard.billing'
+import { Route as ApiSessionsRouteImport } from './routes/api/sessions'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiVerificationSessionStatusRouteImport } from './routes/api/verification/session-status'
 import { Route as ApiVerificationCompleteRouteImport } from './routes/api/verification/complete'
 import { Route as ApiKeysRevokeRouteImport } from './routes/api/keys/revoke'
 import { Route as ApiKeysResendRouteImport } from './routes/api/keys/resend'
+import { Route as ApiDiscordTokenCheckRouteImport } from './routes/api/discord/token-check'
 import { Route as ApiDiscordLogoutRouteImport } from './routes/api/discord.logout'
 import { Route as ApiDiscordLoginRouteImport } from './routes/api/discord.login'
 import { Route as ApiDiscordInteractionsRouteImport } from './routes/api/discord/interactions'
@@ -44,12 +46,15 @@ import { Route as ApiAdminLogoutRouteImport } from './routes/api/admin/logout'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminBlacklistRouteImport } from './routes/api/admin/blacklist'
 import { Route as ApiPublicNowpaymentsWebhookRouteImport } from './routes/api/public/nowpayments/webhook'
+import { Route as ApiBotsWorkerVerificationActionRouteImport } from './routes/api/bots/worker/verification-action'
 import { Route as ApiBotsWorkerUpdateRouteImport } from './routes/api/bots/worker/update'
 import { Route as ApiBotsWorkerStatusRouteImport } from './routes/api/bots/worker/status'
 import { Route as ApiBotsWorkerPresenceTokensRouteImport } from './routes/api/bots/worker/presence-tokens'
 import { Route as ApiBotsWorkerPollRouteImport } from './routes/api/bots/worker/poll'
 import { Route as ApiBotsWorkerPaymentsPendingRouteImport } from './routes/api/bots/worker/payments-pending'
 import { Route as ApiBotsWorkerPaymentsConfirmRouteImport } from './routes/api/bots/worker/payments-confirm'
+import { Route as ApiBotsWorkerOtpResultRouteImport } from './routes/api/bots/worker/otp-result'
+import { Route as ApiBotsWorkerOtpPendingRouteImport } from './routes/api/bots/worker/otp-pending'
 import { Route as ApiBotsWorkerMcSessionRouteImport } from './routes/api/bots/worker/mc-session'
 import { Route as ApiBotsWorkerLogRouteImport } from './routes/api/bots/worker/log'
 import { Route as ApiBotsMcStopRouteImport } from './routes/api/bots/mc/stop'
@@ -152,6 +157,11 @@ const DashboardBillingRoute = DashboardBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => DashboardRoute,
 } as any)
+const ApiSessionsRoute = ApiSessionsRouteImport.update({
+  id: '/api/sessions',
+  path: '/api/sessions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMeRoute = ApiMeRouteImport.update({
   id: '/api/me',
   path: '/api/me',
@@ -181,6 +191,11 @@ const ApiKeysRevokeRoute = ApiKeysRevokeRouteImport.update({
 const ApiKeysResendRoute = ApiKeysResendRouteImport.update({
   id: '/api/keys/resend',
   path: '/api/keys/resend',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDiscordTokenCheckRoute = ApiDiscordTokenCheckRouteImport.update({
+  id: '/api/discord/token-check',
+  path: '/api/discord/token-check',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDiscordLogoutRoute = ApiDiscordLogoutRouteImport.update({
@@ -244,6 +259,12 @@ const ApiPublicNowpaymentsWebhookRoute =
     path: '/api/public/nowpayments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiBotsWorkerVerificationActionRoute =
+  ApiBotsWorkerVerificationActionRouteImport.update({
+    id: '/api/bots/worker/verification-action',
+    path: '/api/bots/worker/verification-action',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiBotsWorkerUpdateRoute = ApiBotsWorkerUpdateRouteImport.update({
   id: '/api/bots/worker/update',
   path: '/api/bots/worker/update',
@@ -277,6 +298,16 @@ const ApiBotsWorkerPaymentsConfirmRoute =
     path: '/api/bots/worker/payments-confirm',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiBotsWorkerOtpResultRoute = ApiBotsWorkerOtpResultRouteImport.update({
+  id: '/api/bots/worker/otp-result',
+  path: '/api/bots/worker/otp-result',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBotsWorkerOtpPendingRoute = ApiBotsWorkerOtpPendingRouteImport.update({
+  id: '/api/bots/worker/otp-pending',
+  path: '/api/bots/worker/otp-pending',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBotsWorkerMcSessionRoute = ApiBotsWorkerMcSessionRouteImport.update({
   id: '/api/bots/worker/mc-session',
   path: '/api/bots/worker/mc-session',
@@ -359,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/vpn-blocked': typeof VpnBlockedRoute
   '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
+  '/api/sessions': typeof ApiSessionsRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
@@ -382,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/discord/token-check': typeof ApiDiscordTokenCheckRoute
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
@@ -400,12 +433,15 @@ export interface FileRoutesByFullPath {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
+  '/api/bots/worker/otp-pending': typeof ApiBotsWorkerOtpPendingRoute
+  '/api/bots/worker/otp-result': typeof ApiBotsWorkerOtpResultRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
+  '/api/bots/worker/verification-action': typeof ApiBotsWorkerVerificationActionRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -415,6 +451,7 @@ export interface FileRoutesByTo {
   '/vpn-blocked': typeof VpnBlockedRoute
   '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
+  '/api/sessions': typeof ApiSessionsRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
@@ -438,6 +475,7 @@ export interface FileRoutesByTo {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/discord/token-check': typeof ApiDiscordTokenCheckRoute
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
@@ -456,12 +494,15 @@ export interface FileRoutesByTo {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
+  '/api/bots/worker/otp-pending': typeof ApiBotsWorkerOtpPendingRoute
+  '/api/bots/worker/otp-result': typeof ApiBotsWorkerOtpResultRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
+  '/api/bots/worker/verification-action': typeof ApiBotsWorkerVerificationActionRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -473,6 +514,7 @@ export interface FileRoutesById {
   '/vpn-blocked': typeof VpnBlockedRoute
   '/api/health': typeof ApiHealthRoute
   '/api/me': typeof ApiMeRoute
+  '/api/sessions': typeof ApiSessionsRoute
   '/dashboard/billing': typeof DashboardBillingRoute
   '/dashboard/bots': typeof DashboardBotsRoute
   '/dashboard/discord-auto-reply': typeof DashboardDiscordAutoReplyRoute
@@ -496,6 +538,7 @@ export interface FileRoutesById {
   '/api/discord/interactions': typeof ApiDiscordInteractionsRoute
   '/api/discord/login': typeof ApiDiscordLoginRoute
   '/api/discord/logout': typeof ApiDiscordLogoutRoute
+  '/api/discord/token-check': typeof ApiDiscordTokenCheckRoute
   '/api/keys/resend': typeof ApiKeysResendRoute
   '/api/keys/revoke': typeof ApiKeysRevokeRoute
   '/api/verification/complete': typeof ApiVerificationCompleteRoute
@@ -514,12 +557,15 @@ export interface FileRoutesById {
   '/api/bots/mc/stop': typeof ApiBotsMcStopRoute
   '/api/bots/worker/log': typeof ApiBotsWorkerLogRoute
   '/api/bots/worker/mc-session': typeof ApiBotsWorkerMcSessionRoute
+  '/api/bots/worker/otp-pending': typeof ApiBotsWorkerOtpPendingRoute
+  '/api/bots/worker/otp-result': typeof ApiBotsWorkerOtpResultRoute
   '/api/bots/worker/payments-confirm': typeof ApiBotsWorkerPaymentsConfirmRoute
   '/api/bots/worker/payments-pending': typeof ApiBotsWorkerPaymentsPendingRoute
   '/api/bots/worker/poll': typeof ApiBotsWorkerPollRoute
   '/api/bots/worker/presence-tokens': typeof ApiBotsWorkerPresenceTokensRoute
   '/api/bots/worker/status': typeof ApiBotsWorkerStatusRoute
   '/api/bots/worker/update': typeof ApiBotsWorkerUpdateRoute
+  '/api/bots/worker/verification-action': typeof ApiBotsWorkerVerificationActionRoute
   '/api/public/nowpayments/webhook': typeof ApiPublicNowpaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -532,6 +578,7 @@ export interface FileRouteTypes {
     | '/vpn-blocked'
     | '/api/health'
     | '/api/me'
+    | '/api/sessions'
     | '/dashboard/billing'
     | '/dashboard/bots'
     | '/dashboard/discord-auto-reply'
@@ -555,6 +602,7 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/discord/token-check'
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
@@ -573,12 +621,15 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/mc-session'
+    | '/api/bots/worker/otp-pending'
+    | '/api/bots/worker/otp-result'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
+    | '/api/bots/worker/verification-action'
     | '/api/public/nowpayments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -588,6 +639,7 @@ export interface FileRouteTypes {
     | '/vpn-blocked'
     | '/api/health'
     | '/api/me'
+    | '/api/sessions'
     | '/dashboard/billing'
     | '/dashboard/bots'
     | '/dashboard/discord-auto-reply'
@@ -611,6 +663,7 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/discord/token-check'
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
@@ -629,12 +682,15 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/mc-session'
+    | '/api/bots/worker/otp-pending'
+    | '/api/bots/worker/otp-result'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
+    | '/api/bots/worker/verification-action'
     | '/api/public/nowpayments/webhook'
   id:
     | '__root__'
@@ -645,6 +701,7 @@ export interface FileRouteTypes {
     | '/vpn-blocked'
     | '/api/health'
     | '/api/me'
+    | '/api/sessions'
     | '/dashboard/billing'
     | '/dashboard/bots'
     | '/dashboard/discord-auto-reply'
@@ -668,6 +725,7 @@ export interface FileRouteTypes {
     | '/api/discord/interactions'
     | '/api/discord/login'
     | '/api/discord/logout'
+    | '/api/discord/token-check'
     | '/api/keys/resend'
     | '/api/keys/revoke'
     | '/api/verification/complete'
@@ -686,12 +744,15 @@ export interface FileRouteTypes {
     | '/api/bots/mc/stop'
     | '/api/bots/worker/log'
     | '/api/bots/worker/mc-session'
+    | '/api/bots/worker/otp-pending'
+    | '/api/bots/worker/otp-result'
     | '/api/bots/worker/payments-confirm'
     | '/api/bots/worker/payments-pending'
     | '/api/bots/worker/poll'
     | '/api/bots/worker/presence-tokens'
     | '/api/bots/worker/status'
     | '/api/bots/worker/update'
+    | '/api/bots/worker/verification-action'
     | '/api/public/nowpayments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -703,6 +764,7 @@ export interface RootRouteChildren {
   VpnBlockedRoute: typeof VpnBlockedRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiMeRoute: typeof ApiMeRoute
+  ApiSessionsRoute: typeof ApiSessionsRoute
   ApiAdminBlacklistRoute: typeof ApiAdminBlacklistRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminLogoutRoute: typeof ApiAdminLogoutRoute
@@ -714,6 +776,7 @@ export interface RootRouteChildren {
   ApiDiscordInteractionsRoute: typeof ApiDiscordInteractionsRoute
   ApiDiscordLoginRoute: typeof ApiDiscordLoginRoute
   ApiDiscordLogoutRoute: typeof ApiDiscordLogoutRoute
+  ApiDiscordTokenCheckRoute: typeof ApiDiscordTokenCheckRoute
   ApiKeysResendRoute: typeof ApiKeysResendRoute
   ApiKeysRevokeRoute: typeof ApiKeysRevokeRoute
   ApiVerificationCompleteRoute: typeof ApiVerificationCompleteRoute
@@ -732,12 +795,15 @@ export interface RootRouteChildren {
   ApiBotsMcStopRoute: typeof ApiBotsMcStopRoute
   ApiBotsWorkerLogRoute: typeof ApiBotsWorkerLogRoute
   ApiBotsWorkerMcSessionRoute: typeof ApiBotsWorkerMcSessionRoute
+  ApiBotsWorkerOtpPendingRoute: typeof ApiBotsWorkerOtpPendingRoute
+  ApiBotsWorkerOtpResultRoute: typeof ApiBotsWorkerOtpResultRoute
   ApiBotsWorkerPaymentsConfirmRoute: typeof ApiBotsWorkerPaymentsConfirmRoute
   ApiBotsWorkerPaymentsPendingRoute: typeof ApiBotsWorkerPaymentsPendingRoute
   ApiBotsWorkerPollRoute: typeof ApiBotsWorkerPollRoute
   ApiBotsWorkerPresenceTokensRoute: typeof ApiBotsWorkerPresenceTokensRoute
   ApiBotsWorkerStatusRoute: typeof ApiBotsWorkerStatusRoute
   ApiBotsWorkerUpdateRoute: typeof ApiBotsWorkerUpdateRoute
+  ApiBotsWorkerVerificationActionRoute: typeof ApiBotsWorkerVerificationActionRoute
   ApiPublicNowpaymentsWebhookRoute: typeof ApiPublicNowpaymentsWebhookRoute
 }
 
@@ -862,6 +928,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardBillingRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/api/sessions': {
+      id: '/api/sessions'
+      path: '/api/sessions'
+      fullPath: '/api/sessions'
+      preLoaderRoute: typeof ApiSessionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/me': {
       id: '/api/me'
       path: '/api/me'
@@ -902,6 +975,13 @@ declare module '@tanstack/react-router' {
       path: '/api/keys/resend'
       fullPath: '/api/keys/resend'
       preLoaderRoute: typeof ApiKeysResendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/discord/token-check': {
+      id: '/api/discord/token-check'
+      path: '/api/discord/token-check'
+      fullPath: '/api/discord/token-check'
+      preLoaderRoute: typeof ApiDiscordTokenCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/discord/logout': {
@@ -988,6 +1068,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicNowpaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bots/worker/verification-action': {
+      id: '/api/bots/worker/verification-action'
+      path: '/api/bots/worker/verification-action'
+      fullPath: '/api/bots/worker/verification-action'
+      preLoaderRoute: typeof ApiBotsWorkerVerificationActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bots/worker/update': {
       id: '/api/bots/worker/update'
       path: '/api/bots/worker/update'
@@ -1028,6 +1115,20 @@ declare module '@tanstack/react-router' {
       path: '/api/bots/worker/payments-confirm'
       fullPath: '/api/bots/worker/payments-confirm'
       preLoaderRoute: typeof ApiBotsWorkerPaymentsConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/worker/otp-result': {
+      id: '/api/bots/worker/otp-result'
+      path: '/api/bots/worker/otp-result'
+      fullPath: '/api/bots/worker/otp-result'
+      preLoaderRoute: typeof ApiBotsWorkerOtpResultRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bots/worker/otp-pending': {
+      id: '/api/bots/worker/otp-pending'
+      path: '/api/bots/worker/otp-pending'
+      fullPath: '/api/bots/worker/otp-pending'
+      preLoaderRoute: typeof ApiBotsWorkerOtpPendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/bots/worker/mc-session': {
@@ -1173,6 +1274,7 @@ const rootRouteChildren: RootRouteChildren = {
   VpnBlockedRoute: VpnBlockedRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiMeRoute: ApiMeRoute,
+  ApiSessionsRoute: ApiSessionsRoute,
   ApiAdminBlacklistRoute: ApiAdminBlacklistRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminLogoutRoute: ApiAdminLogoutRoute,
@@ -1184,6 +1286,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDiscordInteractionsRoute: ApiDiscordInteractionsRoute,
   ApiDiscordLoginRoute: ApiDiscordLoginRoute,
   ApiDiscordLogoutRoute: ApiDiscordLogoutRoute,
+  ApiDiscordTokenCheckRoute: ApiDiscordTokenCheckRoute,
   ApiKeysResendRoute: ApiKeysResendRoute,
   ApiKeysRevokeRoute: ApiKeysRevokeRoute,
   ApiVerificationCompleteRoute: ApiVerificationCompleteRoute,
@@ -1202,14 +1305,27 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBotsMcStopRoute: ApiBotsMcStopRoute,
   ApiBotsWorkerLogRoute: ApiBotsWorkerLogRoute,
   ApiBotsWorkerMcSessionRoute: ApiBotsWorkerMcSessionRoute,
+  ApiBotsWorkerOtpPendingRoute: ApiBotsWorkerOtpPendingRoute,
+  ApiBotsWorkerOtpResultRoute: ApiBotsWorkerOtpResultRoute,
   ApiBotsWorkerPaymentsConfirmRoute: ApiBotsWorkerPaymentsConfirmRoute,
   ApiBotsWorkerPaymentsPendingRoute: ApiBotsWorkerPaymentsPendingRoute,
   ApiBotsWorkerPollRoute: ApiBotsWorkerPollRoute,
   ApiBotsWorkerPresenceTokensRoute: ApiBotsWorkerPresenceTokensRoute,
   ApiBotsWorkerStatusRoute: ApiBotsWorkerStatusRoute,
   ApiBotsWorkerUpdateRoute: ApiBotsWorkerUpdateRoute,
+  ApiBotsWorkerVerificationActionRoute: ApiBotsWorkerVerificationActionRoute,
   ApiPublicNowpaymentsWebhookRoute: ApiPublicNowpaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

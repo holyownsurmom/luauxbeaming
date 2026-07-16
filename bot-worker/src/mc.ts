@@ -55,13 +55,27 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const MC_SUFFIXES = ["", " ", ".", "...", "!", "?", " ~", " :)"];
+const MC_SUFFIXES = ["", " ", ".", "...", "!", "?", " ~", " :)", " :D", " lol", " fr"];
 
 function variateMessage(msg: string): string {
-  if (Math.random() < 0.3) {
-    return msg + pickRandom(MC_SUFFIXES);
+  let result = msg.trim();
+  if (!result) return msg;
+  // Light typo
+  if (Math.random() < 0.12 && result.length > 6) {
+    const idx = randomBetween(1, result.length - 2);
+    const ch = result[idx];
+    if (ch && /[a-z]/i.test(ch)) {
+      result = result.slice(0, idx) + ch + ch + result.slice(idx + 1);
+    }
   }
-  return msg;
+  // Random lowercase first char
+  if (Math.random() < 0.1 && result.length > 2) {
+    result = result.charAt(0).toLowerCase() + result.slice(1);
+  }
+  if (Math.random() < 0.35) {
+    result += pickRandom(MC_SUFFIXES);
+  }
+  return result || msg;
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -74,17 +88,25 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 function calculateMessageDelay(baseInterval: number, sentCount: number, runtimeMinutes: number): number {
-  let min = baseInterval * 0.7;
-  let max = baseInterval * 1.5;
+  // Humanized jitter around base interval (+ occasional longer AFK)
+  let min = baseInterval * 0.65;
+  let max = baseInterval * 1.75;
+  if (Math.random() < 0.12) {
+    // "tab away" pause
+    min = baseInterval * 2;
+    max = baseInterval * 5;
+  }
+  // Slow down slightly over long runs
+  if (runtimeMinutes > 20) {
+    const fat = 1 + Math.min(runtimeMinutes / 90, 1.2);
+    min *= fat;
+    max *= fat;
+  }
 
   if (sentCount < 3) {
     min = Math.max(min, 8);
     max = Math.max(max, 18);
   }
-
-  const slowdownFactor = 1 + Math.min(runtimeMinutes / 120, 2);
-  min *= slowdownFactor;
-  max *= slowdownFactor;
 
   const delay = randomBetween(min * 1000, max * 1000);
   const jitter = randomBetween(-2000, 5000);

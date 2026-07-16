@@ -1,5 +1,16 @@
 import WebSocket from "ws";
 import { createLogger, updateJob } from "./api.js";
+import {
+  browserHeaders,
+  circadianMultiplier,
+  isQuietHours,
+  pickRandom,
+  quietHoursExtraMs,
+  randomBetween,
+  sleep,
+  typingDurationMs,
+  variateMessage,
+} from "./discord-humanize.js";
 
 export type AutoReplyJobConfig = {
   token: string;
@@ -9,94 +20,6 @@ export type AutoReplyJobConfig = {
   typing: boolean;
   autoAcceptFriends: boolean;
 };
-
-function randomBetween(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const t = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(t);
-        resolve();
-      },
-      { once: true },
-    );
-  });
-}
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-const SUFFIXES = ["", " ", "  ", ".", "...", "!", " ~", " lol", " fr", " ngl", " haha"];
-
-function variateMessage(msg: string): string {
-  let result = msg.trim();
-  if (Math.random() < 0.4) result += pickRandom(SUFFIXES);
-  if (Math.random() < 0.12 && result.length > 6) {
-    const idx = randomBetween(1, result.length - 2);
-    const ch = result[idx];
-    if (ch && /[a-z]/i.test(ch)) {
-      result = result.slice(0, idx) + ch + ch + result.slice(idx + 1);
-    }
-  }
-  if (Math.random() < 0.1) {
-    result = result.charAt(0).toLowerCase() + result.slice(1);
-  }
-  return result || msg;
-}
-
-function browserHeaders(token: string): Record<string, string> {
-  const chromeBuild = pickRandom(["131.0.0.0", "132.0.0.0", "133.0.0.0", "134.0.0.0"]);
-  const userAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeBuild} Safari/537.36`;
-  const superProps = Buffer.from(
-    JSON.stringify({
-      os: "Windows",
-      browser: "Chrome",
-      device: "",
-      system_locale: "en-US",
-      browser_user_agent: userAgent,
-      browser_version: chromeBuild,
-      os_version: "10",
-      referrer: "",
-      referring_domain: "",
-      referrer_current: "",
-      referring_domain_current: "",
-      release_channel: "stable",
-      client_build_number: pickRandom([350000, 352000, 354000, 356000]),
-      client_event_source: null,
-    }),
-  ).toString("base64");
-  return {
-    Authorization: token,
-    "Content-Type": "application/json",
-    "User-Agent": userAgent,
-    Accept: "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    Origin: "https://discord.com",
-    Referer: "https://discord.com/channels/@me",
-    "X-Discord-Locale": "en-US",
-    "X-Discord-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
-    "X-Super-Properties": superProps,
-  };
-}
-
-const TYPING_SPEEDS = [40, 50, 60, 70, 80, 90, 100];
-
-function typingDuration(msg: string): number {
-  const cpm = pickRandom(TYPING_SPEEDS);
-  const chars = msg.replace(/\s+/g, " ").length;
-  const base = (chars / cpm) * 60 * 1000;
-  return Math.max(2000, Math.min(base + randomBetween(-500, 2000), 12000));
-}
 
 export async function runDiscordAutoReplyBot(
   jobId: string,
@@ -117,17 +40,16 @@ export async function runDiscordAutoReplyBot(
     return;
   }
 
-  // Defensive defaults — never NaN timers from missing UI fields
+  // Anti-ban v4 floors — sub-25s replies are a ban magnet
   const minDelaySec = (() => {
     const n = Number(config.minDelay);
-    // Floor raised — sub-20s reply spam is a ban magnet
-    if (!Number.isFinite(n) || n < 20) return 30;
+    if (!Number.isFinite(n) || n < 25) return 45;
     return Math.min(86_400, Math.floor(n));
   })();
   const maxDelaySec = (() => {
     const n = Number(config.maxDelay);
-    const floor = minDelaySec + 15;
-    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 90);
+    const floor = minDelaySec + 20;
+    if (!Number.isFinite(n) || n < floor) return Math.max(floor, 120);
     return Math.min(86_400, Math.floor(n));
   })();
   config.minDelay = minDelaySec;
@@ -138,8 +60,11 @@ export async function runDiscordAutoReplyBot(
 
   const apiHeaders = browserHeaders(config.token);
   const chromeUa = apiHeaders["User-Agent"];
+  const DAILY_REPLY_CAP = randomBetween(35, 70);
+  let repliesToday = 0;
+  let dayStart = Date.now();
 
-  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v3)...");
+  await log("system", "Initializing Discord Auto-Reply Gateway client (anti-ban mode v4)...");
   await updateJob(jobId, "running");
 
   let ws: WebSocket | null = null;
@@ -228,19 +153,24 @@ export async function runDiscordAutoReplyBot(
 
   const shouldThrottle = (): boolean => {
     const now = Date.now();
-    recentReplyTimes = recentReplyTimes.filter((t) => now - t < 120000);
-    // Max 2 replies per 2 minutes
-    return recentReplyTimes.length >= 2;
-  };
-
-  const shouldMissReply = (): boolean => {
-    if (replyCount < 3) return false;
-    if (Math.random() < 0.14) return true;
+    // Rolling window: max 2 replies / 3 minutes
+    recentReplyTimes = recentReplyTimes.filter((t) => now - t < 180_000);
+    if (recentReplyTimes.length >= 2) return true;
+    // Hourly soft cap
+    const hourWindow = recentReplyTimes.filter((t) => now - t < 3_600_000);
+    if (hourWindow.length >= 18) return true;
     return false;
   };
 
+  const shouldMissReply = (): boolean => {
+    if (replyCount < 2) return false;
+    // 18–28% miss rate after warm-up (humans ignore DMs)
+    const missP = replyCount < 8 ? 0.18 : 0.28;
+    return Math.random() < missP;
+  };
+
   let repliesSinceAfk = 0;
-  let afkEvery = randomBetween(12, 25);
+  let afkEvery = randomBetween(8, 18);
   const repliedUsers = new Map<string, number>(); // userId -> last reply ts
   let friendsAcceptedHour = 0;
   let friendsHourStart = Date.now();
@@ -248,11 +178,26 @@ export async function runDiscordAutoReplyBot(
   const shouldGoAway = (): boolean => {
     const now = Date.now();
     if (now < longAwayUntil) return true;
+    // Quiet hours → long offline
+    if (isQuietHours()) {
+      const extra = quietHoursExtraMs();
+      if (extra > 0) {
+        longAwayUntil = now + extra;
+        log("info", `Quiet hours AFK ${((extra / 60000) | 0)}min`).catch(() => {});
+        return true;
+      }
+    }
     if (repliesSinceAfk >= afkEvery) {
       repliesSinceAfk = 0;
-      afkEvery = randomBetween(12, 25);
-      longAwayUntil = now + randomBetween(180000, 900000);
+      afkEvery = randomBetween(8, 18);
+      longAwayUntil = now + randomBetween(240_000, 1_200_000);
       log("info", `Going AFK for ${((longAwayUntil - now) / 60000) | 0}min (simulating offline)`).catch(() => {});
+      return true;
+    }
+    // Random "left Discord" windows
+    if (replyCount >= 5 && Math.random() < 0.04) {
+      longAwayUntil = now + randomBetween(15 * 60_000, 55 * 60_000);
+      log("info", `Random offline window ${(((longAwayUntil - now) / 60000) | 0)}min`).catch(() => {});
       return true;
     }
     return false;
@@ -347,9 +292,14 @@ export async function runDiscordAutoReplyBot(
             reconnectAttempts = 0;
             await log("info", `Gateway ready! Running as user ${d.user.username}`);
             // Warmup — don't reply instantly after connect
-            const warm = randomBetween(120_000, 480_000);
+            let warm = randomBetween(180_000, 600_000);
+            warm = Math.floor(warm * circadianMultiplier());
+            if (isQuietHours()) warm += quietHoursExtraMs();
             longAwayUntil = Date.now() + warm;
-            await log("info", `Warmup AFK ${(warm / 60000).toFixed(1)}min before first reply (anti-ban v3)`);
+            await log(
+              "info",
+              `Warmup AFK ${(warm / 60000).toFixed(1)}min before first reply (anti-ban v4) | daily cap ~${DAILY_REPLY_CAP}`,
+            );
           }
 
           if (t === "RESUMED") {
@@ -374,6 +324,16 @@ export async function runDiscordAutoReplyBot(
                   if (stopped || abortSignal.aborted) return;
                   await log("chat", `DM from ${authorTag}: "${content}"`);
 
+                  // Reset daily counter after 24h
+                  if (Date.now() - dayStart > 86_400_000) {
+                    repliesToday = 0;
+                    dayStart = Date.now();
+                  }
+                  if (repliesToday >= DAILY_REPLY_CAP) {
+                    await log("info", `Daily reply cap (${DAILY_REPLY_CAP}) — skipping`);
+                    return;
+                  }
+
                   if (shouldGoAway()) {
                     await log("info", "AFK — skipping reply");
                     return;
@@ -387,16 +347,22 @@ export async function runDiscordAutoReplyBot(
                     return;
                   }
                   if (shouldThrottle()) {
-                    await log("info", "Throttled (2+ replies in 2min), skipping this message");
+                    await log("info", "Throttled (rate / hourly budget), skipping this message");
                     return;
                   }
 
                   const authorId = String(d.author.id || "");
                   const lastToUser = repliedUsers.get(authorId) || 0;
-                  // Per-user cooldown: at most one reply per user every 10–25 min
-                  const userCd = randomBetween(600_000, 1_500_000);
+                  // Per-user cooldown: 15–40 min
+                  const userCd = randomBetween(900_000, 2_400_000);
                   if (authorId && Date.now() - lastToUser < userCd) {
                     await log("info", `Per-user cooldown active for ${authorTag} — skip`);
+                    return;
+                  }
+
+                  // Ignore very short / emoji-only pings sometimes
+                  if (content && content.trim().length < 3 && Math.random() < 0.55) {
+                    await log("info", `Ignoring short ping from ${authorTag}`);
                     return;
                   }
 
@@ -405,16 +371,19 @@ export async function runDiscordAutoReplyBot(
                   );
 
                   let delay = randomBetween(minDelaySec * 1000, maxDelaySec * 1000);
+                  delay = Math.floor(delay * circadianMultiplier());
                   if (replyCount < 3) {
-                    delay = randomBetween(45000, 120000);
-                  } else if (Math.random() < 0.18) {
-                    delay = randomBetween(120000, 360000);
+                    delay = randomBetween(60_000, 180_000);
+                  } else if (Math.random() < 0.22) {
+                    delay = randomBetween(180_000, 480_000);
                     await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
                   }
 
                   // Typing API only rarely (fingerprint) — sleep still simulates think time
-                  const useTyping = config.typing && Math.random() < 0.22;
-                  const typingTime = useTyping ? typingDuration(reply) : randomBetween(4000, 14000);
+                  const useTyping = config.typing && Math.random() < 0.12;
+                  const typingTime = useTyping
+                    ? typingDurationMs(reply, 2500, 12_000)
+                    : randomBetween(5000, 18_000);
                   const waitMs = Math.max(delay, typingTime);
                   if (useTyping) {
                     try {
@@ -446,10 +415,28 @@ export async function runDiscordAutoReplyBot(
                     );
                     if (res.ok) {
                       replyCount++;
+                      repliesToday++;
                       repliesSinceAfk++;
                       if (authorId) repliedUsers.set(authorId, Date.now());
                       recentReplyTimes.push(Date.now());
                       await log("bot", `Sent auto-reply to ${authorTag}: "${reply}"`);
+                      return true;
+                    }
+                    const errBody = await res.text().catch(() => "");
+                    if (
+                      res.status === 400 &&
+                      /captcha/i.test(errBody)
+                    ) {
+                      await log(
+                        "error",
+                        "Discord requires captcha on this account — token is flagged. Stop using it; switch to a fresh alt. Not a LuauX bug.",
+                      );
+                      await updateJob(
+                        jobId,
+                        "error",
+                        "Discord captcha-required (account flagged). Use a different alt token.",
+                      );
+                      stopped = true;
                       return true;
                     }
                     if (res.status === 429) {
@@ -500,7 +487,7 @@ export async function runDiscordAutoReplyBot(
             }
           }
 
-              if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
+          if (t === "RELATIONSHIP_ADD" && config.autoAcceptFriends) {
             if (d.type === 3) {
               const targetUser = `@${d.user.username}`;
               const userId = d.id as string;
@@ -511,8 +498,10 @@ export async function runDiscordAutoReplyBot(
                 friendsHourStart = Date.now();
                 friendsAcceptedHour = 0;
               }
-              if (friendsAcceptedHour >= 4) {
-                await log("warn", `Friend-accept hourly cap (4) — skipping ${targetUser}`);
+              if (friendsAcceptedHour >= 3) {
+                await log("warn", `Friend-accept hourly cap (3) — skipping ${targetUser}`);
+              } else if (isQuietHours()) {
+                await log("info", `Quiet hours — not accepting friends now (${targetUser})`);
               } else if (dmQueueDepth >= MAX_DM_QUEUE) {
                 await log("warn", `Friend-accept queue full — skipping ${targetUser}`);
               } else {
@@ -521,7 +510,7 @@ export async function runDiscordAutoReplyBot(
                   .then(async () => {
                     if (stopped || abortSignal.aborted) return;
                     // Long delay before accepting — looks less bot-like
-                    await sleep(randomBetween(45_000, 180_000), abortSignal);
+                    await sleep(randomBetween(90_000, 360_000), abortSignal);
                     if (stopped || abortSignal.aborted) return;
 
                     try {
@@ -591,6 +580,19 @@ export async function runDiscordAutoReplyBot(
                         );
                       } else {
                         const txt = await sendRes.text();
+                        if (/captcha/i.test(txt)) {
+                          await log(
+                            "error",
+                            "Discord captcha on friend-DM — account flagged. Stopping. Use a fresh alt; disable auto-accept friends.",
+                          );
+                          await updateJob(
+                            jobId,
+                            "error",
+                            "Discord captcha-required after friend accept (account flagged).",
+                          );
+                          stopped = true;
+                          return;
+                        }
                         await log(
                           "error",
                           `Failed to send initial reply to ${targetUser}: ${txt.slice(0, 200)}`,

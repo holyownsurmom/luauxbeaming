@@ -18,12 +18,19 @@ export function useReveal(deps: unknown[] = []) {
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            entry.target.classList.add("revealed");
+            const el = entry.target as HTMLElement;
+            // Stagger siblings slightly for cascade feel
+            const delay = Number(el.dataset.revealDelay || 0);
+            if (delay > 0) {
+              window.setTimeout(() => el.classList.add("revealed"), delay);
+            } else {
+              el.classList.add("revealed");
+            }
             observer.unobserve(entry.target);
           }
         }
       },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      { threshold: 0.08, rootMargin: "0px 0px -6% 0px" },
     );
 
     for (const el of nodes) observer.observe(el);

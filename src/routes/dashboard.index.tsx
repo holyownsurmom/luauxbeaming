@@ -186,10 +186,10 @@ function Overview() {
               {isAdmin ? "Admin mode" : active ? "Active" : "No plan"}
             </div>
 
-            <h1 className="font-display text-4xl md:text-5xl font-semibold tracking-tight text-gradient leading-tight">
+            <h1 className="font-display text-4xl md:text-5xl font-extrabold tracking-tight text-gradient leading-tight">
               Welcome back, {displayName}
             </h1>
-            <p className="mt-3 text-muted-foreground text-sm max-w-lg leading-relaxed">
+            <p className="mt-3 text-muted-foreground text-sm font-semibold max-w-lg leading-relaxed">
               {active
                 ? "Your workspace is live. Deploy bots, monitor activity, and manage your setup below."
                 : "Unlock your workspace to deploy bots and access all automation tools."}
@@ -221,18 +221,43 @@ function Overview() {
             </div>
           </div>
 
-          {/* Runtime ring */}
+          {/* Plan countdown */}
           <div className="flex flex-col items-center md:items-end shrink-0">
-            <RuntimeRing daysLeft={daysLeft} />
-            <div className="mt-3 text-center md:text-right text-xs">
-              <div className="font-mono text-lg text-gradient-gold">{botHours.toFixed(1)}h</div>
-              <div className="text-muted-foreground/60 uppercase tracking-widest text-[9px] mt-0.5">
-                runtime remaining
+            <RuntimeRing daysLeft={daysLeft} isAdmin={isAdmin} active={active || isAdmin} />
+            <div className="mt-4 text-center md:text-right">
+              <div className="font-mono text-xl font-semibold text-primary tabular-nums">
+                {botHours.toFixed(1)}
+                <span className="text-sm text-muted-foreground font-normal ml-0.5">h</span>
+              </div>
+              <div className="text-muted-foreground/70 uppercase tracking-[0.18em] text-[10px] mt-1">
+                bot hours left
               </div>
             </div>
           </div>
         </div>
       </header>
+
+      {/* Usage meters */}
+      <section className="grid sm:grid-cols-2 gap-3 md:gap-4">
+        <UsageBar
+          label="Bot slots"
+          valueLabel={isAdmin ? "Unlimited" : `${maxBots} concurrent`}
+          pct={isAdmin ? 1 : maxBots <= 0 ? 0 : Math.min(1, maxBots / 20)}
+          hint={isAdmin ? "Admin bypass" : planActive ? (plan?.name || "Plan") : botHours > 0 ? "Hours pack" : "No access"}
+          locked={!active && !isAdmin}
+        />
+        <UsageBar
+          label="Bot hours"
+          valueLabel={`${botHours.toFixed(1)}h remaining`}
+          pct={
+            isAdmin
+              ? 1
+              : Math.min(1, botHours / Math.max(1, Number(plan?.bot_hours ?? 14)))
+          }
+          hint={active || isAdmin ? "Shared runtime pool" : "Buy a plan or hours pack"}
+          locked={!active && !isAdmin}
+        />
+      </section>
 
       {/* Stats row */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
@@ -422,81 +447,109 @@ function PluginCard({
   );
 }
 
-function RuntimeRing({ daysLeft }: { daysLeft: number }) {
-  const pct = Math.min(1, daysLeft / 30);
-  const r = 34;
-  const c = 2 * Math.PI * r;
+function UsageBar({
+  label,
+  valueLabel,
+  pct,
+  hint,
+  locked,
+}: {
+  label: string;
+  valueLabel: string;
+  pct: number;
+  hint: string;
+  locked?: boolean;
+}) {
+  const fill = Math.max(0, Math.min(1, pct));
   return (
-    <div className="relative">
-      <svg
-        width="88"
-        height="88"
-        viewBox="0 0 88 88"
-        className="drop-shadow-[0_0_8px_oklch(0.79_0.16_85_/_0.2)]"
+    <div
+      className={`rounded-2xl border border-border/50 bg-card/80 p-4 md:p-5 ${locked ? "opacity-60" : ""}`}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+          <div className="mt-1 text-sm font-semibold text-foreground">{valueLabel}</div>
+        </div>
+        <div className="text-[10px] text-muted-foreground text-right max-w-[45%] leading-snug">{hint}</div>
+      </div>
+      <div className="h-2 rounded-full bg-muted/60 overflow-hidden border border-border/40">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-primary/80 to-primary transition-all duration-700 ease-out"
+          style={{ width: `${fill * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RuntimeRing({
+  daysLeft,
+  isAdmin,
+  active,
+}: {
+  daysLeft: number;
+  isAdmin?: boolean;
+  active?: boolean;
+}) {
+  // Normalize to a 30-day cycle for the arc (plans are monthly-ish)
+  const display = isAdmin && daysLeft >= 999 ? "∞" : String(daysLeft);
+  const pct = isAdmin && daysLeft >= 999 ? 1 : Math.min(1, Math.max(0, daysLeft / 30));
+  const size = 120;
+  const stroke = 8;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - pct);
+  const low = !isAdmin && daysLeft > 0 && daysLeft <= 7;
+
+  return (
+    <div className="relative flex flex-col items-center">
+      <div
+        className={`relative rounded-full p-1 ${
+          active
+            ? "bg-gradient-to-b from-primary/15 via-card to-card border border-primary/20 shadow-[0_0_32px_-8px_color-mix(in_oklch,var(--primary)_35%,transparent)]"
+            : "bg-card border border-border/50"
+        }`}
       >
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          className="text-border/50"
-          strokeWidth="6"
-        />
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke="url(#ringGradient)"
-          strokeWidth="6"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - pct)}
-          strokeLinecap="round"
-          transform="rotate(-90 44 44)"
-          style={{ transition: "stroke-dashoffset 1s ease-out" }}
-        />
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          className="text-primary"
-          strokeWidth="12"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - pct)}
-          strokeLinecap="round"
-          transform="rotate(-90 44 44)"
-          opacity="0.08"
-        />
-        <defs>
-          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="oklch(0.85 0.18 85)" />
-            <stop offset="100%" stopColor="oklch(0.72 0.14 85)" />
-          </linearGradient>
-        </defs>
-        <text
-          x="44"
-          y="42"
-          textAnchor="middle"
-          className="fill-foreground font-mono"
-          fontSize="18"
-          fontWeight="600"
-        >
-          {daysLeft}
-        </text>
-        <text
-          x="44"
-          y="58"
-          textAnchor="middle"
-          className="fill-muted-foreground"
-          fontSize="8"
-          letterSpacing="2"
-        >
-          DAYS LEFT
-        </text>
-      </svg>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block -rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            className="text-border/40"
+            strokeWidth={stroke}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            className={low ? "text-destructive" : "text-primary"}
+            strokeWidth={stroke}
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{ transition: "stroke-dashoffset 0.9s cubic-bezier(0.22,1,0.36,1)" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
+          <div
+            className={`font-display text-3xl font-semibold tabular-nums leading-none tracking-tight ${
+              low ? "text-destructive" : "text-foreground"
+            }`}
+          >
+            {display}
+          </div>
+          <div className="mt-1.5 text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
+            {isAdmin && daysLeft >= 999 ? "Admin" : daysLeft === 1 ? "Day left" : "Days left"}
+          </div>
+        </div>
+      </div>
+      {low && (
+        <div className="mt-2 text-[10px] text-destructive/90 font-medium">Renew soon</div>
+      )}
     </div>
   );
 }

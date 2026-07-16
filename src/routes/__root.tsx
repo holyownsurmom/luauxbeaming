@@ -91,8 +91,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "Deploy stealthy Minecraft bots in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "LuauX" },
+      {
+        property: "og:image",
+        content: "https://luaux.wtf/og.png",
+      },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@luaux" },
+      {
+        name: "twitter:image",
+        content: "https://luaux.wtf/og.png",
+      },
     ],
     links: [
       {
@@ -105,8 +114,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&family=Syne:wght@700;800&display=swap",
       },
+      { rel: "manifest", href: "/site.webmanifest" },
+      { rel: "canonical", href: "https://luaux.wtf/" },
+      { name: "theme-color", content: "#e11d48" },
     ],
   }),
   shellComponent: RootShell,

@@ -27,7 +27,12 @@ import { useSettings } from "@/lib/settings-context";
 import { CartButton, CartDrawer } from "@/components/cart-drawer";
 
 export const Route = createFileRoute("/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — LuauX" }] }),
+  head: () => ({
+    meta: [
+      { title: "Dashboard — LuauX" },
+      { name: "robots", content: "noindex, nofollow" },
+    ],
+  }),
   component: DashboardLayout,
 });
 
@@ -107,10 +112,10 @@ function SidebarContent({
           </div>
         </div>
         <div className="flex-1">
-          <span className="font-display text-base font-bold text-gradient-gold tracking-wide">
+          <span className="font-display text-lg font-extrabold text-gradient-gold tracking-tight">
             LuauX
           </span>
-          <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/60">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70 font-bold">
             Bot Control
           </div>
         </div>
@@ -129,7 +134,7 @@ function SidebarContent({
       <nav className="flex-1 px-3 space-y-5 overflow-y-auto relative scrollbar-thin">
         {NAV.map((sec, si) => (
           <div key={sec.section}>
-            <div className="px-3 mb-2 text-[9px] uppercase tracking-[0.2em] text-muted-foreground/50 font-semibold">
+            <div className="px-3 mb-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/55 font-extrabold">
               {sec.section}
             </div>
             <div className="space-y-0.5">
@@ -145,10 +150,10 @@ function SidebarContent({
                       onClose?.();
                     }}
                     data-active={active ? "true" : "false"}
-                    className={`nav-glide w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-300 relative group/item ${
+                    className={`nav-glide nav-item-fluid w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold relative group/item ${
                       active
-                        ? "bg-primary/10 text-primary border border-primary/25 shadow-[0_0_20px_color-mix(in_oklch,var(--primary)_12%,transparent)]"
-                        : "text-foreground/60 hover:bg-primary/5 hover:text-foreground/90 border border-transparent"
+                        ? "bg-primary/12 text-primary border border-primary/30 shadow-[0_0_20px_color-mix(in_oklch,var(--primary)_14%,transparent)]"
+                        : "text-foreground/65 hover:bg-primary/5 hover:text-foreground border border-transparent"
                     }`}
                   >
                     {active && (
@@ -161,7 +166,7 @@ function SidebarContent({
                           : "text-muted-foreground/60 group-hover/item:text-primary/70"
                       }`}
                     />
-                    <span className={active ? "font-semibold" : ""}>{it.label}</span>
+                    <span className={active ? "font-extrabold" : "font-bold"}>{it.label}</span>
                     {active && (
                       <div className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_60%,transparent)] animate-status-pulse" />
                     )}
@@ -392,7 +397,7 @@ function DashboardLayout() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[240px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
         <div
           key={path}
-          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative"
+          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative font-ui"
         >
           <Outlet />
         </div>
@@ -419,14 +424,14 @@ function TopBar({
       <CartButton onOpen={onOpenCart} />
       <button
         onClick={onOpenSearch}
-        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
+        className="h-10 w-10 rounded-xl bg-card border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
         aria-label="Search"
       >
         <Search className="h-4 w-4 text-foreground/60" />
       </button>
       <button
         onClick={() => s.set("mode", s.mode === "dark" ? "light" : "dark")}
-        className="h-10 w-10 rounded-xl bg-card/90 backdrop-blur-sm border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
+        className="h-10 w-10 rounded-xl bg-card border border-border/60 flex items-center justify-center shadow-lg hover:bg-card transition-colors md:h-9 md:w-9 md:shadow-none"
         aria-label="Toggle mode"
       >
         {s.mode === "dark" ? (

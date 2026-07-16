@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /dashboard
 Disallow: /api/
+Disallow: /sitemap.xml
 
 Sitemap: https://luaux.wtf/sitemap.xml

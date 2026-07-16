@@ -16,6 +16,8 @@ type SessionData = {
   user?: StoredUser;
   vpnBlocked?: boolean;
   isAdmin?: boolean;
+  sessionStartedAt?: number;
+  sessionLabel?: string;
 };
 
 export const Route = createFileRoute("/api/discord/callback")({
@@ -168,6 +170,7 @@ export const Route = createFileRoute("/api/discord/callback")({
           oauth_state: undefined,
           vpnBlocked,
           isAdmin: false,
+          sessionStartedAt: Date.now(),
           user: {
             id: user.id,
             username: user.username,

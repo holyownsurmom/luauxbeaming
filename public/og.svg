@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a853"/>
+      <stop offset="100%" stop-color="#b8860b"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1a1510"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="600" cy="280" r="200" fill="none" stroke="#d4a853" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="600" cy="280" r="300" fill="none" stroke="#d4a853" stroke-width="0.3" opacity="0.1"/>
+  <g transform="translate(540, 220)">
+    <rect x="0" y="0" width="30" height="30" rx="4" fill="#d4a853"/>
+    <rect x="34" y="0" width="30" height="30" rx="4" fill="#d4a853" opacity="0.5"/>
+    <rect x="0" y="34" width="30" height="30" rx="4" fill="#d4a853" opacity="0.5"/>
+    <rect x="34" y="34" width="30" height="30" rx="4" fill="#d4a853"/>
+  </g>
+  <text x="600" y="340" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="700" fill="url(#g)" letter-spacing="0.15em">LUAUX</text>
+  <text x="600" y="390" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="24" fill="#888" letter-spacing="0.3em">MINECRAFT BOT MANAGEMENT</text>
+  <text x="600" y="440" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="18" fill="#666">Deploy stealth bots in under a minute. Live logs, anti-detect proxies, 24/7 uptime.</text>
+  <line x1="400" y1="470" x2="800" y2="470" stroke="#d4a853" stroke-width="0.5" opacity="0.3"/>
+  <text x="600" y="500" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="16" fill="#d4a853" opacity="0.7">luaux.wtf</text>
+</svg>

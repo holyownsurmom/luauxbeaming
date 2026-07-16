@@ -10,7 +10,7 @@ export function PageShell({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn("space-y-6 animate-page-in", className)}>{children}</div>;
+  return <div className={cn("space-y-4 animate-page-in max-w-5xl", className)}>{children}</div>;
 }
 
 /** Standard page title + description + optional actions */
@@ -33,16 +33,18 @@ export function PageHeader({
       )}
     >
       <div className="min-w-0">
-        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-balance">
+        <h1 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight text-balance">
           {title}
         </h1>
         {description ? (
-          <p className="mt-2 text-sm text-muted-foreground max-w-2xl leading-relaxed">
+          <p className="mt-2.5 text-sm font-semibold text-muted-foreground max-w-2xl leading-relaxed">
             {description}
           </p>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center gap-2 shrink-0 font-ui">{actions}</div>
+      ) : null}
     </header>
   );
 }
@@ -62,11 +64,11 @@ export function Surface({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border/50 bg-card/70 backdrop-blur-sm",
-        "shadow-[0_1px_0_0_oklch(1_0_0_/_0.04)_inset]",
+        "rounded-2xl border border-border/60 bg-card",
+        "shadow-[0_1px_0_0_oklch(1_0_0_/_0.05)_inset,0_12px_40px_-24px_oklch(0_0_0_/_0.55)]",
         padded && "p-5 md:p-6",
         interactive &&
-          "transition-colors duration-200 hover:border-primary/25 hover:bg-card/90",
+          "transition-all duration-200 hover:border-primary/30 hover:bg-card hover:-translate-y-0.5",
         className,
       )}
     >
@@ -192,22 +194,18 @@ export function DashButton({
   href?: string;
 }) {
   const sizes = {
-    sm: "px-3.5 py-1.5 text-[11px]",
-    md: "px-5 py-2.5 text-xs",
-    lg: "px-6 py-3 text-xs",
+    sm: "px-2.5 py-1.5 text-xs",
+    md: "px-3 py-2 text-sm",
+    lg: "px-4 py-2.5 text-sm",
   };
   const variants = {
-    primary:
-      "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 border border-transparent",
-    secondary:
-      "border border-border/60 bg-card/80 text-foreground hover:bg-primary/5 hover:border-primary/25 hover:text-primary",
-    ghost: "border border-transparent text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
-    danger:
-      "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15",
+    primary: "bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent",
+    secondary: "border border-border bg-background text-foreground hover:bg-secondary",
+    ghost: "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
+    danger: "border border-destructive/40 text-destructive hover:bg-destructive/10",
   };
   const cls = cn(
-    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors",
     "disabled:pointer-events-none disabled:opacity-50",
     sizes[size],
     variants[variant],
@@ -257,4 +255,168 @@ export function FieldLabel({ children, className }: { children: ReactNode; class
 
 /** Shared control chrome for inputs/selects/textareas */
 export const fieldControlClass =
-  "w-full rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:border-primary/40 disabled:opacity-50";
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50";
+
+export const fieldMonoClass = `${fieldControlClass} font-mono text-[13px]`;
+
+/** Flat bot page header — no icon boxes */
+export function BotPageHeader({
+  title,
+  description,
+  badge,
+  actions,
+}: {
+  icon?: React.ComponentType<{ className?: string }>;
+  title: string;
+  description?: string;
+  badge?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border pb-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{title}</h1>
+          {badge}
+        </div>
+        {description ? (
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** Simple bordered section — no icon pills / glow */
+export function BotPanel({
+  title,
+  subtitle,
+  actions,
+  children,
+  className,
+  bodyClassName,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+}) {
+  return (
+    <section className={cn("border border-border rounded-lg bg-card", className)}>
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+        <div className="min-w-0">
+          <div className="text-sm font-bold truncate">{title}</div>
+          {subtitle ? (
+            <div className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</div>
+          ) : null}
+        </div>
+        {actions ? <div className="flex items-center gap-2 shrink-0">{actions}</div> : null}
+      </div>
+      <div className={cn("p-4 space-y-3", bodyClassName)}>{children}</div>
+    </section>
+  );
+}
+
+export function BotField({
+  label,
+  hint,
+  children,
+  className,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={cn("block space-y-1", className)}>
+      <span className="block text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+      {hint ? <span className="block text-xs text-muted-foreground">{hint}</span> : null}
+    </label>
+  );
+}
+
+export function BotTabBar({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { id: string; label: string; icon?: React.ComponentType<{ className?: string }> }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="flex gap-0 border-b border-border -mt-1 mb-1">
+      {tabs.map((t) => {
+        const active = value === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            className={cn(
+              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              active
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function LicenseBar({
+  isAdmin,
+  expiresAt,
+  licenseKey,
+  onCopy,
+  copied,
+}: {
+  isAdmin?: boolean;
+  expiresAt?: string;
+  licenseKey?: string;
+  onCopy?: () => void;
+  copied?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm border border-border rounded-lg px-3 py-2.5 bg-card">
+      <span className="font-medium">
+        {isAdmin ? "Admin" : "Licensed"}
+        {!isAdmin && expiresAt
+          ? ` · expires ${new Date(expiresAt).toLocaleDateString()}`
+          : ""}
+      </span>
+      {!isAdmin && licenseKey ? (
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <code className="truncate font-mono text-xs text-muted-foreground">{licenseKey}</code>
+          {onCopy ? (
+            <button
+              type="button"
+              onClick={onCopy}
+              className="shrink-0 text-xs font-medium text-primary hover:underline"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function AdminBadge() {
+  return (
+    <span className="text-xs font-medium text-primary border border-primary/30 rounded px-1.5 py-0.5">
+      admin
+    </span>
+  );
+}

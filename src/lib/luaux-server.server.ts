@@ -9,7 +9,14 @@ export type LuauxSessionUser = {
   avatar: string | null;
 };
 
-type SessionData = { oauth_state?: string; user?: LuauxSessionUser; isAdmin?: boolean; vpnBlocked?: boolean };
+type SessionData = {
+  oauth_state?: string;
+  user?: LuauxSessionUser;
+  isAdmin?: boolean;
+  vpnBlocked?: boolean;
+  sessionStartedAt?: number;
+  sessionLabel?: string;
+};
 
 /** Strip accidental quotes from env values (common when pasting into Vercel/CLI) */
 export function envStr(name: string, fallback = ""): string {

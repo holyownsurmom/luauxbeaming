@@ -25,9 +25,29 @@ import {
   DiscordRiskDisclaimer,
   useDiscordRiskDisclaimer,
 } from "@/components/discord-risk-disclaimer";
+import {
+  SPAM_PROFILES,
+  deleteTemplate,
+  listTemplates,
+  saveTemplate,
+  type SpamTemplate,
+} from "@/lib/job-templates";
+import {
+  AdminBadge,
+  BotField,
+  BotPageHeader,
+  BotPanel,
+  DashButton,
+  LicenseBar,
+  PageShell,
+  fieldControlClass,
+  fieldMonoClass,
+} from "@/components/dashboard-ui";
 
 export const Route = createFileRoute("/dashboard/discord-spam")({
-  head: () => ({ meta: [{ title: "Discord Auto-Spam — LuauX" }] }),
+  head: () => ({
+    meta: [{ title: "Discord Auto-Spam — LuauX" }],
+  }),
   component: DiscordSpamPage,
 });
 
@@ -100,11 +120,90 @@ function DiscordSpamPage() {
   const [humanize, setHumanize] = useState(true);
   const [minDelay, setMinDelay] = useState("1200");
   const [maxDelay, setMaxDelay] = useState("2400");
+  const [delayProfile, setDelayProfile] = useState<"safe" | "balanced" | "custom">("balanced");
+  const [templates, setTemplates] = useState<SpamTemplate[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const [tokenCheck, setTokenCheck] = useState<{
+    status: "idle" | "loading" | "ok" | "bad";
+    message: string;
+  }>({ status: "idle", message: "" });
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [showConfig, setShowConfig] = useState(true);
+
+  const refreshTemplates = useCallback(() => {
+    setTemplates(listTemplates("spam") as SpamTemplate[]);
+  }, []);
+
+  useEffect(() => {
+    refreshTemplates();
+    const on = () => refreshTemplates();
+    window.addEventListener("luaux-templates", on);
+    return () => window.removeEventListener("luaux-templates", on);
+  }, [refreshTemplates]);
+
+  const applyProfile = (p: "safe" | "balanced") => {
+    const cfg = SPAM_PROFILES[p];
+    setDelayProfile(p);
+    setInterval_(cfg.interval);
+    setMinDelay(cfg.minDelay);
+    setMaxDelay(cfg.maxDelay);
+  };
+
+  const checkToken = async () => {
+    if (!token.trim()) {
+      setTokenCheck({ status: "bad", message: "Paste a token first" });
+      return;
+    }
+    setTokenCheck({ status: "loading", message: "Checking…" });
+    try {
+      const res = await fetch("/api/discord/token-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token.trim() }),
+      });
+      const data = (await res.json()) as { ok?: boolean; message?: string };
+      if (data.ok) {
+        setTokenCheck({ status: "ok", message: data.message || "Valid token" });
+        toast.success(data.message || "Token OK");
+      } else {
+        setTokenCheck({ status: "bad", message: data.message || "Token failed" });
+        toast.error(data.message || "Token failed");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Check failed";
+      setTokenCheck({ status: "bad", message: msg });
+    }
+  };
+
+  const saveCurrentTemplate = () => {
+    const name = templateName.trim() || `Spam ${new Date().toLocaleDateString()}`;
+    saveTemplate({
+      kind: "spam",
+      name,
+      channelId,
+      messages,
+      interval,
+      minDelay,
+      maxDelay,
+      profile: delayProfile,
+    });
+    setTemplateName("");
+    refreshTemplates();
+    toast.success("Template saved (token not stored)");
+  };
+
+  const loadTemplate = (t: SpamTemplate) => {
+    setChannelId(t.channelId);
+    setMessages(t.messages);
+    setInterval_(t.interval);
+    setMinDelay(t.minDelay);
+    setMaxDelay(t.maxDelay);
+    setDelayProfile(t.profile || "custom");
+    toast.success(`Loaded “${t.name}”`);
+  };
 
   useEffect(() => {
     Promise.all([fetchKeys({ data: { plugin_id: "discord-spam" } }), fetchProfile()])
@@ -408,7 +507,7 @@ function DiscordSpamPage() {
             <Zap className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <h1 className="font-display text-4xl font-semibold tracking-tight">
+            <h1 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight">
               Discord Auto-Spam
             </h1>
             <p className="mt-1 text-muted-foreground">
@@ -549,111 +648,138 @@ function DiscordSpamPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <div className="space-y-6 animate-page-in">
+    <PageShell>
       <DiscordRiskDisclaimer
         tool="spam"
         open={risk.open}
         onAccepted={risk.onAccepted}
       />
-      <header className="flex items-start gap-4">
-        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
-          <Zap className="h-6 w-6" />
-        </div>
-        <div className="flex-1">
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
-            Discord Auto-Spam
-            {isAdmin && (
-              <span className="ml-3 inline-flex items-center rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-semibold brutal-border">
-                ADMIN
-              </span>
-            )}
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Slow, short sessions. Use an alt account only — Discord can ban self-bots.
-          </p>
-        </div>
-      </header>
+      <BotPageHeader
+        title="Discord spam"
+        description="Alt accounts only. Slow delays. Can still get banned."
+        badge={isAdmin ? <AdminBadge /> : null}
+      />
 
-      {/* License Key Display */}
-      <div className="rounded-2xl brutal-border bg-card p-5 animated-border noise-texture relative overflow-hidden">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-primary" />
-            <span className="text-xs uppercase tracking-widest text-primary">
-              {isAdmin ? "Admin mode" : "License active"}
-            </span>
-          </div>
-          {!isAdmin && (
-            <span className="text-[10px] text-muted-foreground">
-              Expires {new Date(activeKey!.expires_at).toLocaleDateString()}
-            </span>
-          )}
-        </div>
-        {!isAdmin && (
-          <div className="mt-3 flex items-center gap-2">
-            <code className="flex-1 rounded-lg bg-secondary/40 px-3 py-2 font-mono text-sm break-all">
-              {activeKey!.key}
-            </code>
-            <button
-              onClick={() => copy(activeKey!.key)}
-              className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
+      <LicenseBar
+        isAdmin={isAdmin}
+        expiresAt={activeKey?.expires_at}
+        licenseKey={activeKey?.key}
+        onCopy={() => activeKey && copy(activeKey.key)}
+        copied={!!activeKey && copied === activeKey.key}
+      />
+
+      <BotPanel title="Config" subtitle={channelId ? `ch ${channelId}` : "empty"}>
+        {showConfig && (
+          <>
+            <BotField
+              label="User token"
+              hint={
+                tokenCheck.message ||
+                "Discord user token (DevTools). Check before start — never stored in templates."
+              }
             >
-              {copied === activeKey!.key ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-        )}
-        {isAdmin && (
-          <div className="mt-3 text-xs text-muted-foreground">
-            Payment checks bypassed. All features unlocked.
-          </div>
-        )}
-      </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  className={`${fieldMonoClass} flex-1`}
+                  value={token}
+                  onChange={(e) => {
+                    setToken(e.target.value);
+                    setTokenCheck({ status: "idle", message: "" });
+                  }}
+                  placeholder="MTI..."
+                />
+                <DashButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={checkToken}
+                  disabled={tokenCheck.status === "loading"}
+                >
+                  {tokenCheck.status === "loading" ? "…" : "Check"}
+                </DashButton>
+              </div>
+            </BotField>
 
-      {/* Config Panel */}
-      <div className="rounded-2xl brutal-border bg-card animated-border noise-texture relative overflow-hidden">
-        <button
-          onClick={() => setShowConfig(!showConfig)}
-          className="w-full flex items-center justify-between p-5"
-        >
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Settings className="h-5 w-5 text-primary" />
-            </div>
-            <div className="text-left">
-              <div className="font-semibold text-sm">Spam Configuration</div>
-              <div className="text-xs text-muted-foreground">
-                {channelId ? `Channel: ${channelId}` : "Not configured"}
+            {/* Delay profiles */}
+            <div className="space-y-2">
+              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
+                Delay profile
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { id: "safe" as const, ...SPAM_PROFILES.safe },
+                    { id: "balanced" as const, ...SPAM_PROFILES.balanced },
+                    { id: "custom" as const, label: "Custom", hint: "Manual delays" },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => (p.id === "custom" ? setDelayProfile("custom") : applyProfile(p.id))}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      delayProfile === p.id
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border/50 bg-background/40 text-muted-foreground hover:border-primary/20"
+                    }`}
+                  >
+                    <div className="text-xs font-semibold">{p.label}</div>
+                    <div className="text-[10px] opacity-80 mt-0.5">{p.hint}</div>
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-          {showConfig ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
 
-        {showConfig && (
-          <div className="px-5 pb-5 space-y-4 border-t border-border/60 pt-4">
-            <label className="text-xs space-y-1">
-              <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
-                User Token
-              </span>
-              <input
-                type="password"
-                className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="MTI..."
-              />
-              <span className="text-[10px] text-muted-foreground">
-                Discord user token (from browser DevTools). Your account must be in the server.
-              </span>
-            </label>
+            {/* Templates */}
+            <div className="rounded-xl border border-border/50 bg-background/30 p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                Templates
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-xs"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Template name"
+                />
+                <button
+                  type="button"
+                  onClick={saveCurrentTemplate}
+                  className="rounded-lg bg-primary/15 text-primary px-3 py-2 text-xs font-semibold hover:bg-primary/25"
+                >
+                  Save
+                </button>
+              </div>
+              {templates.length > 0 && (
+                <div className="space-y-1 max-h-28 overflow-y-auto">
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-border/40 px-2 py-1.5 text-xs"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => loadTemplate(t)}
+                        className="text-left flex-1 truncate hover:text-primary font-medium"
+                      >
+                        {t.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          deleteTemplate(t.id);
+                          refreshTemplates();
+                        }}
+                        className="text-destructive/80 hover:text-destructive shrink-0"
+                        aria-label="Delete template"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <label className="text-xs space-y-1">
               <span className="text-muted-foreground uppercase tracking-widest text-[10px]">
@@ -693,7 +819,10 @@ function DiscordSpamPage() {
                   min="1"
                   className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                   value={interval}
-                  onChange={(e) => setInterval_(e.target.value)}
+                  onChange={(e) => {
+                    setDelayProfile("custom");
+                    setInterval_(e.target.value);
+                  }}
                 />
               </label>
               <div className="text-xs space-y-1">
@@ -731,10 +860,13 @@ function DiscordSpamPage() {
                   </span>
                   <input
                     type="number"
-                    min="1"
+                    min="1200"
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                     value={minDelay}
-                    onChange={(e) => setMinDelay(e.target.value)}
+                    onChange={(e) => {
+                      setDelayProfile("custom");
+                      setMinDelay(e.target.value);
+                    }}
                   />
                 </label>
                 <label className="text-xs space-y-1">
@@ -743,37 +875,50 @@ function DiscordSpamPage() {
                   </span>
                   <input
                     type="number"
-                    min="1"
+                    min="1800"
                     className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
                     value={maxDelay}
-                    onChange={(e) => setMaxDelay(e.target.value)}
+                    onChange={(e) => {
+                      setDelayProfile("custom");
+                      setMaxDelay(e.target.value);
+                    }}
                   />
                 </label>
               </div>
             )}
 
-            {error && <div className="text-xs text-destructive">{error}</div>}
+            {error && <div className="text-xs font-semibold text-destructive">{error}</div>}
 
-            <button
-              onClick={launchBot}
-              disabled={launching}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-5 py-3 text-sm font-semibold disabled:opacity-50 btn-premium"
-            >
+            <DashButton className="w-full" size="lg" onClick={launchBot} disabled={launching}>
               {launching ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              {launching ? "Starting..." : "Start Spamming"}
-            </button>
-          </div>
+              {launching ? "Starting..." : "Start spamming"}
+            </DashButton>
+          </>
         )}
-      </div>
+      </BotPanel>
 
-      {/* Live Console */}
       {selectedBotId && (
-        <div className="rounded-2xl border border-border/50 bg-card/70 p-5 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+        <BotPanel
+          title="Live console"
+          subtitle={activeBot?.label || selectedBotId}
+          actions={
+            <DashButton
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedBotId(null);
+                setConsoleEntries([]);
+              }}
+            >
+              Close
+            </DashButton>
+          }
+        >
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
             <div className="flex items-center gap-2 min-w-0">
               <div
                 className={`h-2 w-2 rounded-full shrink-0 ${
@@ -786,56 +931,31 @@ function DiscordSpamPage() {
                         : "bg-muted-foreground"
                 }`}
               />
-              <span className="text-xs font-semibold uppercase tracking-widest">Console</span>
-              <span className="text-xs text-muted-foreground truncate">
-                {activeBot?.label || selectedBotId.slice(0, 8)}
+              <span className="text-xs font-extrabold uppercase tracking-widest">
+                {activeBot?.status || "idle"}
               </span>
-              {activeBot?.status ? (
-                <span
-                  className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${
-                    activeBot.status === "running"
-                      ? "bg-primary/15 text-primary border-primary/20"
-                      : activeBot.status === "error"
-                        ? "bg-destructive/15 text-destructive border-destructive/20"
-                        : "bg-secondary/80 text-muted-foreground border-border/50"
-                  }`}
-                >
-                  {activeBot.status}
-                </span>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground font-mono">
                 {consoleEntries.length} lines
               </span>
-              <button
-                type="button"
-                onClick={() => setConsoleEntries([])}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
+            </div>
+            <div className="flex items-center gap-2">
+              <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
                 Clear
-              </button>
+              </DashButton>
               {selectedBotId && (
-                <button
-                  type="button"
+                <DashButton
+                  variant="danger"
+                  size="sm"
                   onClick={() => void stopBot(selectedBotId)}
                   disabled={stoppingId === selectedBotId}
-                  className="inline-flex items-center gap-1 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
                 >
                   <Square className="h-3 w-3" /> Stop
-                </button>
+                </DashButton>
               )}
-              <button
-                type="button"
-                onClick={() => setSelectedBotId(null)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Close
-              </button>
             </div>
           </div>
           {activeBot?.error ? (
-            <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs font-semibold text-destructive">
               {activeBot.error}
             </div>
           ) : null}
@@ -844,78 +964,72 @@ function DiscordSpamPage() {
             highlightBot={true}
             title="LUAUX@SPAM ~ TAIL -F BOT.LOG"
           />
-        </div>
+        </BotPanel>
       )}
 
-      {/* Running Bots */}
       {runningBots.length > 0 && (
-        <div className="rounded-2xl border border-border/50 bg-card/70 p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">
-              Active bots ({runningBots.length})
-            </div>
-            <button
-              type="button"
+        <BotPanel
+          title="Active jobs"
+          subtitle={`${runningBots.length} running`}
+          actions={
+            <DashButton
+              variant="danger"
+              size="sm"
               onClick={stopAndClearAll}
               disabled={stoppingId !== null}
-              className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-1.5 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
             >
-              <Square className="h-3 w-3" /> Stop & Clear All
-            </button>
+              <Square className="h-3 w-3" /> Stop all
+            </DashButton>
+          }
+        >
+          <div className="space-y-2">
+            {runningBots.map((bot) => (
+              <div
+                key={bot.id}
+                className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div
+                    className={`h-2 w-2 rounded-full shrink-0 ${
+                      bot.status === "running"
+                        ? "bg-primary animate-pulse"
+                        : bot.status === "pending"
+                          ? "bg-amber-400 animate-pulse"
+                          : bot.status === "error"
+                            ? "bg-destructive"
+                            : "bg-muted-foreground"
+                    }`}
+                  />
+                  <span className="text-sm font-extrabold truncate">{bot.label || "spam"}</span>
+                  <span className="text-xs font-semibold text-muted-foreground capitalize">
+                    {bot.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedBotId(bot.id);
+                      setConsoleEntries([]);
+                    }}
+                    className="text-xs font-extrabold text-primary hover:underline"
+                  >
+                    Console
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stopBot(bot.id)}
+                    disabled={stoppingId === bot.id}
+                    className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          {runningBots.map((bot) => (
-            <div
-              key={bot.id}
-              className="flex items-center justify-between rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <div
-                  className={`h-2 w-2 rounded-full shrink-0 ${
-                    bot.status === "running"
-                      ? "bg-primary animate-pulse"
-                      : bot.status === "pending"
-                        ? "bg-amber-400 animate-pulse"
-                        : bot.status === "error"
-                          ? "bg-destructive"
-                          : "bg-muted-foreground"
-                  }`}
-                />
-                <span className="text-sm font-semibold truncate">{bot.label || "spam"}</span>
-                <span
-                  className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest shrink-0 ${
-                    bot.status === "running"
-                      ? "bg-primary/15 text-primary border-primary/20"
-                      : bot.status === "error"
-                        ? "bg-destructive/15 text-destructive border-destructive/20"
-                        : "bg-secondary/80 text-muted-foreground border-border/50"
-                  }`}
-                >
-                  {bot.status}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedBotId(bot.id);
-                    setConsoleEntries([]);
-                  }}
-                  className="text-xs text-primary hover:underline font-semibold"
-                >
-                  Console
-                </button>
-                <button
-                  onClick={() => stopBot(bot.id)}
-                  disabled={stoppingId === bot.id}
-                  className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        </BotPanel>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -97,9 +97,9 @@ export function validateDiscordSpamBody(body: Record<string, unknown>):
   const guildId =
     body.guildId != null ? String(body.guildId).trim().slice(0, MAX_CHANNEL_ID_LEN) : undefined;
   const label = body.label != null ? String(body.label).trim().slice(0, 64) : undefined;
-  let minDelay = clampInterval(body.minDelay, 900, MAX_INTERVAL_SEC, 900);
-  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 300, 1800));
-  if (maxDelay < minDelay) maxDelay = minDelay + 300;
+  let minDelay = clampInterval(body.minDelay, 1200, MAX_INTERVAL_SEC, 1200);
+  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 600, 2400));
+  if (maxDelay < minDelay) maxDelay = minDelay + 600;
   return {
     ok: true,
     config: {
@@ -107,10 +107,10 @@ export function validateDiscordSpamBody(body: Record<string, unknown>):
       channelId,
       messages,
       interval,
-      humanize: asBool(body.humanize, true),
+      humanize: true,
       minDelay,
       maxDelay,
-      deleteAfterSend: asBool(body.deleteAfterSend, false),
+      deleteAfterSend: false,
       ...(guildId ? { guildId } : {}),
       ...(label ? { label } : {}),
     },
@@ -143,9 +143,9 @@ export function validateDiscordAutoreplyBody(body: Record<string, unknown>):
     body.cooldownSec != null
       ? clampInterval(body.cooldownSec, 0, MAX_INTERVAL_SEC, 0)
       : undefined;
-  let minDelay = clampInterval(body.minDelay, 10, MAX_INTERVAL_SEC, 15);
-  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 5, 45));
-  if (maxDelay < minDelay) maxDelay = minDelay + 5;
+  let minDelay = clampInterval(body.minDelay, 25, MAX_INTERVAL_SEC, 45);
+  let maxDelay = clampInterval(body.maxDelay, minDelay, MAX_INTERVAL_SEC, Math.max(minDelay + 20, 120));
+  if (maxDelay < minDelay) maxDelay = minDelay + 20;
   return {
     ok: true,
     config: {
@@ -153,7 +153,7 @@ export function validateDiscordAutoreplyBody(body: Record<string, unknown>):
       messages,
       minDelay,
       maxDelay,
-      typing: asBool(body.typing, true),
+      typing: false,
       autoAcceptFriends: asBool(body.autoAcceptFriends, false),
       ...(guildId ? { guildId } : {}),
       ...(channelId ? { channelId } : {}),

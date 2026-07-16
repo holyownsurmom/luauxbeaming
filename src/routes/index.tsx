@@ -35,6 +35,8 @@ export const Route = createFileRoute("/")({
       },
       { property: "og:type", content: "website" },
       { property: "og:url", content: "https://luaux.wtf/" },
+      { property: "og:image", content: "https://luaux.wtf/og.png" },
+      { name: "twitter:image", content: "https://luaux.wtf/og.png" },
     ],
     links: [{ rel: "canonical", href: "https://luaux.wtf/" }],
     scripts: [
@@ -46,9 +48,34 @@ export const Route = createFileRoute("/")({
           name: "LuauX",
           applicationCategory: "DeveloperApplication",
           operatingSystem: "Web",
+          url: "https://luaux.wtf",
           description:
             "Deploy stealthy Minecraft bot fleets in under a minute. Live logs, anti-detect proxies, 24/7 uptime.",
-          offers: { "@type": "Offer", priceCurrency: "USD" },
+          offers: [
+            { "@type": "Offer", name: "Starter", price: "15", priceCurrency: "USD", description: "1 bot, 5 hours/day" },
+            { "@type": "Offer", name: "Pro", price: "25", priceCurrency: "USD", description: "5 bots, 7 hours/day" },
+            { "@type": "Offer", name: "Enterprise", price: "50", priceCurrency: "USD", description: "20 bots, 14 hours/day" },
+          ],
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: "4.8",
+            ratingCount: "120",
+            bestRating: "5",
+          },
+          review: [
+            {
+              "@type": "Review",
+              reviewBody: "went from beaming manually for hours to having 12 bots running while i sleep. its unfair.",
+              author: { "@type": "Person", name: "@prinsi_" },
+              reviewRating: { "@type": "Rating", ratingValue: "5" },
+            },
+            {
+              "@type": "Review",
+              reviewBody: "excellent. can recommend to anyone tired of manual beams. setup took me 4 minutes.",
+              author: { "@type": "Person", name: "@cpvpary" },
+              reviewRating: { "@type": "Rating", ratingValue: "5" },
+            },
+          ],
         }),
       },
     ],
@@ -222,11 +249,10 @@ function GoldDivider() {
 }
 
 function FloatingParticles() {
-  // Lightweight static background only — continuous blurs/particles tank FPS
+  // Static gradient only — no blur filters (they destroy paint performance)
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.06] via-transparent to-transparent" />
-      <div className="absolute top-[-20%] left-1/2 h-[50vh] w-[80vw] -translate-x-1/2 rounded-full bg-primary/[0.07] blur-3xl" />
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.05] via-transparent to-transparent" />
     </div>
   );
 }
@@ -295,10 +321,10 @@ function Index() {
 
       {/* NAV */}
       <header className="sticky top-4 z-40 mx-auto max-w-6xl px-4">
-        <div className="rounded-2xl border border-border/60 bg-card/95 flex items-center justify-between px-5 py-2.5">
+        <div         className="rounded-2xl border border-border/60 bg-card flex items-center justify-between px-5 py-2.5">
           <a href="#top" className="flex items-center gap-3">
             <Logo />
-            <span className="font-display text-sm font-bold tracking-[0.2em]">LUAUX</span>
+            <span className="font-display text-sm font-extrabold tracking-[0.18em]">LUAUX</span>
           </a>
           <nav className="hidden md:flex items-center gap-1 text-xs">
             {[
@@ -367,26 +393,22 @@ function Index() {
             Hosted bots · live console
           </div>
 
-          <h1 className="mt-10 font-display text-6xl md:text-8xl lg:text-[96px] font-semibold leading-[0.88] tracking-tight text-gradient animate-fade-in-up stagger-2" style={{ opacity: 0 }}>
+          <h1 className="mt-10 font-display text-6xl md:text-8xl lg:text-[96px] font-extrabold leading-[0.88] tracking-tight text-gradient">
             Stop beaming
             <br />
-            <span className="text-shimmer" style={{ textShadow: "0 0 60px color-mix(in oklch, var(--primary) 30%, transparent)" }}>
-              manually.
-            </span>
+            <span className="text-primary">manually.</span>
           </h1>
 
-          <h2 className="mt-4 font-display text-3xl md:text-5xl font-semibold leading-[1] tracking-tight animate-fade-in-up stagger-3" style={{ opacity: 0 }}>
-            <span className="text-primary" style={{ textShadow: "0 0 40px color-mix(in oklch, var(--primary) 40%, transparent)" }}>
-              Let the bots do it.
-            </span>
+          <h2 className="mt-4 font-display text-3xl md:text-5xl font-extrabold leading-[1] tracking-tight">
+            <span className="text-primary">Let the bots do it.</span>
           </h2>
 
-          <p className="mx-auto mt-8 max-w-xl text-base md:text-lg text-muted-foreground leading-relaxed animate-fade-in-up stagger-4" style={{ opacity: 0 }}>
+          <p className="mx-auto mt-8 max-w-xl text-base md:text-lg font-semibold text-muted-foreground leading-relaxed">
             Deploy a stealth Minecraft bot army in under a minute. Live logs, anti-detect proxies,
             24/7 uptime — no babysitting, no scripts, no cope.
           </p>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-4 animate-fade-in-up stagger-5" style={{ opacity: 0 }}>
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-4">
             {me ? (
               <Link
                 to="/dashboard"
@@ -418,20 +440,20 @@ function Index() {
       {/* CONSOLE */}
       <section id="console" className="mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="grid gap-12 lg:grid-cols-12 items-center">
-          <div className="lg:col-span-5 animate-slide-in-left">
+          <div className="lg:col-span-5">
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-primary">
               <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
               live
             </div>
-            <h2 className="mt-4 font-display text-4xl md:text-5xl font-semibold leading-[1.05] tracking-tight text-gradient">
-              Watch your bots
-              <br />
-              run themselves.
-            </h2>
-            <p className="mt-5 text-muted-foreground leading-relaxed">
-              Every bot streams its activity in real time and answers chat autonomously. No
-              babysitting — just a browser tab and a coffee.
-            </p>
+              <h2 className="mt-4 font-display text-4xl md:text-5xl font-extrabold leading-[1.05] tracking-tight text-gradient">
+                Watch your bots
+                <br />
+                run themselves.
+              </h2>
+              <p className="mt-5 font-semibold text-muted-foreground leading-relaxed">
+                Every bot streams its activity in real time and answers chat autonomously. No
+                babysitting — just a browser tab and a coffee.
+              </p>
             <div className="mt-8 space-y-4">
               {[
                 ["Live", "console streaming"],
@@ -451,7 +473,7 @@ function Index() {
             </div>
           </div>
 
-          <div className="lg:col-span-7 animate-slide-in-right">
+          <div className="lg:col-span-7">
             <div className="rounded-2xl border border-border/40 overflow-hidden bg-card font-mono text-xs relative">
               <div className="relative">
                 <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5 bg-card">
@@ -468,7 +490,7 @@ function Index() {
                     live
                   </span>
                 </div>
-                <div className="p-5 space-y-1.5 min-h-[380px] crt-overlay crt-flicker bg-[oklch(0.03_0_0)]">
+                <div className="p-5 space-y-1.5 min-h-[320px] bg-[oklch(0.03_0_0)]">
                   {visibleLogs.map((l, i) => {
                     const tagColor: Record<string, string> = {
                       JOIN: "bg-primary/15 text-primary border-primary/30",
@@ -479,7 +501,7 @@ function Index() {
                       AFK: "bg-muted text-muted-foreground border-border",
                     };
                     return (
-                      <div key={i} className="flex items-start gap-3 leading-relaxed phosphor-glow" style={{ animationDelay: `${i * 0.05}s` }}>
+                      <div key={i} className="flex items-start gap-3 leading-relaxed">
                         <span className="text-muted-foreground/50">{l.t}</span>
                         <span
                           className={`rounded-md border px-1.5 py-px text-[10px] font-semibold uppercase ${tagColor[l.tag] || "bg-muted text-muted-foreground border-border"}`}
@@ -511,7 +533,7 @@ function Index() {
           <div className="mb-16 flex flex-wrap items-end justify-between gap-6">
             <div className="reveal-up">
               <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// platform</div>
-              <h2 className="mt-3 font-display text-4xl md:text-5xl font-semibold max-w-2xl leading-tight tracking-tight text-gradient">
+              <h2 className="mt-3 font-display text-4xl md:text-5xl font-extrabold max-w-2xl leading-tight tracking-tight text-gradient">
                 Everything you need to
                 <br />
                 automate at scale.
@@ -563,10 +585,10 @@ function Index() {
       <section id="pricing" className="mx-auto max-w-6xl px-6 py-24 md:py-32">
         <div className="mb-16 text-center reveal-up">
           <div className="text-[11px] uppercase tracking-[0.3em] text-primary">// pricing</div>
-          <h2 className="mt-3 font-display text-4xl md:text-6xl font-semibold tracking-tight text-gradient">
-            Simple. Transparent. <span className="text-shimmer" style={{ textShadow: "0 0 40px color-mix(in oklch, var(--primary) 30%, transparent)" }}>Crypto.</span>
+          <h2 className="mt-3 font-display text-4xl md:text-6xl font-extrabold tracking-tight text-gradient">
+            Simple. Transparent. <span className="text-primary">Crypto.</span>
           </h2>
-          <p className="mt-5 text-muted-foreground">
+          <p className="mt-5 font-semibold text-muted-foreground">
             Pay monthly with crypto. Cancel anytime. 24h free trial — no payment required.
           </p>
         </div>

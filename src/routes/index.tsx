@@ -401,7 +401,7 @@ function Index() {
                 onClick={openAuth}
                 className="rounded-full btn-gold-lg px-10 py-4 text-sm"
               >
-                Get started free
+                Get started
               </button>
             )}
             <a

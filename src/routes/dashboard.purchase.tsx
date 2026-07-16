@@ -270,7 +270,7 @@ function PurchasePage() {
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-muted-foreground">
-                {s.formatPrice(1)} per hour · Max 24h · Expires at midnight UTC
+                {s.formatPrice(1)} per hour · packs up to 24 hours
               </p>
             </div>
             <div className="rounded-xl brutal-border bg-card p-4 min-w-[180px]">

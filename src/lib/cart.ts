@@ -42,13 +42,6 @@ export function getCartTotalUsd(): number {
 }
 
 export function addToCart(item: CartItem): { ok: boolean; reason?: string } {
-  if (
-    item.planId === "verification" ||
-    item.planId.startsWith("verification") ||
-    /verification/i.test(item.name)
-  ) {
-    return { ok: false, reason: "Verification Bot is under work and cannot be purchased" };
-  }
   const items = read();
   if (items.some((i) => i.planId === item.planId)) {
     return { ok: false, reason: "Already in cart" };

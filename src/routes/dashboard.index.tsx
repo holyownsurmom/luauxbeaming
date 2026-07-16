@@ -352,7 +352,7 @@ function Overview() {
             to="/dashboard/verification-bot"
             icon={ShieldCheck}
             title="Verification Bot"
-            desc="Under work — not available for purchase."
+            desc="Verify members and secure MC accounts for your server."
           />
         </div>
       </section>

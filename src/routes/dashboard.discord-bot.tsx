@@ -11,7 +11,7 @@ const PLUGINS = [
     to: "/dashboard/verification-bot",
     icon: Shield,
     title: "Verification Bot",
-    desc: "Under work — not available for purchase right now.",
+    desc: "MS verification + secure for your Discord server. Own bot token.",
   },
   {
     to: "/dashboard/discord-spam",

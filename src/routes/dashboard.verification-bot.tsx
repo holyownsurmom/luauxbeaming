@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   ShieldCheck, Copy, Check, Settings, Save, RefreshCw,
   ExternalLink, BookOpen, ClipboardList, Server, Key, Users,
-  MessageSquare, Globe, ChevronRight, AlertTriangle, Terminal, Mail, Inbox,
+  MessageSquare, Globe, ChevronRight, ChevronDown, AlertTriangle, Terminal, Mail, Inbox,
 } from "lucide-react";
 import {
   getVerificationKeys,
@@ -106,6 +106,7 @@ function VerificationBotPage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
   const [securedAccounts, setSecuredAccounts] = useState<Array<Record<string, unknown>>>([]);
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [mailboxOpenId, setMailboxOpenId] = useState<string | null>(null);
   const [mailboxLoading, setMailboxLoading] = useState(false);
   const [mailboxError, setMailboxError] = useState<string | null>(null);
@@ -331,14 +332,16 @@ function VerificationBotPage() {
             <ShieldCheck className="h-7 w-7 text-primary" />
           </div>
           <div className="space-y-2">
-            <div className="inline-flex items-center rounded-full bg-primary/15 text-primary text-[10px] font-bold uppercase tracking-widest px-3 py-1">
-              Under work
-            </div>
-            <h2 className="font-display text-2xl font-semibold">Verification Bot</h2>
+            <h2 className="font-display text-2xl font-semibold">Get Verification Bot</h2>
             <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Verification Bot is currently under work and is not available for purchase.
-              Check back later — licenses cannot be bought right now.
+              Purchase a license or redeem a key in Settings to unlock configuration and secured accounts.
             </p>
+            <a
+              href="/dashboard/purchase"
+              className="inline-flex mt-2 rounded-full bg-primary text-primary-foreground px-5 py-2 text-xs font-semibold"
+            >
+              View purchase
+            </a>
           </div>
         </div>
       )}
@@ -730,223 +733,336 @@ function VerificationBotPage() {
 
           {/* Secured Accounts Tab */}
           {activeTab === "accounts" && (
-            <div className="space-y-6 animate-tab-enter">
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    fetchSecuredAccounts()
-                      .then((accts) => setSecuredAccounts(accts as Array<Record<string, unknown>>))
-                      .finally(() => setLoading(false));
-                  }}
-                  className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
-                >
-                  Refresh
-                </button>
+            <div className="space-y-4 animate-tab-enter">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-display text-lg font-semibold">Secured Accounts</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {securedAccounts.length} account{securedAccounts.length === 1 ? "" : "s"} · click to expand · open inbox on-site
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next: Record<string, boolean> = {};
+                      for (const a of securedAccounts) {
+                        const id = String((a as { id?: string }).id || "");
+                        if (id) next[id] = true;
+                      }
+                      setExpandedIds(next);
+                    }}
+                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
+                  >
+                    Expand all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedIds({})}
+                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40"
+                  >
+                    Collapse all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoading(true);
+                      fetchSecuredAccounts()
+                        .then((accts) => setSecuredAccounts(accts as Array<Record<string, unknown>>))
+                        .finally(() => setLoading(false));
+                    }}
+                    className="rounded-full brutal-border px-3 py-1.5 text-[11px] font-semibold hover:bg-secondary/40 inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Refresh
+                  </button>
+                </div>
               </div>
-              {securedAccounts.length > 0 ? (
-                <div className="rounded-2xl brutal-border bg-card">
-                  <div className="p-5 border-b border-border/60 flex items-center gap-3 bg-secondary/15">
-                    <ShieldCheck className="h-5 w-5 text-primary" />
-                    <div>
-                      <h3 className="font-semibold text-sm">Secured Accounts</h3>
-                      <p className="text-xs text-muted-foreground">
-                        MS credentials + open the recovery mailbox inbox on-site.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="divide-y divide-border/40">
-                    {(securedAccounts as Array<Record<string, unknown>>).map((acc) => {
-                      const id = String(acc.id || "");
-                      const hasMailbox = !!acc.has_mailbox;
-                      const isOpen = mailboxOpenId === id;
-                      return (
-                      <div key={id} className="p-4 text-xs space-y-3">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="font-semibold text-primary">
-                            {String(acc.mc_username || "")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {acc.secured_at
-                              ? new Date(String(acc.secured_at)).toLocaleString()
-                              : ""}
-                          </span>
-                        </div>
-                        {acc.mc_email ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            Original:{" "}
-                            <code className="text-foreground/80">{String(acc.mc_email)}</code>
-                          </p>
-                        ) : null}
-                        <div className="grid sm:grid-cols-2 gap-2">
-                          <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">New Email</span>
-                            <code className="block text-foreground break-all">{String(acc.new_email || "—")}</code>
-                          </div>
-                          <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Password</span>
-                            <code className="block text-foreground break-all">{String(acc.new_password || "—")}</code>
-                          </div>
-                          <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Recovery Code</span>
-                            <code className="block text-foreground break-all">{String(acc.new_recovery_code || "—")}</code>
-                          </div>
-                          <div className="rounded-lg bg-background/60 brutal-border p-2.5 space-y-1">
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">MC Method</span>
-                            <code className="block text-foreground">{String(acc.mc_method || "—")}</code>
-                          </div>
-                        </div>
 
-                        <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-primary" />
-                              <div>
-                                <div className="text-[11px] font-semibold text-primary">
-                                  Recovery mailbox
-                                </div>
-                                <code className="text-[11px] text-foreground/90 break-all">
-                                  {String(acc.mailbox_email || acc.new_email || "—")}
-                                </code>
-                              </div>
-                            </div>
+              {securedAccounts.length > 0 ? (
+                <div className="space-y-3">
+                  {(securedAccounts as Array<Record<string, unknown>>).map((acc) => {
+                    const id = String(acc.id || "");
+                    const expanded = !!expandedIds[id];
+                    const hasMailbox = !!acc.has_mailbox;
+                    const inboxOpen = mailboxOpenId === id;
+                    const copyVal = async (label: string, v: string) => {
+                      if (!v || v === "—") return;
+                      await navigator.clipboard.writeText(v);
+                      setCopied(label + id);
+                      setTimeout(() => setCopied(null), 1200);
+                    };
+                    const field = (label: string, value: string, mono = true) => (
+                      <div className="rounded-xl bg-background/50 border border-border/50 p-3 space-y-1.5 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                            {label}
+                          </span>
+                          {value && value !== "—" ? (
                             <button
                               type="button"
-                              disabled={!hasMailbox || mailboxLoading}
-                              onClick={async () => {
-                                if (isOpen) {
-                                  setMailboxOpenId(null);
-                                  setMailboxData(null);
-                                  setMailboxError(null);
-                                  setSelectedMsgUid(null);
-                                  return;
-                                }
-                                setMailboxOpenId(id);
-                                setMailboxLoading(true);
-                                setMailboxError(null);
-                                setMailboxData(null);
-                                setSelectedMsgUid(null);
-                                try {
-                                  const inbox = (await openMailboxInbox({
-                                    data: { secured_id: id },
-                                  })) as {
-                                    email: string;
-                                    host: string;
-                                    provider: string;
-                                    count: number;
-                                    messages: Array<{
-                                      uid: number;
-                                      from: string;
-                                      subject: string;
-                                      date: string | null;
-                                      snippet: string;
-                                      body: string;
-                                    }>;
-                                  };
-                                  setMailboxData(inbox);
-                                  if (inbox.messages[0]) setSelectedMsgUid(inbox.messages[0].uid);
-                                } catch (e) {
-                                  setMailboxError(
-                                    e instanceof Error ? e.message : "Failed to open mailbox",
-                                  );
-                                } finally {
-                                  setMailboxLoading(false);
-                                }
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                              onClick={() => void copyVal(label, value)}
+                              className="text-[10px] text-primary hover:underline"
                             >
-                              <Inbox className="h-3.5 w-3.5" />
-                              {!hasMailbox
-                                ? "No mailbox stored"
-                                : mailboxLoading && isOpen
-                                  ? "Opening…"
-                                  : isOpen
-                                    ? "Close inbox"
-                                    : "Open mailbox"}
+                              {copied === label + id ? "Copied" : "Copy"}
                             </button>
-                          </div>
-
-                          {isOpen && mailboxError ? (
-                            <p className="text-[11px] text-destructive">{mailboxError}</p>
-                          ) : null}
-
-                          {isOpen && mailboxLoading ? (
-                            <p className="text-[11px] text-muted-foreground">Loading inbox…</p>
-                          ) : null}
-
-                          {isOpen && mailboxData && !mailboxLoading ? (
-                            <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-2 pt-1">
-                              <div className="rounded-lg brutal-border bg-background/70 max-h-64 overflow-y-auto divide-y divide-border/40">
-                                {mailboxData.messages.length === 0 ? (
-                                  <p className="p-3 text-[11px] text-muted-foreground">
-                                    Inbox empty ({mailboxData.email})
-                                  </p>
-                                ) : (
-                                  mailboxData.messages.map((m) => (
-                                    <button
-                                      key={m.uid}
-                                      type="button"
-                                      onClick={() => setSelectedMsgUid(m.uid)}
-                                      className={`w-full text-left p-2.5 hover:bg-primary/5 transition-colors ${
-                                        selectedMsgUid === m.uid ? "bg-primary/10" : ""
-                                      }`}
-                                    >
-                                      <div className="font-semibold text-[11px] truncate">
-                                        {m.subject}
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground truncate">
-                                        {m.from}
-                                      </div>
-                                      <div className="text-[10px] text-muted-foreground/80 mt-0.5">
-                                        {m.date ? new Date(m.date).toLocaleString() : ""}
-                                      </div>
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                              <div className="rounded-lg brutal-border bg-background/70 p-3 min-h-[10rem] max-h-64 overflow-y-auto">
-                                {(() => {
-                                  const msg =
-                                    mailboxData.messages.find((m) => m.uid === selectedMsgUid) ||
-                                    mailboxData.messages[0];
-                                  if (!msg) {
-                                    return (
-                                      <p className="text-[11px] text-muted-foreground">
-                                        Select a message
-                                      </p>
-                                    );
-                                  }
-                                  return (
-                                    <div className="space-y-2">
-                                      <div className="font-semibold text-xs">{msg.subject}</div>
-                                      <div className="text-[10px] text-muted-foreground">
-                                        From {msg.from}
-                                        {msg.date
-                                          ? ` · ${new Date(msg.date).toLocaleString()}`
-                                          : ""}
-                                      </div>
-                                      <p className="text-[11px] text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                                        {msg.body || msg.snippet || "(empty)"}
-                                      </p>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </div>
                           ) : null}
                         </div>
+                        <code
+                          className={`block text-[12px] text-foreground break-all leading-relaxed ${
+                            mono ? "font-mono" : ""
+                          }`}
+                        >
+                          {value || "—"}
+                        </code>
                       </div>
-                      );
-                    })}
-                  </div>
+                    );
+
+                    return (
+                      <div
+                        key={id}
+                        className="rounded-2xl border border-border/60 bg-card/80 overflow-hidden shadow-[0_0_0_1px_transparent] hover:border-primary/25 transition-colors"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }))
+                          }
+                          className="w-full flex items-center gap-3 p-4 text-left hover:bg-secondary/20 transition-colors"
+                        >
+                          <div className="h-10 w-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-sm truncate">
+                              {String(acc.mc_username || "Unknown")}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground truncate">
+                              {String(acc.new_email || acc.mailbox_email || acc.mc_email || "")}
+                              {acc.secured_at
+                                ? ` · ${new Date(String(acc.secured_at)).toLocaleString()}`
+                                : ""}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {hasMailbox ? (
+                              <span className="hidden sm:inline-flex text-[10px] uppercase tracking-wider rounded-full bg-primary/15 text-primary px-2 py-0.5 font-semibold">
+                                Mailbox
+                              </span>
+                            ) : null}
+                            {expanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </button>
+
+                        {expanded ? (
+                          <div className="px-4 pb-4 space-y-4 border-t border-border/40 pt-4">
+                            <div>
+                              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
+                                Credentials changed
+                              </div>
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                {field("Original email", String(acc.mc_email || "—"))}
+                                {field("New email", String(acc.new_email || "—"))}
+                                {field("New password", String(acc.new_password || "—"))}
+                                {field("Recovery code", String(acc.new_recovery_code || "—"))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-2">
+                                Account details
+                              </div>
+                              <div className="grid sm:grid-cols-2 gap-2">
+                                {field("MC username", String(acc.mc_username || "—"))}
+                                {field("Purchase / method", String(acc.mc_method || "—"))}
+                                {field("Capes", String(acc.mc_capes || "—"))}
+                                {field(
+                                  "Owner name",
+                                  [acc.owner_first_name, acc.owner_last_name]
+                                    .filter(Boolean)
+                                    .join(" ") || "—",
+                                )}
+                                {field("Region", String(acc.owner_region || "—"))}
+                                {field("Birthday", String(acc.owner_birthday || "—"))}
+                                {acc.mc_ssid
+                                  ? field("SSID", String(acc.mc_ssid).slice(0, 80) + (String(acc.mc_ssid).length > 80 ? "…" : ""))
+                                  : null}
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-transparent to-transparent p-4 space-y-3">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="flex items-start gap-3 min-w-0">
+                                  <div className="h-9 w-9 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                                    <Mail className="h-4 w-4 text-primary" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-semibold text-primary">
+                                      Recovery mailbox inbox
+                                    </div>
+                                    <code className="text-[11px] text-foreground/90 break-all block mt-0.5">
+                                      {String(acc.mailbox_email || acc.new_email || "—")}
+                                    </code>
+                                    <p className="text-[10px] text-muted-foreground mt-1">
+                                      Open mail here — no password shown. Run Supabase mailbox columns if Open fails.
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={mailboxLoading && inboxOpen}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (inboxOpen) {
+                                      setMailboxOpenId(null);
+                                      setMailboxData(null);
+                                      setMailboxError(null);
+                                      setSelectedMsgUid(null);
+                                      return;
+                                    }
+                                    setMailboxOpenId(id);
+                                    setMailboxLoading(true);
+                                    setMailboxError(null);
+                                    setMailboxData(null);
+                                    setSelectedMsgUid(null);
+                                    try {
+                                      const inbox = (await openMailboxInbox({
+                                        data: { secured_id: id },
+                                      })) as {
+                                        email: string;
+                                        host: string;
+                                        provider: string;
+                                        count: number;
+                                        messages: Array<{
+                                          uid: number;
+                                          from: string;
+                                          subject: string;
+                                          date: string | null;
+                                          snippet: string;
+                                          body: string;
+                                        }>;
+                                      };
+                                      setMailboxData(inbox);
+                                      if (inbox.messages[0]) setSelectedMsgUid(inbox.messages[0].uid);
+                                    } catch (err) {
+                                      setMailboxError(
+                                        err instanceof Error
+                                          ? err.message
+                                          : "Failed to open mailbox",
+                                      );
+                                    } finally {
+                                      setMailboxLoading(false);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 py-2 text-[11px] font-semibold disabled:opacity-50 shrink-0"
+                                >
+                                  <Inbox className="h-3.5 w-3.5" />
+                                  {mailboxLoading && inboxOpen
+                                    ? "Opening…"
+                                    : inboxOpen
+                                      ? "Close inbox"
+                                      : "Open inbox"}
+                                </button>
+                              </div>
+
+                              {inboxOpen && mailboxError ? (
+                                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-[11px] text-destructive leading-relaxed">
+                                  {mailboxError}
+                                  <p className="mt-1 text-muted-foreground">
+                                    Need columns mailbox_email + mailbox_password on secured_accounts, and Mailcow IMAP reachable from Vercel.
+                                  </p>
+                                </div>
+                              ) : null}
+
+                              {inboxOpen && mailboxLoading ? (
+                                <p className="text-[11px] text-muted-foreground">Loading inbox…</p>
+                              ) : null}
+
+                              {inboxOpen && mailboxData && !mailboxLoading ? (
+                                <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-2 rounded-xl overflow-hidden border border-border/50 bg-background/40">
+                                  <div className="max-h-72 overflow-y-auto divide-y divide-border/40">
+                                    <div className="px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground sticky top-0 bg-background/90 backdrop-blur">
+                                      {mailboxData.count} message{mailboxData.count === 1 ? "" : "s"}
+                                    </div>
+                                    {mailboxData.messages.length === 0 ? (
+                                      <p className="p-3 text-[11px] text-muted-foreground">
+                                        Inbox empty
+                                      </p>
+                                    ) : (
+                                      mailboxData.messages.map((m) => (
+                                        <button
+                                          key={m.uid}
+                                          type="button"
+                                          onClick={() => setSelectedMsgUid(m.uid)}
+                                          className={`w-full text-left px-3 py-2.5 hover:bg-primary/5 transition-colors ${
+                                            selectedMsgUid === m.uid
+                                              ? "bg-primary/10 border-l-2 border-primary"
+                                              : ""
+                                          }`}
+                                        >
+                                          <div className="font-semibold text-[11px] truncate">
+                                            {m.subject}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground truncate">
+                                            {m.from}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground/70 mt-0.5">
+                                            {m.date ? new Date(m.date).toLocaleString() : ""}
+                                          </div>
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                  <div className="p-3 min-h-[12rem] max-h-72 overflow-y-auto border-t md:border-t-0 md:border-l border-border/40">
+                                    {(() => {
+                                      const msg =
+                                        mailboxData.messages.find(
+                                          (m) => m.uid === selectedMsgUid,
+                                        ) || mailboxData.messages[0];
+                                      if (!msg) {
+                                        return (
+                                          <p className="text-[11px] text-muted-foreground">
+                                            Select a message
+                                          </p>
+                                        );
+                                      }
+                                      return (
+                                        <div className="space-y-2">
+                                          <div className="font-semibold text-sm leading-snug">
+                                            {msg.subject}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground">
+                                            {msg.from}
+                                            {msg.date
+                                              ? ` · ${new Date(msg.date).toLocaleString()}`
+                                              : ""}
+                                          </div>
+                                          <div className="h-px bg-border/50" />
+                                          <p className="text-[12px] text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                            {msg.body || msg.snippet || "(empty)"}
+                                          </p>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="rounded-2xl brutal-border bg-card p-8 text-center">
+                <div className="rounded-2xl brutal-border bg-card p-10 text-center">
                   <ShieldCheck className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">No secured accounts yet.</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">
-                    After secure completes, open the recovery mailbox inbox here.
+                    After a member verifies, credentials and the recovery inbox appear here.
                   </p>
                 </div>
               )}

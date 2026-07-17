@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
-import { Check, Copy, Clock, ShoppingCart, Trash2, X } from "lucide-react";
+import { ShoppingCart, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 import { createInvoice, getPayment } from "@/lib/luaux.functions";
 import {
   clearCart,
@@ -11,6 +12,7 @@ import {
   subscribeCart,
   type CartItem,
 } from "@/lib/cart";
+import { CompletePurchaseModal } from "@/components/complete-purchase-modal";
 
 const CURRENCIES = [
   { code: "ltc" as const, label: "LTC" },
@@ -62,7 +64,8 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const [error, setError] = useState<string | null>(null);
   const [payment, setPayment] = useState<Payment | null>(null);
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [paymentLabel, setPaymentLabel] = useState("");
+  const [checkingPay, setCheckingPay] = useState(false);
 
   useEffect(() => {
     const sync = () => setItems(getCart());
@@ -98,8 +101,6 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     return () => clearInterval(t);
   }, [paymentId, getPay, payingPlanId]);
 
-  if (!open) return null;
-
   const total = getCartTotalUsd();
   const done =
     payment && (!!payment.fulfilled_at || payment.status === "finished");
@@ -119,6 +120,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         return;
       }
       setPayingPlanId(item.planId);
+      setPaymentLabel(`${item.name} — $${Number(item.priceUsd).toFixed(2)}`);
       setPayment(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Checkout failed");
@@ -127,7 +129,55 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
+  const refreshPayment = async () => {
+    if (!payment?.id) return;
+    setCheckingPay(true);
+    try {
+      const p = (await getPay({ data: { id: payment.id } })) as Payment;
+      setPayment(p);
+      if (p.fulfilled_at || p.status === "finished") {
+        toast.success("Payment confirmed");
+        if (payingPlanId) removeFromCart(payingPlanId);
+        setPayingPlanId(null);
+      } else {
+        toast.message("Not confirmed yet — keep this open");
+      }
+    } catch {
+      toast.error("Could not refresh payment");
+    } finally {
+      setCheckingPay(false);
+    }
+  };
+
   return (
+    <>
+      {payment && (
+        <CompletePurchaseModal
+          open
+          payment={payment}
+          productLabel={paymentLabel}
+          checking={checkingPay}
+          onClose={() => {
+            setPayment(null);
+            setPayingPlanId(null);
+            setPaymentLabel("");
+          }}
+          onChangeMethod={() => {
+            setPayment(null);
+            setPayingPlanId(null);
+            setPaymentLabel("");
+          }}
+          onCancel={() => {
+            if (window.confirm("Cancel this invoice?")) {
+              setPayment(null);
+              setPayingPlanId(null);
+              setPaymentLabel("");
+            }
+          }}
+          onCheckNow={refreshPayment}
+        />
+      )}
+      {open && (
     <div className="fixed inset-0 z-[90] flex justify-end">
       <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
       <div className="relative h-full w-full max-w-md bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
@@ -149,70 +199,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {payment ? (
-            <div className="space-y-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setPayment(null);
-                  setPayingPlanId(null);
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                ← Back to cart
-              </button>
-              <div className="rounded-2xl border border-border/70 bg-background/40 p-4 space-y-3">
-                <div className="text-[10px] uppercase tracking-widest text-primary">
-                  {done ? "Paid" : "Send payment"}
-                </div>
-                <div className="font-display text-2xl font-semibold">
-                  {payment.pay_amount}{" "}
-                  <span className="uppercase text-base">{payment.pay_currency}</span>
-                </div>
-                <div>
-                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                    Address
-                  </div>
-                  <div className="flex gap-2">
-                    <code className="flex-1 rounded-xl border border-border/70 bg-background px-3 py-2 text-[11px] font-mono break-all">
-                      {payment.pay_address}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(payment.pay_address);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1200);
-                      }}
-                      className="rounded-xl border border-border/70 px-3 hover:bg-secondary/40"
-                    >
-                      {copied ? (
-                        <Check className="h-4 w-4 text-primary" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  {done ? (
-                    <>
-                      <Check className="h-4 w-4 text-primary" />
-                      <span className="text-primary font-semibold">Confirmed — item removed</span>
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-4 w-4 animate-pulse text-primary" />
-                      <span className="capitalize">{payment.status}</span>
-                      <span className="text-muted-foreground text-xs">
-                        · {payment.confirmations}/{payment.required_confirmations}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : items.length === 0 ? (
+          {items.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/60 px-4 py-14 text-center">
               <ShoppingCart className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
               <p className="text-sm text-muted-foreground">Your cart is empty</p>
@@ -312,5 +299,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         )}
       </div>
     </div>
+      )}
+    </>
   );
 }

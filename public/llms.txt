@@ -1,7 +1,19 @@
 # LuauX
 
-> LuauX deploys automated Minecraft bot fleets with live logs, anti-detect proxies, and 24/7 uptime, plus Discord automation plugins.
+> LuauX is a hosted control panel for Minecraft auto-message bots and Discord automation plugins (auto-spam, auto-reply, verification). Crypto billing, live console, Discord login.
 
 ## Pages
 
-- [Home](/): Product overview, features, pricing, FAQ, and live console demo.
+- [Home](https://luaux.wtf/): Product overview, features, pricing, FAQ
+- [Sitemap](https://luaux.wtf/sitemap.xml)
+
+## Product
+
+- Minecraft bot fleets with live logs and humanized messaging
+- Discord plugins: channel spam, DM auto-reply, server verification
+- Plans from $7/mo · paid with crypto · Discord OAuth sign-in
+
+## Contact
+
+- Discord: https://discord.gg/n6nEcvwzYQ
+- Telegram: https://t.me/luauxx

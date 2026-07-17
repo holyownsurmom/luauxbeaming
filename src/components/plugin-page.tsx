@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Check, Copy, Clock, Bitcoin, KeyRound, ArrowLeft, ShoppingCart } from "lucide-react";
+import { Check, Copy, Bitcoin, KeyRound, ShoppingCart } from "lucide-react";
 import { getPluginKeys, createInvoice, getPayment } from "@/lib/luaux.functions";
 import { RedeemKeyForm } from "@/components/redeem-key-form";
 import { addToCart, isInCart, subscribeCart } from "@/lib/cart";
+import { CompletePurchaseModal } from "@/components/complete-purchase-modal";
 
 type KeyRow = {
   id: string;
@@ -72,6 +73,7 @@ export function PluginPage({
   const [selectedPlan, setSelectedPlan] = useState(planId || pluginId);
   const [selectedPrice, setSelectedPrice] = useState(price);
   const [cartTick, setCartTick] = useState(0);
+  const [checkingPay, setCheckingPay] = useState(false);
 
   useEffect(() => {
     setSelectedPlan(planId || pluginId);
@@ -138,87 +140,41 @@ export function PluginPage({
     setTimeout(() => setCopied(null), 1500);
   };
 
-  if (payment) {
-    const done = !!payment.fulfilled_at || payment.status === "finished";
-    return (
-      <div className="space-y-6 max-w-xl mx-auto">
-        <button
-          onClick={() => setPayment(null)}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back
-        </button>
-        <div className="rounded-2xl brutal-border bg-card p-8 space-y-5">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-primary">
-              Awaiting payment
-            </div>
-            <h2 className="mt-2 font-display text-3xl font-semibold">
-              Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Send the exact amount to the address below. Payment is detected automatically on-chain
-              (usually within 1–2 minutes). Your key unlocks here and is DM&apos;d.
-            </p>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-              Pay to address
-            </div>
-            <div className="flex gap-2">
-              <code className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-xs font-mono break-all">
-                {payment.pay_address}
-              </code>
-              <button
-                onClick={() => copy(payment.pay_address)}
-                className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
-              >
-                {copied === payment.pay_address ? (
-                  <Check className="h-4 w-4 text-primary" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/60">
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Status
-              </div>
-              <div className="mt-1 flex items-center gap-2 text-sm">
-                {done ? (
-                  <>
-                    <Check className="h-4 w-4 text-primary" />
-                    <span className="text-primary font-semibold">Paid</span>
-                  </>
-                ) : (
-                  <>
-                    <Clock className="h-4 w-4 animate-pulse text-primary" />
-                    <span className="capitalize">{payment.status}</span>
-                  </>
-                )}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                Network
-              </div>
-              <div className="mt-1 font-mono uppercase">{payment.pay_currency}</div>
-            </div>
-          </div>
-          {done && (
-            <div className="rounded-lg bg-primary/10 brutal-border px-4 py-3 text-sm text-primary">
-              Payment confirmed. Your license key is ready.
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const refreshPayment = async () => {
+    if (!payment?.id) return;
+    setCheckingPay(true);
+    try {
+      const p = (await getPay({ data: { id: payment.id } })) as Payment;
+      setPayment(p);
+      if (p.fulfilled_at || p.status === "finished") {
+        toast.success("Payment confirmed");
+        fetchKeys({ data: { plugin_id: pluginId } }).then((d) => setKeys(d as KeyRow[]));
+      } else {
+        toast.message("Not confirmed yet — keep this open");
+      }
+    } catch {
+      toast.error("Could not refresh payment");
+    } finally {
+      setCheckingPay(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-page-in">
+      {payment && (
+        <CompletePurchaseModal
+          open
+          payment={payment}
+          productLabel={`${cardTitle} — $${selectedPrice.toFixed(2)}`}
+          checking={checkingPay}
+          onClose={() => setPayment(null)}
+          onChangeMethod={() => setPayment(null)}
+          onCancel={() => {
+            if (window.confirm("Cancel this invoice?")) setPayment(null);
+          }}
+          onCheckNow={refreshPayment}
+        />
+      )}
       <header>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground max-w-2xl leading-relaxed">{tagline}</p>

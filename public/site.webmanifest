@@ -1,7 +1,7 @@
 {
   "name": "LuauX",
   "short_name": "LuauX",
-  "description": "Automated Minecraft bot management. Deploy stealth bots, live logs, anti-detect proxies, 24/7 uptime.",
+  "description": "Minecraft bot manager and Discord automation. Live console, crypto billing, Discord login.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

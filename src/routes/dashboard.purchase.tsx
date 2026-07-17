@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Check, Copy, Clock, ShoppingCart, Package, Timer } from "lucide-react";
+import { Check, ShoppingCart, Package, Timer } from "lucide-react";
 import { getPlans, createInvoice, getPayment, getMyProfile } from "@/lib/luaux.functions";
 import { useSettings } from "@/lib/settings-context";
 import { addToCart, isInCart, subscribeCart } from "@/lib/cart";
+import { CompletePurchaseModal } from "@/components/complete-purchase-modal";
 
 export const Route = createFileRoute("/dashboard/purchase")({
   component: PurchasePage,
@@ -49,7 +50,11 @@ function PurchasePage() {
     status: string;
     confirmations: number;
     required_confirmations: number;
+    fulfilled_at?: string | null;
+    price_amount?: number | null;
   } | null>(null);
+  const [paymentLabel, setPaymentLabel] = useState<string>("");
+  const [checkingPay, setCheckingPay] = useState(false);
 
   const [plansLoading, setPlansLoading] = useState(true);
 
@@ -144,7 +149,7 @@ function PurchasePage() {
     try {
       const p = (await invoice({
         data: { plan_id: planId, pay_currency: selectedCurrency },
-      })) as typeof payment;
+      })) as NonNullable<typeof payment>;
       // Admin bypass: skip payment view, show success inline
       if (p && p.pay_currency === "admin" && p.status === "finished") {
         setAdminActivated(true);
@@ -154,6 +159,13 @@ function PurchasePage() {
         });
         return;
       }
+      const plan = plans.find((x) => x.id === planId);
+      const label = plan
+        ? `${plan.name} — $${Number(plan.price_usd).toFixed(2)}`
+        : planId.startsWith("hours_")
+          ? `${planId.replace("hours_", "")} bot hour(s)`
+          : planId;
+      setPaymentLabel(label);
       setPayment(p);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create invoice");
@@ -162,7 +174,27 @@ function PurchasePage() {
     }
   };
 
-  if (payment) return <PaymentView payment={payment} onBack={() => setPayment(null)} />;
+  const refreshPayment = async () => {
+    if (!payment?.id) return;
+    setCheckingPay(true);
+    try {
+      const p = (await getPay({ data: { id: payment.id } })) as NonNullable<typeof payment>;
+      setPayment(p);
+      if (p.fulfilled_at || p.status === "finished") {
+        toast.success("Payment confirmed");
+        fetchProfile().then((d) => {
+          const prof = (d as { profile?: { bot_hours_remaining?: number } })?.profile;
+          setBotHours(Number(prof?.bot_hours_remaining ?? 0));
+        });
+      } else {
+        toast.message("Not confirmed yet — keep this open");
+      }
+    } catch {
+      toast.error("Could not refresh payment");
+    } finally {
+      setCheckingPay(false);
+    }
+  };
 
   const HOUR_OPTIONS = [1, 2, 5, 10, 24];
   const hourPlanId = `hours_${selectedHours}`;
@@ -170,6 +202,23 @@ function PurchasePage() {
 
   return (
     <div className="space-y-6 animate-page-in">
+      {payment && (
+        <CompletePurchaseModal
+          open
+          payment={payment}
+          productLabel={paymentLabel}
+          checking={checkingPay}
+          onClose={() => setPayment(null)}
+          onChangeMethod={() => setPayment(null)}
+          onCancel={() => {
+            if (window.confirm("Cancel this invoice? You can create a new one anytime.")) {
+              setPayment(null);
+              setPaymentLabel("");
+            }
+          }}
+          onCheckNow={refreshPayment}
+        />
+      )}
       <header>
         <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight">
           {s.t("choose_plan")}
@@ -452,150 +501,4 @@ function FeatureRow({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PaymentView({
-  payment,
-  onBack,
-}: {
-  payment: {
-    id: string;
-    pay_address: string;
-    pay_amount: number;
-    pay_currency: string;
-    status: string;
-    confirmations: number;
-    required_confirmations: number;
-    fulfilled_at?: string | null;
-  };
-  onBack: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  // Only "activated" when fulfillment ran — not merely on-chain confirmed
-  const done = !!payment.fulfilled_at || payment.status === "finished";
-  const confirming =
-    !done &&
-    (payment.status === "confirmed" ||
-      payment.status === "confirming" ||
-      payment.status === "sending");
-  const copy = () => {
-    navigator.clipboard.writeText(payment.pay_address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
 
-  return (
-    <div className="space-y-6 max-w-xl">
-      <button onClick={onBack} className="text-xs text-muted-foreground hover:text-foreground">
-        ← Back to plans
-      </button>
-      <div className="rounded-2xl brutal-border bg-card p-8 space-y-5">
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-primary">Awaiting payment</div>
-          <h2 className="mt-2 font-display text-3xl font-semibold">
-            Send {payment.pay_amount} <span className="uppercase">{payment.pay_currency}</span>
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Send the exact amount to the address below (LTC or SOL only). Detected automatically
-            on-chain — access unlocks in ~1–2 minutes.
-          </p>
-        </div>
-
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-            Pay to address
-          </div>
-          <div className="flex gap-2">
-            <code className="flex-1 rounded-lg bg-background brutal-border px-3 py-2 text-xs font-mono break-all">
-              {payment.pay_address}
-            </code>
-            <button
-              onClick={copy}
-              className="rounded-lg brutal-border bg-secondary/40 hover:bg-secondary px-3 py-2 text-xs font-semibold"
-            >
-              {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border/60">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              Status
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-sm">
-              {done ? (
-                <>
-                  <Check className="h-4 w-4 text-primary" />
-                  <span className="text-primary font-semibold">Activated</span>
-                </>
-              ) : confirming ? (
-                <>
-                  <Clock className="h-4 w-4 animate-pulse text-primary" />
-                  <span className="text-primary">Confirming…</span>
-                </>
-              ) : (
-                <>
-                  <Clock className="h-4 w-4 animate-pulse text-primary" />
-                  <span className="capitalize">{payment.status}</span>
-                </>
-              )}
-            </div>
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              Confirmations
-            </div>
-            <div className="mt-1 font-mono">
-              {payment.confirmations} / {payment.required_confirmations}
-            </div>
-          </div>
-        </div>
-
-        {confirming && !done && (
-          <div className="rounded-lg bg-secondary/40 brutal-border px-4 py-3 text-sm text-muted-foreground">
-            Payment seen on-chain. Unlocking access…
-          </div>
-        )}
-
-        {done && (
-          <div className="rounded-2xl border border-primary/25 bg-primary/10 p-5 space-y-4">
-            <div className="flex items-center gap-2 text-primary font-semibold text-sm">
-              <Check className="h-4 w-4" />
-              Purchase unlocked
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Access is saved to your Discord account. Next steps for MC Auto-Message:
-            </p>
-            <ol className="text-sm space-y-2 text-foreground/90">
-              <li className="flex gap-2">
-                <span className="font-mono text-primary font-bold">1</span>
-                Open MC Auto-Message and add a Microsoft or SSID account
-              </li>
-              <li className="flex gap-2">
-                <span className="font-mono text-primary font-bold">2</span>
-                Set server IP + messages, then Launch
-              </li>
-              <li className="flex gap-2">
-                <span className="font-mono text-primary font-bold">3</span>
-                For Microsoft: complete the device-code popup when it appears
-              </li>
-            </ol>
-            <div className="flex flex-wrap gap-2 pt-1">
-              <a
-                href="/dashboard/bots"
-                className="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground px-5 py-2.5 text-xs font-semibold hover:bg-primary/90"
-              >
-                Add account & launch
-              </a>
-              <a
-                href="/dashboard/discord-bot"
-                className="inline-flex items-center justify-center rounded-full border border-border/60 bg-card/80 px-5 py-2.5 text-xs font-semibold hover:bg-secondary/60"
-              >
-                Open plugins
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

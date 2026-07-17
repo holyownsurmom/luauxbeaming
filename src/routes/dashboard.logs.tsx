@@ -77,7 +77,7 @@ function LogsPage() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void refreshBots();
     };
-    const t = setInterval(tick, 8000);
+    const t = setInterval(tick, 15000);
     const onVis = () => {
       if (document.visibilityState === "visible") void refreshBots();
     };

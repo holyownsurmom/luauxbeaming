@@ -164,6 +164,26 @@ export function validateDiscordAutoreplyBody(body: Record<string, unknown>):
   };
 }
 
+/** Parse `host`, `host:port`, or `https://host/…` into host + port (default 25565). */
+export function parseMcAddress(raw: string): { host: string; port: number } {
+  let s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .trim();
+  // host:port (IPv4 / hostname only — not bare IPv6)
+  const m = s.match(/^([^:\[\]]+):(\d{1,5})$/);
+  if (m) {
+    const p = Number(m[2]);
+    if (Number.isFinite(p) && p >= 1 && p <= 65535) {
+      return { host: m[1].slice(0, MAX_HOST_LEN), port: Math.floor(p) };
+    }
+  }
+  s = s.replace(/^\[|\]$/g, "").slice(0, MAX_HOST_LEN);
+  return { host: s, port: 25565 };
+}
+
 export function validateMcLaunchFields(body: {
   serverHost?: unknown;
   serverPort?: unknown;
@@ -189,19 +209,16 @@ export function validateMcLaunchFields(body: {
       ok: false;
       error: string;
     } {
-  const serverHost = String(body.serverHost ?? "")
-    .trim()
-    .slice(0, MAX_HOST_LEN);
+  const parsed = parseMcAddress(String(body.serverHost ?? ""));
+  const serverHost = parsed.host;
   if (!serverHost || /[\s<>]/.test(serverHost)) {
     return { ok: false, error: "Invalid serverHost" };
   }
   if (PRIVATE_HOST_RE.test(serverHost)) {
     return { ok: false, error: "private/reserved hosts not allowed" };
   }
-  const port = Number(body.serverPort);
-  if (!Number.isFinite(port) || port < 1 || port > 65535) {
-    return { ok: false, error: "serverPort must be 1–65535" };
-  }
+  // Port is always default 25565 unless host was pasted as host:port; body.serverPort ignored (no port UI).
+  const serverPort = parsed.port;
   const messages = normalizeMessages(body.messages);
   if (!messages) return { ok: false, error: "At least one non-empty message required" };
   const interval = clampInterval(body.interval, MIN_MC_INTERVAL_SEC, MAX_INTERVAL_SEC, 30);
@@ -218,7 +235,7 @@ export function validateMcLaunchFields(body: {
   return {
     ok: true,
     serverHost,
-    serverPort: Math.floor(port),
+    serverPort,
     messages,
     interval,
     autoReply,

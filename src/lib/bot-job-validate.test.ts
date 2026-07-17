@@ -41,7 +41,6 @@ describe("validateDiscordSpamBody", () => {
   it("rejects private MC hosts", () => {
     const r = validateMcLaunchFields({
       serverHost: "127.0.0.1",
-      serverPort: 25565,
       messages: ["a"],
     });
     assert.equal(r.ok, false);
@@ -49,25 +48,37 @@ describe("validateDiscordSpamBody", () => {
 });
 
 describe("validateMcLaunchFields", () => {
-  it("accepts valid host/port/messages", () => {
+  it("accepts valid host/messages and defaults port", () => {
     const r = validateMcLaunchFields({
       serverHost: "play.example.com",
-      serverPort: 25565,
       messages: [" /spawn "],
       interval: 60,
     });
     assert.equal(r.ok, true);
     if (r.ok) {
       assert.equal(r.serverPort, 25565);
+      assert.equal(r.serverHost, "play.example.com");
       assert.deepEqual(r.messages, ["/spawn"]);
     }
   });
-  it("rejects bad port", () => {
+  it("parses host:port from serverHost", () => {
+    const r = validateMcLaunchFields({
+      serverHost: "play.example.com:25566",
+      messages: ["a"],
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.serverHost, "play.example.com");
+      assert.equal(r.serverPort, 25566);
+    }
+  });
+  it("ignores invalid body.serverPort", () => {
     const r = validateMcLaunchFields({
       serverHost: "x.com",
       serverPort: 99999,
       messages: ["a"],
     });
-    assert.equal(r.ok, false);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.serverPort, 25565);
   });
 });

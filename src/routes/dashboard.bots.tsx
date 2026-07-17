@@ -137,7 +137,6 @@ function BotsPage() {
 
   const [mcConfig, setMcConfig] = useState({
     serverHost: "",
-    serverPort: "25565",
     messages: "" as string,
     interval: "5",
     autoReply: true,
@@ -148,7 +147,7 @@ function BotsPage() {
   const [mcTab, setMcTab] = useState<"launch" | "presets">("launch");
   const [userServers, setUserServers] = useState<McServerEntry[]>([]);
   const [launchPresets, setLaunchPresets] = useState<McLaunchPreset[]>([]);
-  const [newServer, setNewServer] = useState({ label: "", host: "", port: "25565" });
+  const [newServer, setNewServer] = useState({ label: "", host: "" });
   const [presetName, setPresetName] = useState("");
   const [launching, setLaunching] = useState(false);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
@@ -166,21 +165,26 @@ function BotsPage() {
     return () => window.removeEventListener("luaux-mc-presets", on);
   }, [refreshMcPresets]);
 
-  const applyServer = (s: { host: string; port?: number }) => {
+  const applyServer = (s: { host: string }) => {
+    const host = s.host.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim().toLowerCase();
     setMcConfig((c) => ({
       ...c,
-      serverHost: s.host,
-      serverPort: String(s.port && s.port > 0 ? s.port : 25565),
+      serverHost: host,
     }));
     setMcTab("launch");
-    toast.success(`Server set to ${s.host}`);
+    toast.success(`Server set to ${host}`);
   };
 
   const applyPreset = (p: McLaunchPreset) => {
+    const host = String(p.serverHost || "")
+      .replace(/^https?:\/\//, "")
+      .split("/")[0]
+      .split(":")[0]
+      .trim()
+      .toLowerCase();
     setMcConfig((c) => ({
       ...c,
-      serverHost: p.serverHost,
-      serverPort: p.serverPort || "25565",
+      serverHost: host,
       messages: p.messages,
       interval: p.interval || "5",
       autoReply: p.autoReply ?? c.autoReply,
@@ -201,7 +205,6 @@ function BotsPage() {
     saveLaunchPreset({
       name,
       serverHost: mcConfig.serverHost,
-      serverPort: mcConfig.serverPort,
       messages: mcConfig.messages,
       interval: mcConfig.interval,
       autoReply: mcConfig.autoReply,
@@ -223,9 +226,8 @@ function BotsPage() {
     addUserServer({
       label: newServer.label.trim() || host,
       host,
-      port: parseInt(newServer.port, 10) || 25565,
     });
-    setNewServer({ label: "", host: "", port: "25565" });
+    setNewServer({ label: "", host: "" });
     refreshMcPresets();
     toast.success("Server added to your list");
   };
@@ -645,9 +647,12 @@ function BotsPage() {
     setPinging(true);
     setPingResult(null);
     try {
-      const address = mcConfig.serverPort && mcConfig.serverPort !== "25565"
-        ? `${mcConfig.serverHost}:${mcConfig.serverPort}`
-        : mcConfig.serverHost;
+      const address = mcConfig.serverHost
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .split("/")[0]
+        .split(":")[0];
       const res = await fetch(
         `https://api.mcsrvstat.us/3/${encodeURIComponent(address)}`,
       );
@@ -710,7 +715,6 @@ function BotsPage() {
           accountId: account.id,
           label: account.label,
           serverHost: mcConfig.serverHost,
-          serverPort: 25565,
           authType: account.auth_type,
           messages: msgs,
           interval: parseInt(mcConfig.interval, 10) || 5,

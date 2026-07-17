@@ -150,6 +150,26 @@ export async function runMcBot(
   const log = createLogger(jobId, discordId);
   let terminal: JobRunResult = { status: "completed" };
 
+  // Normalize host: strip scheme/path and accidental host:port (port default 25565)
+  {
+    let host = String(config.serverHost || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .split("/")[0]
+      .trim();
+    const hostPort = host.match(/^([^:\[\]]+):(\d{1,5})$/);
+    if (hostPort) {
+      host = hostPort[1];
+      const p = Number(hostPort[2]);
+      if (Number.isFinite(p) && p >= 1 && p <= 65535) config.serverPort = Math.floor(p);
+    }
+    config.serverHost = host;
+    const port = Number(config.serverPort);
+    config.serverPort =
+      Number.isFinite(port) && port >= 1 && port <= 65535 ? Math.floor(port) : 25565;
+  }
+
   if (!config.serverHost) {
     await log("error", "Missing serverHost");
     await updateJob(jobId, "error", "Missing serverHost");
@@ -767,6 +787,8 @@ export async function runMcBot(
 
   function shouldReconnect(kickReason: unknown): boolean {
     const lower = formatKickReason(kickReason).toLowerCase();
+    // Permanent DNS failure — do not loop forever
+    if (lower.includes("enotfound") || lower.includes("getaddrinfo")) return false;
     if (lower.includes("banned")) return false;
     if (lower.includes("blocked")) return false;
     if (lower.includes("security")) return false;
@@ -776,7 +798,7 @@ export async function runMcBot(
     if (lower.includes("not logged into")) return false;
     if (lower.includes("invalid session")) return false;
     if (lower.includes("whitelist")) return false;
-    // Server full is temporary — allow reconnect with backoff
+    // Server full / region transfer are temporary — allow reconnect with backoff
     if (lower.includes("logged in from another")) return false;
     if (lower.includes("already connected")) return false;
     if (lower.includes("already logged in")) return false;
@@ -837,20 +859,18 @@ export async function runMcBot(
       reconnectAttempts > 0
         ? `Reconnect ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`
         : "Connecting";
-    await log(
-      "system",
-      `${attemptLabel} to ${config.serverHost}:${config.serverPort}…`,
-      true,
-    );
+    await log("system", `${attemptLabel} to ${config.serverHost}…`, true);
 
     const botOptions: Record<string, unknown> = {
       host: config.serverHost,
-      port: config.serverPort,
+      port: config.serverPort || 25565,
       username: config.username || config.label || "Player",
       hideErrors: true,
       checkTimeoutInterval: 60_000,
       keepAlive: true,
       respawn: true,
+      // Prefer IPv4 — some hosts only publish AAAA via CDN and TCP fails
+      family: 4,
       // physics plugin MUST load (teleport_confirm). physicsEnabled true = simulate ticks.
       physicsEnabled: true,
       viewDistance: "tiny",
@@ -923,11 +943,15 @@ export async function runMcBot(
           lower.includes("not logged into") ||
           lower.includes("invalid session") ||
           lower.includes("not authenticated");
+        const isDns =
+          lower.includes("enotfound") || lower.includes("getaddrinfo");
         const msg = isAuth
           ? `Authentication failed: ${reasonText}. Token may be expired — open account → Refresh Token.`
-          : lower.includes("banned") || lower.includes("blocked") || lower.includes("suspicious")
-            ? `Account blocked/banned: ${reasonText}`
-            : `Not reconnecting: ${reasonText}`;
+          : isDns
+            ? `DNS failed for ${config.serverHost}: host not found. Check the server IP.`
+            : lower.includes("banned") || lower.includes("blocked") || lower.includes("suspicious")
+              ? `Account blocked/banned: ${reasonText}`
+              : `Not reconnecting: ${reasonText}`;
         log("error", msg, true).catch(() => {});
         if (isAuth) await markMcAccountExpired(accountId, discordId);
         await updateJob(jobId, "error", msg);
@@ -947,6 +971,10 @@ export async function runMcBot(
 
       reconnectAttempts++;
       // Protocol / socket closes need longer cool-down (avoid spam reconnects)
+      const isRegionTransfer =
+        lower.includes("transferred") ||
+        lower.includes("different region") ||
+        lower.includes("transfer");
       const isHardClose =
         lower.includes("invalid sequence") ||
         lower.includes("timed out") ||
@@ -956,12 +984,15 @@ export async function runMcBot(
         lower.includes("econnreset") ||
         lower.includes("etimedout") ||
         lower.includes("connection closed") ||
-        lower.includes("connreset");
-      const baseDelay = isHardClose
-        ? randomBetween(25, 55) * 1000
-        : reconnectAttempts <= 3
-          ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
-          : randomBetween(45, 150) * 1000;
+        lower.includes("connreset") ||
+        lower.includes("econnrefused");
+      const baseDelay = isRegionTransfer
+        ? randomBetween(3, 8) * 1000
+        : isHardClose
+          ? randomBetween(25, 55) * 1000
+          : reconnectAttempts <= 3
+            ? RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts - 1)
+            : randomBetween(45, 150) * 1000;
       const delay = baseDelay + randomBetween(0, 5000);
 
       // Dedupe identical disconnect spam in console

@@ -4,7 +4,6 @@ export type McServerEntry = {
   id: string;
   label: string;
   host: string;
-  port: number;
   builtin?: boolean;
 };
 
@@ -12,7 +11,6 @@ export type McLaunchPreset = {
   id: string;
   name: string;
   serverHost: string;
-  serverPort: string;
   messages: string;
   interval: string;
   autoReply?: boolean;
@@ -27,14 +25,14 @@ const PRESETS_KEY = "luaux_mc_presets_v1";
 const MAX_USER = 40;
 
 export const BUILTIN_SERVERS: McServerEntry[] = [
-  { id: "donut", label: "DonutSMP", host: "donutsmp.net", port: 25565, builtin: true },
-  { id: "catpvp", label: "CatPVP", host: "catpvp.com", port: 25565, builtin: true },
-  { id: "hugo", label: "HugoSMP", host: "hugosmp.com", port: 25565, builtin: true },
-  { id: "minemen", label: "Minemen EU", host: "minemen.club", port: 25565, builtin: true },
-  { id: "mcpvp-na", label: "MCPVP NA", host: "na.mcpvp.club", port: 25565, builtin: true },
-  { id: "mcpvp-eu", label: "MCPVP EU", host: "eu.mcpvp.club", port: 25565, builtin: true },
-  { id: "hypixel", label: "Hypixel", host: "mc.hypixel.net", port: 25565, builtin: true },
-  { id: "cubecraft", label: "CubeCraft", host: "play.cubecraft.net", port: 25565, builtin: true },
+  { id: "donut", label: "DonutSMP", host: "donutsmp.net", builtin: true },
+  { id: "catpvp", label: "CatPVP", host: "catpvp.com", builtin: true },
+  { id: "hugo", label: "HugoSMP", host: "hugosmp.com", builtin: true },
+  { id: "minemen", label: "Minemen", host: "minemen.club", builtin: true },
+  { id: "mcpvp", label: "MCPVP", host: "play.mcpvp.club", builtin: true },
+  { id: "mcpvp-eu", label: "MCPVP EU", host: "eu.mcpvp.club", builtin: true },
+  { id: "hypixel", label: "Hypixel", host: "mc.hypixel.net", builtin: true },
+  { id: "cubecraft", label: "CubeCraft", host: "play.cubecraft.net", builtin: true },
 ];
 
 function readJson<T>(key: string, fallback: T): T {
@@ -67,12 +65,14 @@ export function listAllServers(): McServerEntry[] {
   return [...BUILTIN_SERVERS, ...listUserServers()];
 }
 
-export function addUserServer(entry: { label: string; host: string; port?: number }): McServerEntry {
+export function addUserServer(entry: { label: string; host: string }): McServerEntry {
+  let host = entry.host.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].trim();
+  const hp = host.match(/^([^:\[\]]+):(\d{1,5})$/);
+  if (hp) host = hp[1];
   const row: McServerEntry = {
     id: crypto.randomUUID(),
-    label: entry.label.trim() || entry.host.trim(),
-    host: entry.host.trim().toLowerCase(),
-    port: entry.port && entry.port > 0 ? entry.port : 25565,
+    label: entry.label.trim() || host,
+    host,
   };
   const next = [row, ...listUserServers().filter((s) => s.host !== row.host)].slice(0, MAX_USER);
   writeJson(SERVERS_KEY, next);
@@ -96,11 +96,13 @@ export function listLaunchPresets(): McLaunchPreset[] {
 export function saveLaunchPreset(
   p: Omit<McLaunchPreset, "id" | "createdAt"> & { id?: string },
 ): McLaunchPreset {
+  let host = p.serverHost.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0].trim();
+  const hp = host.match(/^([^:\[\]]+):(\d{1,5})$/);
+  if (hp) host = hp[1];
   const row: McLaunchPreset = {
     id: p.id || crypto.randomUUID(),
     name: p.name.trim() || "Preset",
-    serverHost: p.serverHost.trim(),
-    serverPort: p.serverPort.trim() || "25565",
+    serverHost: host,
     messages: p.messages,
     interval: p.interval || "5",
     autoReply: p.autoReply,

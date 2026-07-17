@@ -29,8 +29,17 @@ export const Route = createFileRoute("/api/bots/mc/stop")({
           return notFound("Bot not found");
         }
 
-        if (job.status !== "running" && job.status !== "pending" && job.status !== "stopping") {
+        if (job.status !== "running" && job.status !== "pending" && job.status !== "stopping" && job.status !== "paused") {
           return Response.json({ ok: true, alreadyStopped: true });
+        }
+
+        // Pending never reaches the worker — mark stopped immediately (avoid ghost "stopping")
+        if (job.status === "pending") {
+          await db
+            .from("bot_jobs")
+            .update({ status: "stopped", error: "Stopped before start" })
+            .eq("id", botId);
+          return Response.json({ ok: true, stoppedPending: true });
         }
 
         if (job.status !== "stopping") {

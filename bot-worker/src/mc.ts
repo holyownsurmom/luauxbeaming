@@ -520,14 +520,37 @@ export async function runMcBot(
     config.username || config.label || jobId,
   );
 
-  const existingJob = activeAccounts.get(accountKey);
-  if (existingJob && existingJob !== jobId) {
-    const msg = `Account already in use by another bot job (${existingJob.slice(0, 8)}…). Stop that bot first.`;
-    await log("error", msg);
-    await updateJob(jobId, "error", msg);
-    return { status: "error", error: msg };
+  // Wait for prior same-account job to release lock (DB stop can lag socket close)
+  {
+    const waitUntil = Date.now() + 20_000;
+    while (Date.now() < waitUntil) {
+      if (abortSignal.aborted) {
+        return { status: "stopped", error: "Stopped by user" };
+      }
+      const existingJob = activeAccounts.get(accountKey);
+      if (!existingJob || existingJob === jobId) break;
+      await log(
+        "info",
+        `Waiting for previous job ${existingJob.slice(0, 8)}… to release this account…`,
+        true,
+      );
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    const stillHeld = activeAccounts.get(accountKey);
+    if (stillHeld && stillHeld !== jobId) {
+      const msg = `Account already in use by another bot job (${stillHeld.slice(0, 8)}…). Stop that bot first.`;
+      await log("error", msg);
+      await updateJob(jobId, "error", msg);
+      return { status: "error", error: msg };
+    }
   }
   activeAccounts.set(accountKey, jobId);
+  // Extra cool-down so previous TCP is fully dead after replace/stop
+  await new Promise((r) => setTimeout(r, 3000));
+  if (abortSignal.aborted) {
+    if (activeAccounts.get(accountKey) === jobId) activeAccounts.delete(accountKey);
+    return { status: "stopped", error: "Stopped by user" };
+  }
 
   const mineflayer = await loadMineflayer();
 
@@ -538,6 +561,7 @@ export async function runMcBot(
   let antiAfkTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let authFailed = false;
   let lastLongBreakMin = 0;
@@ -569,6 +593,13 @@ export async function runMcBot(
     }
   };
 
+  // Keep updated_at fresh while paused/AFK so orphan sweeper doesn't reclaim live bots
+  heartbeatTimer = setInterval(() => {
+    if (stopped || abortSignal.aborted) return;
+    const st = isJobPaused(jobId) ? "paused" : "running";
+    updateJob(jobId, st).catch(() => {});
+  }, 10 * 60_000);
+
   const runtimeMinutes = () => (Date.now() - startedAt) / 60000;
 
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -596,6 +627,10 @@ export async function runMcBot(
     if (settleTimer) {
       clearTimeout(settleTimer);
       settleTimer = null;
+    }
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
     }
   };
 
@@ -656,7 +691,7 @@ export async function runMcBot(
     let pauseNotified = false;
 
     const scheduleNext = () => {
-      if (stopped || abortSignal.aborted) return;
+      if (stopped || abortSignal.aborted || currentBot !== bot) return;
 
       // User paused bot from console — stay connected, don't send
       if (isJobPaused(jobId)) {
@@ -680,9 +715,9 @@ export async function runMcBot(
       if (longBreak > 0) {
         lastLongBreakMin = rt;
         const breakMin = (longBreak / 60000).toFixed(0);
-        log("info", `Long AFK break: ${breakMin}min (simulating offline) (runtime: ${rt.toFixed(0)}min)`).catch(() => {});
+        log("info", `Long AFK break: ${breakMin}min (stay online, no chat) (runtime: ${rt.toFixed(0)}min)`).catch(() => {});
         currentTimer = setTimeout(() => {
-          if (stopped || abortSignal.aborted) return;
+          if (stopped || abortSignal.aborted || currentBot !== bot) return;
           log("info", "Resuming from long break").catch(() => {});
           scheduleNext();
         }, longBreak);
@@ -693,7 +728,7 @@ export async function runMcBot(
       if (breakDuration > 0) {
         log("info", `Taking a break: ${(breakDuration / 1000).toFixed(0)}s (sent ${sentCount} msgs, runtime ${rt.toFixed(0)}min)`).catch(() => {});
         currentTimer = setTimeout(() => {
-          if (stopped || abortSignal.aborted) return;
+          if (stopped || abortSignal.aborted || currentBot !== bot) return;
           sendOneMessage(bot);
         }, breakDuration);
         return;
@@ -702,13 +737,13 @@ export async function runMcBot(
       const delay = calculateMessageDelay(config.interval, sentCount, rt);
       log("info", `Next message in ${(delay / 1000).toFixed(0)}s (sent ${sentCount}, runtime ${rt.toFixed(0)}min)`).catch(() => {});
       currentTimer = setTimeout(() => {
-        if (stopped || abortSignal.aborted) return;
+        if (stopped || abortSignal.aborted || currentBot !== bot) return;
         sendOneMessage(bot);
       }, delay);
     };
 
     const sendOneMessage = async (botArg: typeof bot) => {
-      if (stopped || abortSignal.aborted) return;
+      if (stopped || abortSignal.aborted || currentBot !== botArg) return;
       if (isJobPaused(jobId)) {
         scheduleNext();
         return;
@@ -729,7 +764,7 @@ export async function runMcBot(
         await log("error", `Chat error: ${e instanceof Error ? e.message : String(e)}`);
       }
 
-      scheduleNext();
+      if (currentBot === botArg) scheduleNext();
     };
 
     // Short settle after spawn — long delays looked like a dead console

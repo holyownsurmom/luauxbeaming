@@ -382,7 +382,7 @@ function DiscordAutoReplyPage() {
       />
       <BotPageHeader
         title="Discord auto-reply"
-        description="DM replies on an alt. Slow. Can still get banned."
+        description="Reply to every inbound DM on an alt — humanized timing, live logs."
         badge={isAdmin ? <AdminBadge /> : null}
       />
 

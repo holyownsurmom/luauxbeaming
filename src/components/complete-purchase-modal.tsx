@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Check,
@@ -129,14 +130,19 @@ export function CompletePurchaseModal({
   const body = (
     <div
       className={cn(
-        "w-full max-w-md rounded-2xl border border-border/60 bg-[oklch(0.12_0.01_25)] text-foreground shadow-2xl",
-        variant === "modal" && "max-h-[min(92vh,720px)] overflow-y-auto",
+        "w-full rounded-2xl border border-border/70 bg-card text-card-foreground",
+        "bg-[oklch(0.11_0.012_25)] dark:bg-[oklch(0.11_0.012_25)]",
       )}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3">
         <div className="min-w-0">
-          <h2 className="font-display text-xl font-bold tracking-tight">Complete Purchase</h2>
+          <h2
+            id="complete-purchase-title"
+            className="font-display text-xl font-bold tracking-tight"
+          >
+            Complete Purchase
+          </h2>
           <p className="mt-0.5 text-sm text-muted-foreground truncate">{subtitle}</p>
         </div>
         <button
@@ -330,12 +336,25 @@ export function CompletePurchaseModal({
     return body;
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full flex justify-center animate-in fade-in zoom-in-95 duration-200">
+  // Portal to body so dashboard overflow/transform never clips or mis-positions the modal
+  const overlay = (
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="complete-purchase-title"
+    >
+      <div
+        className="absolute inset-0 bg-black/75 backdrop-blur-[2px]"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="relative z-10 w-full max-w-md mx-auto max-h-[min(92vh,760px)] overflow-y-auto rounded-2xl shadow-2xl">
         {body}
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return overlay;
+  return createPortal(overlay, document.body);
 }

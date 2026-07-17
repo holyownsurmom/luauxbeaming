@@ -668,7 +668,7 @@ function DiscordSpamPage() {
       />
       <BotPageHeader
         title="Discord spam"
-        description="Alt accounts only. Slow delays. Can still get banned."
+        description="Channel campaigns for alt tokens — humanized delays, live console."
         badge={isAdmin ? <AdminBadge /> : null}
       />
 

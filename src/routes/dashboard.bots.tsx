@@ -876,7 +876,7 @@ function BotsPage() {
     <PageShell>
       <BotPageHeader
         title="Minecraft bots"
-        description="Server, messages, accounts."
+        description="Configure server, messages, and accounts — launch with live console."
         badge={isAdmin ? <AdminBadge /> : null}
         actions={
           <>

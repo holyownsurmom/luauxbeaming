@@ -393,11 +393,10 @@ function DashboardLayout() {
       </div>
 
       {/* Main content */}
-      <main className="min-h-screen relative">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[240px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
+      <main className="min-h-screen">
         <div
           key={path}
-          className="max-w-6xl mx-auto p-4 md:p-8 pt-16 md:pt-8 relative font-ui"
+          className="max-w-6xl mx-auto px-4 py-4 md:px-6 md:py-6 pt-16 md:pt-6"
         >
           <Outlet />
         </div>

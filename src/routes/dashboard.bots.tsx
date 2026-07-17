@@ -882,7 +882,7 @@ function BotsPage() {
         badge={isAdmin ? <AdminBadge /> : null}
         actions={
           <>
-            <span className="inline-flex items-center rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
+            <span className="text-xs tabular-nums text-muted-foreground">
               {accounts.length}/{maxBots} slots
             </span>
             {runningBots.some((b) =>
@@ -1202,7 +1202,7 @@ function BotsPage() {
                     Label
                   </span>
                   <input
-                    className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm font-mono"
+                    className={fieldMonoClass}
                     value={form.label}
                     onChange={(e) => setForm({ ...form, label: e.target.value })}
                     placeholder="alt-1"
@@ -1213,7 +1213,7 @@ function BotsPage() {
                     Auth type
                   </span>
                   <select
-                    className="w-full rounded-lg bg-background brutal-border px-3 py-2 text-sm"
+                    className={fieldControlClass}
                     value={form.auth_type}
                     onChange={(e) =>
                       setForm({
@@ -1476,7 +1476,7 @@ function BotsPage() {
                       <div
                         className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
                       />
-                      <span className="text-xs font-extrabold uppercase tracking-widest">
+                      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         {activeBot?.status || "idle"}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
@@ -1557,8 +1557,8 @@ function BotsPage() {
                         <div
                           className={`h-2 w-2 shrink-0 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
                         />
-                        <span className="text-sm font-extrabold truncate">{bot.label}</span>
-                        <span className="text-xs font-semibold text-muted-foreground capitalize">
+                        <span className="text-sm font-medium truncate">{bot.label}</span>
+                        <span className="text-xs text-muted-foreground capitalize">
                           {bot.status}
                         </span>
                       </div>
@@ -1569,7 +1569,7 @@ function BotsPage() {
                             setSelectedBotId(bot.id);
                             setConsoleEntries([]);
                           }}
-                          className="text-xs font-extrabold text-primary hover:underline"
+                          className="text-xs font-medium text-primary hover:underline"
                         >
                           Console
                         </button>

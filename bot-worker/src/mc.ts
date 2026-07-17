@@ -114,14 +114,9 @@ function calculateMessageDelay(baseInterval: number, sentCount: number, runtimeM
     max *= fat;
   }
 
-  if (sentCount < 3) {
-    min = Math.max(min, 8);
-    max = Math.max(max, 18);
-  }
-
   const delay = randomBetween(min * 1000, max * 1000);
   const jitter = randomBetween(-2000, 5000);
-  return Math.max(5000, delay + jitter);
+  return Math.max(1000, delay + jitter);
 }
 
 function shouldTakeBreak(sentCount: number, runtimeMinutes: number): number {
@@ -767,17 +762,12 @@ export async function runMcBot(
       if (currentBot === botArg) scheduleNext();
     };
 
-    // Short settle after spawn — long delays looked like a dead console
-    const initialDelay = randomBetween(8_000, 15_000);
-    log(
-      "info",
-      `Waiting ${(initialDelay / 1000).toFixed(0)}s before first message (interval base ${config.interval}s)...`,
-      true,
-    ).catch(() => {});
+    // First message immediately after spawn (no warm-up)
+    log("info", `Message loop active (interval base ${config.interval}s)`, true).catch(() => {});
     currentTimer = setTimeout(() => {
       if (stopped || abortSignal.aborted || currentBot !== bot) return;
       sendOneMessage(bot);
-    }, initialDelay);
+    }, randomBetween(200, 800));
   }
 
   function extractChatText(node: unknown): string {
@@ -1124,28 +1114,23 @@ export async function runMcBot(
       }
       log(
         "info",
-        `Spawned in world (protocol ${bot.version || MC_PROTOCOL_VERSION}) — settling, then message loop…`,
+        `Spawned in world (protocol ${bot.version || MC_PROTOCOL_VERSION}) — starting message loop`,
         true,
       ).catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Longer settle for hub teleports; no chat/look until done
-      const settleMs = randomBetween(12_000, 20_000);
-      log("info", `Settle ${Math.round(settleMs / 1000)}s before chat loop`, true).catch(() => {});
-      if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = setTimeout(() => {
+      settleDone = true;
+      if (settleTimer) {
+        clearTimeout(settleTimer);
         settleTimer = null;
-        if (stopped || abortSignal.aborted || currentBot !== bot) return;
-        settleDone = true;
-        startAntiAfk(bot);
-        startMessageLoop(bot);
-      }, settleMs);
+      }
+      startAntiAfk(bot);
+      startMessageLoop(bot);
     });
 
     const maybeAutoReply = (username: string, message: string, source: "whisper" | "msg") => {
       if (!autoReplyOn || stopped || abortSignal.aborted) return;
       if (currentBot !== bot) return;
-      // Never chat during hub teleport settle — causes Invalid sequence on Via
       if (!settleDone) return;
       const who = String(username || "").trim();
       if (!who) return;

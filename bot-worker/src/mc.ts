@@ -42,6 +42,9 @@ export type McJobConfig = {
 const CONNECTION_TIMEOUT_MS = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 25;
 const RECONNECT_BASE_DELAY = 5000;
+/** Pin protocol — DonutSMP / modern hubs expect 1.21.x; auto-negotiate can desync Via */
+const MC_PROTOCOL_VERSION = "1.21.11";
+const MAX_INVALID_SEQUENCE_KICKS = 4;
 
 /** Only one live socket per Minecraft account (prevents multi-login + Invalid sequence storms) */
 const activeAccounts = new Map<string, string>(); // uuid/name → jobId
@@ -570,6 +573,8 @@ export async function runMcBot(
 
   let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
+  let settleDone = false;
+  let invalidSequenceKicks = 0;
 
   const cleanup = () => {
     if (currentTimer) {
@@ -852,7 +857,8 @@ export async function runMcBot(
       } catch {
         /* ignore */
       }
-      await new Promise((r) => setTimeout(r, 2000));
+      // Wait for prior TCP/session to fully die (multi-socket → Invalid sequence)
+      await new Promise((r) => setTimeout(r, 8000));
     }
 
     const attemptLabel =
@@ -871,11 +877,12 @@ export async function runMcBot(
       respawn: true,
       // Prefer IPv4 — some hosts only publish AAAA via CDN and TCP fails
       family: 4,
-      // physics plugin MUST load (teleport_confirm). physicsEnabled true = simulate ticks.
-      physicsEnabled: true,
+      // Physics plugin still loads for teleport_confirm; do NOT simulate movement ticks
+      // (position spam on Via/Paper hubs → Invalid sequence after spawn).
+      physicsEnabled: false,
       viewDistance: "tiny",
       brand: "vanilla",
-      version: false,
+      version: MC_PROTOCOL_VERSION,
     };
 
     if (
@@ -934,6 +941,21 @@ export async function runMcBot(
         stopped = true;
         terminal = { status: "error", error: msg };
         return;
+      }
+
+      // Protocol desync (not SSID) — cap retries so we don't loop forever
+      if (lower.includes("invalid sequence")) {
+        invalidSequenceKicks++;
+        if (invalidSequenceKicks >= MAX_INVALID_SEQUENCE_KICKS) {
+          const msg =
+            `Protocol desync (Invalid sequence ×${invalidSequenceKicks}). ` +
+            `SSID auth is OK — stop other clients on this account, wait 30s, relaunch.`;
+          log("error", msg, true).catch(() => {});
+          await updateJob(jobId, "error", msg);
+          stopped = true;
+          terminal = { status: "error", error: msg };
+          return;
+        }
       }
 
       const doReconnect = shouldReconnect(reasonText);
@@ -1039,9 +1061,17 @@ export async function runMcBot(
       if (currentBot !== bot) return;
       connected = true;
       connecting = false;
+      settleDone = false;
+      // Freeze movement sim if mineflayer re-enabled it
+      try {
+        bot.physicsEnabled = false;
+      } catch {
+        /* ignore */
+      }
       if (loggedInOnce) return;
       loggedInOnce = true;
-      log("info", `Logged in as ${bot.username}`, true).catch(() => {});
+      const ver = bot.version || MC_PROTOCOL_VERSION;
+      log("info", `Logged in as ${bot.username} (protocol ${ver})`, true).catch(() => {});
     });
 
     bot.on("spawn", () => {
@@ -1049,17 +1079,29 @@ export async function runMcBot(
       if (loopsStarted) return;
       loopsStarted = true;
       connecting = false;
+      settleDone = false;
       reconnectAttempts = 0;
-      log("info", "Spawned in world — settling, then message loop…", true).catch(() => {});
+      invalidSequenceKicks = 0;
+      try {
+        bot.physicsEnabled = false;
+      } catch {
+        /* ignore */
+      }
+      log(
+        "info",
+        `Spawned in world (protocol ${bot.version || MC_PROTOCOL_VERSION}) — settling, then message loop…`,
+        true,
+      ).catch(() => {});
       updateJob(jobId, "running").catch(() => {});
 
-      // Brief settle so Via/Paper teleports finish; then start chat loop
-      const settleMs = randomBetween(8_000, 14_000);
+      // Longer settle for hub teleports; no chat/look until done
+      const settleMs = randomBetween(12_000, 20_000);
       log("info", `Settle ${Math.round(settleMs / 1000)}s before chat loop`, true).catch(() => {});
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
         settleTimer = null;
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
+        settleDone = true;
         startAntiAfk(bot);
         startMessageLoop(bot);
       }, settleMs);
@@ -1068,6 +1110,8 @@ export async function runMcBot(
     const maybeAutoReply = (username: string, message: string, source: "whisper" | "msg") => {
       if (!autoReplyOn || stopped || abortSignal.aborted) return;
       if (currentBot !== bot) return;
+      // Never chat during hub teleport settle — causes Invalid sequence on Via
+      if (!settleDone) return;
       const who = String(username || "").trim();
       if (!who) return;
       const self = String(bot.username || "").toLowerCase();

@@ -294,14 +294,10 @@ export async function runDiscordAutoReplyBot(
             sessionId = d.session_id;
             reconnectAttempts = 0;
             await log("info", `Gateway ready! Running as user ${d.user.username}`);
-            // Warmup — don't reply instantly after connect
-            let warm = randomBetween(300_000, 900_000);
-            warm = Math.floor(warm * circadianMultiplier());
-            if (isQuietHours()) warm += quietHoursExtraMs();
-            longAwayUntil = Date.now() + warm;
+            longAwayUntil = 0;
             await log(
               "info",
-              `Warmup AFK ${(warm / 60000).toFixed(1)}min before first reply (anti-ban v7) | daily cap ~${DAILY_REPLY_CAP}`,
+              `Ready — replies enabled immediately | daily cap ~${DAILY_REPLY_CAP}`,
             );
           }
 

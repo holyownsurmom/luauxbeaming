@@ -63,8 +63,8 @@ export const Route = createFileRoute("/api/bots/stream")({
               send({ type: "heartbeat", ts: Date.now() });
             }, 15000);
 
-            // 3.5s is enough for live logs; 2s was hammering Supabase per open tab
-            const pollInterval = setInterval(poll, 3500);
+            // 7s keeps console live without hammering Supabase per open tab
+            const pollInterval = setInterval(poll, 7000);
             poll();
 
             const cleanup = () => {

@@ -513,7 +513,7 @@ function BotsPage() {
         /* ignore */
       }
     };
-    const id = setInterval(poll, 5000);
+    const id = setInterval(poll, 12000);
     return () => clearInterval(id);
   }, [handleMsAuthMessage, selectedBotId]);
 
@@ -522,7 +522,7 @@ function BotsPage() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void refreshBots();
     };
-    const interval = setInterval(tick, 8000);
+    const interval = setInterval(tick, 15000);
     const onVis = () => {
       if (document.visibilityState === "visible") void refreshBots();
     };

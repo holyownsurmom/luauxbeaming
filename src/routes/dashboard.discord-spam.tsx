@@ -114,8 +114,7 @@ function DiscordSpamPage() {
   const [token, setToken] = useState("");
   const [channelId, setChannelId] = useState("");
   const [messages, setMessages] = useState("");
-  // SAFETY: Discord user-token automation is against ToS.
-  // Worker enforces long floors (15–40 min warmup, 20+ min gaps). UI matches that.
+  // Worker enforces min delay floors; no startup warmup.
   const [interval, setInterval_] = useState("1800");
   const [deleteAfter, setDeleteAfter] = useState(false);
   const [humanize, setHumanize] = useState(true);
@@ -240,7 +239,7 @@ function DiscordSpamPage() {
       } catch {
         /* ignore polling errors */
       }
-    }, 8000);
+    }, 15000);
     return () => clearInterval(t);
   }, [paymentId, getPay, fetchKeys]);
 
@@ -271,7 +270,7 @@ function DiscordSpamPage() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void refreshBots();
     };
-    const interval = setInterval(tick, 8000);
+    const interval = setInterval(tick, 15000);
     const onVis = () => {
       if (document.visibilityState === "visible") void refreshBots();
     };

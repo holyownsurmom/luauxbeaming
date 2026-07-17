@@ -219,7 +219,7 @@ function DiscordAutoReplyPage() {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       void refreshBots();
     };
-    const interval = setInterval(tick, 8000);
+    const interval = setInterval(tick, 15000);
     const onVis = () => {
       if (document.visibilityState === "visible") void refreshBots();
     };

@@ -123,26 +123,6 @@ export async function runDiscordBot(
     { once: true },
   );
 
-  // Quiet-hours gate before warmup
-  const quietExtra = quietHoursExtraMs();
-  if (quietExtra > 0) {
-    await log(
-      "system",
-      `Quiet hours — sleeping extra ${(quietExtra / 60000).toFixed(0)}min before warmup (anti-ban v7)`,
-    );
-    await sleep(quietExtra, abortSignal);
-    if (stopped || abortSignal.aborted) return;
-  }
-
-  // Warmup 18–50 min — accounts that post immediately after "login" get flagged
-  const warmupMs = randomBetween(1_080_000, 3_000_000);
-  await log(
-    "system",
-    `Warmup: ${(warmupMs / 60000).toFixed(1)}min idle before first message (anti-ban v7)...`,
-  );
-  await sleep(warmupMs, abortSignal);
-  if (stopped || abortSignal.aborted) return;
-
   await log(
     "system",
     `Message loop started | session cap ~${SESSION_MSG_CAP} | soft daily ~${DAILY_MSG_SOFT_CAP} | anti-ban v7`,

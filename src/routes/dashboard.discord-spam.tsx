@@ -36,10 +36,11 @@ import {
   AdminBadge,
   BotField,
   BotPageHeader,
+  BotPageShell,
   BotPanel,
+  BotWorkspace,
   DashButton,
   LicenseBar,
-  PageShell,
   fieldControlClass,
   fieldMonoClass,
 } from "@/components/dashboard-ui";
@@ -660,7 +661,7 @@ function DiscordSpamPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <PageShell>
+    <BotPageShell>
       <DiscordRiskDisclaimer
         tool="spam"
         open={risk.open}
@@ -680,6 +681,9 @@ function DiscordSpamPage() {
         copied={!!activeKey && copied === activeKey.key}
       />
 
+      <BotWorkspace
+        main={
+          <>
       <BotPanel title="Config" subtitle={channelId ? `ch ${channelId}` : "empty"}>
         {showConfig && (
           <>
@@ -912,136 +916,158 @@ function DiscordSpamPage() {
           </>
         )}
       </BotPanel>
-
-      {selectedBotId && (
-        <BotPanel
-          title="Live console"
-          subtitle={activeBot?.label || selectedBotId}
-          actions={
-            <DashButton
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedBotId(null);
-                setConsoleEntries([]);
-              }}
-            >
-              Close
-            </DashButton>
-          }
-        >
-          <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <div
-                className={`h-2 w-2 rounded-full shrink-0 ${
-                  activeBot?.status === "running"
-                    ? "bg-primary animate-pulse"
-                    : activeBot?.status === "pending"
-                      ? "bg-amber-400 animate-pulse"
-                      : activeBot?.status === "error"
-                        ? "bg-destructive"
-                        : "bg-muted-foreground"
-                }`}
-              />
-              <span className="text-xs font-extrabold uppercase tracking-widest">
-                {activeBot?.status || "idle"}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {consoleEntries.length} lines
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
-                Clear
-              </DashButton>
-              {selectedBotId && (
-                <DashButton
-                  variant="danger"
-                  size="sm"
-                  onClick={() => void stopBot(selectedBotId)}
-                  disabled={stoppingId === selectedBotId}
-                >
-                  <Square className="h-3 w-3" /> Stop
-                </DashButton>
-              )}
-            </div>
-          </div>
-          {activeBot?.error ? (
-            <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs font-semibold text-destructive">
-              {activeBot.error}
-            </div>
-          ) : null}
-          <BotConsole
-            entries={consoleEntries}
-            highlightBot={true}
-            title="LUAUX@SPAM ~ TAIL -F BOT.LOG"
-          />
-        </BotPanel>
-      )}
-
-      {runningBots.length > 0 && (
-        <BotPanel
-          title="Active jobs"
-          subtitle={`${runningBots.length} running`}
-          actions={
-            <DashButton
-              variant="danger"
-              size="sm"
-              onClick={stopAndClearAll}
-              disabled={stoppingId !== null}
-            >
-              <Square className="h-3 w-3" /> Stop all
-            </DashButton>
-          }
-        >
-          <div className="space-y-2">
-            {runningBots.map((bot) => (
-              <div
-                key={bot.id}
-                className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className={`h-2 w-2 rounded-full shrink-0 ${
-                      bot.status === "running"
-                        ? "bg-primary animate-pulse"
-                        : bot.status === "pending"
-                          ? "bg-amber-400 animate-pulse"
-                          : bot.status === "error"
-                            ? "bg-destructive"
-                            : "bg-muted-foreground"
-                    }`}
-                  />
-                  <span className="text-sm font-extrabold truncate">{bot.label || "spam"}</span>
-                  <span className="text-xs font-semibold text-muted-foreground capitalize">
-                    {bot.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
+          </>
+        }
+        side={
+          <>
+            <BotPanel
+              title="Live console"
+              subtitle={
+                selectedBotId
+                  ? activeBot?.label || selectedBotId.slice(0, 8)
+                  : "Select a job"
+              }
+              actions={
+                selectedBotId ? (
+                  <DashButton
+                    variant="ghost"
+                    size="sm"
                     onClick={() => {
-                      setSelectedBotId(bot.id);
+                      setSelectedBotId(null);
                       setConsoleEntries([]);
                     }}
-                    className="text-xs font-extrabold text-primary hover:underline"
                   >
-                    Console
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stopBot(bot.id)}
-                    disabled={stoppingId === bot.id}
-                    className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
-                  >
-                    <Square className="h-3.5 w-3.5" />
-                  </button>
+                    Close
+                  </DashButton>
+                ) : null
+              }
+            >
+              {selectedBotId ? (
+                <>
+                  <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`h-2 w-2 rounded-full shrink-0 ${
+                          activeBot?.status === "running"
+                            ? "bg-primary animate-pulse"
+                            : activeBot?.status === "pending"
+                              ? "bg-amber-400 animate-pulse"
+                              : activeBot?.status === "error"
+                                ? "bg-destructive"
+                                : "bg-muted-foreground"
+                        }`}
+                      />
+                      <span className="text-xs font-extrabold uppercase tracking-widest">
+                        {activeBot?.status || "idle"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {consoleEntries.length} lines
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
+                        Clear
+                      </DashButton>
+                      <DashButton
+                        variant="danger"
+                        size="sm"
+                        onClick={() => void stopBot(selectedBotId)}
+                        disabled={stoppingId === selectedBotId}
+                      >
+                        <Square className="h-3 w-3" /> Stop
+                      </DashButton>
+                    </div>
+                  </div>
+                  {activeBot?.error ? (
+                    <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs font-semibold text-destructive mb-2">
+                      {activeBot.error}
+                    </div>
+                  ) : null}
+                  <BotConsole
+                    entries={consoleEntries}
+                    maxHeight={420}
+                    highlightBot={true}
+                    title="LUAUX@SPAM ~ TAIL -F BOT.LOG"
+                  />
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/60 px-4 py-12 text-center">
+                  <Zap className="h-8 w-8 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    Start a campaign or open Console on a job to stream logs.
+                  </p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </BotPanel>
-      )}
-    </PageShell>
+              )}
+            </BotPanel>
+
+            {runningBots.length > 0 && (
+              <BotPanel
+                title="Active jobs"
+                subtitle={`${runningBots.length} running`}
+                actions={
+                  <DashButton
+                    variant="danger"
+                    size="sm"
+                    onClick={stopAndClearAll}
+                    disabled={stoppingId !== null}
+                  >
+                    <Square className="h-3 w-3" /> Stop all
+                  </DashButton>
+                }
+              >
+                <div className="space-y-2">
+                  {runningBots.map((bot) => (
+                    <div
+                      key={bot.id}
+                      className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`h-2 w-2 rounded-full shrink-0 ${
+                            bot.status === "running"
+                              ? "bg-primary animate-pulse"
+                              : bot.status === "pending"
+                                ? "bg-amber-400 animate-pulse"
+                                : bot.status === "error"
+                                  ? "bg-destructive"
+                                  : "bg-muted-foreground"
+                          }`}
+                        />
+                        <span className="text-sm font-extrabold truncate">
+                          {bot.label || "spam"}
+                        </span>
+                        <span className="text-xs font-semibold text-muted-foreground capitalize">
+                          {bot.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBotId(bot.id);
+                            setConsoleEntries([]);
+                          }}
+                          className="text-xs font-extrabold text-primary hover:underline"
+                        >
+                          Console
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => stopBot(bot.id)}
+                          disabled={stoppingId === bot.id}
+                          className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </BotPanel>
+            )}
+          </>
+        }
+      />
+    </BotPageShell>
   );
 }

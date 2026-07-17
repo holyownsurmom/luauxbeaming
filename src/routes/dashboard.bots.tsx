@@ -59,8 +59,10 @@ import {
   AdminBadge,
   BotField,
   BotPageHeader,
+  BotPageShell,
   BotPanel,
   BotTabBar,
+  BotWorkspace,
   DashButton,
   fieldControlClass,
   fieldMonoClass,
@@ -873,14 +875,14 @@ function BotsPage() {
   const activeBot = runningBots.find((b) => b.id === selectedBotId);
 
   return (
-    <PageShell>
+    <BotPageShell>
       <BotPageHeader
         title="Minecraft bots"
         description="Configure server, messages, and accounts — launch with live console."
         badge={isAdmin ? <AdminBadge /> : null}
         actions={
           <>
-            <span className="text-sm text-muted-foreground tabular-nums">
+            <span className="inline-flex items-center rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs font-semibold tabular-nums text-muted-foreground">
               {accounts.length}/{maxBots} slots
             </span>
             {runningBots.some((b) =>
@@ -899,6 +901,9 @@ function BotsPage() {
         }
       />
 
+      <BotWorkspace
+        main={
+          <>
       <BotPanel
         title="Server"
         subtitle={mcConfig.serverHost ? mcConfig.serverHost : "not set"}
@@ -1437,134 +1442,154 @@ function BotsPage() {
           </ul>
         )}
       </BotPanel>
-
-      {/* Live Console */}
-      {selectedBotId && (
-        <BotPanel
-          icon={MessageSquare}
-          title="Live console"
-          subtitle={activeBot?.label || selectedBotId}
-          actions={
-            <DashButton
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSelectedBotId(null);
-                setConsoleEntries([]);
-              }}
-            >
-              Close
-            </DashButton>
-          }
-          bodyClassName="!pt-3"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <div
-                className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
-              />
-              <span className="text-xs font-extrabold uppercase tracking-widest">
-                {activeBot?.status || "idle"}
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {consoleEntries.length} lines
-              </span>
-            </div>
-            <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
-              Clear
-            </DashButton>
-          </div>
-          <BotConsole
-            entries={consoleEntries}
-            highlightBot={true}
-            botPaused={activeBot?.status === "paused"}
-            pauseDisabled={!selectedBotId || stoppingId === selectedBotId}
-            onTogglePause={async () => {
-              if (!selectedBotId) return;
-              const pause = activeBot?.status !== "paused";
-              try {
-                const res = await fetch("/api/bots/mc/pause", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ botId: selectedBotId, pause }),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || "Pause failed");
-                toast.success(pause ? "Bot paused (still online)" : "Bot resumed");
-                setConsoleEntries((prev) => [
-                  ...prev,
-                  {
-                    ts: Date.now(),
-                    level: "system",
-                    msg: pause
-                      ? "Bot PAUSED — messages stopped (stay online)."
-                      : "Bot RESUMED — message loop active again.",
-                  },
-                ]);
-                await refreshBots();
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Pause failed");
+          </>
+        }
+        side={
+          <>
+            <BotPanel
+              title="Live console"
+              subtitle={
+                selectedBotId
+                  ? activeBot?.label || selectedBotId.slice(0, 8)
+                  : "Select a bot"
               }
-            }}
-          />
-        </BotPanel>
-      )}
-
-      {runningBots.length > 0 && (
-        <BotPanel
-          title="Active jobs"
-          subtitle={`${runningBots.length} running`}
-          actions={
-            <DashButton
-              variant="danger"
-              size="sm"
-              onClick={stopAndClearAll}
-              disabled={stoppingId !== null}
-            >
-              <Square className="h-3 w-3" /> Stop all
-            </DashButton>
-          }
-        >
-          <div className="space-y-2">
-            {runningBots.map((bot) => (
-              <div
-                key={bot.id}
-                className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className={`h-2 w-2 shrink-0 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
-                  />
-                  <span className="text-sm font-extrabold truncate">{bot.label}</span>
-                  <span className="text-xs font-semibold text-muted-foreground capitalize">
-                    {bot.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
+              actions={
+                selectedBotId ? (
+                  <DashButton
+                    variant="ghost"
+                    size="sm"
                     onClick={() => {
-                      setSelectedBotId(bot.id);
+                      setSelectedBotId(null);
                       setConsoleEntries([]);
                     }}
-                    className="text-xs font-extrabold text-primary hover:underline"
                   >
-                    Console
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => stopBot(bot.id)}
-                    disabled={stoppingId === bot.id}
-                    className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
-                  >
-                    <Square className="h-3.5 w-3.5" />
-                  </button>
+                    Close
+                  </DashButton>
+                ) : null
+              }
+              bodyClassName="!pt-3"
+            >
+              {selectedBotId ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-2 w-2 rounded-full ${activeBot?.status === "running" ? "bg-primary animate-pulse" : "bg-muted-foreground"}`}
+                      />
+                      <span className="text-xs font-extrabold uppercase tracking-widest">
+                        {activeBot?.status || "idle"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {consoleEntries.length} lines
+                      </span>
+                    </div>
+                    <DashButton variant="ghost" size="sm" onClick={() => setConsoleEntries([])}>
+                      Clear
+                    </DashButton>
+                  </div>
+                  <BotConsole
+                    entries={consoleEntries}
+                    maxHeight={420}
+                    highlightBot={true}
+                    botPaused={activeBot?.status === "paused"}
+                    pauseDisabled={!selectedBotId || stoppingId === selectedBotId}
+                    onTogglePause={async () => {
+                      if (!selectedBotId) return;
+                      const pause = activeBot?.status !== "paused";
+                      try {
+                        const res = await fetch("/api/bots/mc/pause", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ botId: selectedBotId, pause }),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(data.error || "Pause failed");
+                        toast.success(pause ? "Bot paused (still online)" : "Bot resumed");
+                        setConsoleEntries((prev) => [
+                          ...prev,
+                          {
+                            ts: Date.now(),
+                            level: "system",
+                            msg: pause
+                              ? "Bot PAUSED — messages stopped (stay online)."
+                              : "Bot RESUMED — message loop active again.",
+                          },
+                        ]);
+                        await refreshBots();
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : "Pause failed");
+                      }
+                    }}
+                  />
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/60 px-4 py-12 text-center">
+                  <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    Launch a bot or open Console on an active job to stream logs here.
+                  </p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </BotPanel>
-      )}
+              )}
+            </BotPanel>
+
+            {runningBots.length > 0 && (
+              <BotPanel
+                title="Active jobs"
+                subtitle={`${runningBots.length} running`}
+                actions={
+                  <DashButton
+                    variant="danger"
+                    size="sm"
+                    onClick={stopAndClearAll}
+                    disabled={stoppingId !== null}
+                  >
+                    <Square className="h-3 w-3" /> Stop all
+                  </DashButton>
+                }
+              >
+                <div className="space-y-2">
+                  {runningBots.map((bot) => (
+                    <div
+                      key={bot.id}
+                      className="flex items-center justify-between rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className={`h-2 w-2 shrink-0 rounded-full ${bot.status === "running" ? "bg-primary animate-pulse" : "bg-amber-400"}`}
+                        />
+                        <span className="text-sm font-extrabold truncate">{bot.label}</span>
+                        <span className="text-xs font-semibold text-muted-foreground capitalize">
+                          {bot.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBotId(bot.id);
+                            setConsoleEntries([]);
+                          }}
+                          className="text-xs font-extrabold text-primary hover:underline"
+                        >
+                          Console
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => stopBot(bot.id)}
+                          disabled={stoppingId === bot.id}
+                          className="rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1"
+                        >
+                          <Square className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </BotPanel>
+            )}
+          </>
+        }
+      />
 
       {/* Portal to body so parent overflow/transform cannot bury the modal */}
       {typeof document !== "undefined" &&
@@ -1795,6 +1820,6 @@ function BotsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </PageShell>
+    </BotPageShell>
   );
 }

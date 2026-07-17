@@ -13,6 +13,51 @@ export function PageShell({
   return <div className={cn("space-y-4 animate-page-in max-w-5xl", className)}>{children}</div>;
 }
 
+/** Wider shell for bot tools (config + console) */
+export function BotPageShell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-5 animate-page-in w-full max-w-[1400px]", className)}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Two-column bot workspace: main controls + sticky side rail (console / jobs).
+ * Stacks on mobile.
+ */
+export function BotWorkspace({
+  main,
+  side,
+  className,
+}: {
+  main: ReactNode;
+  side?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid gap-5 lg:grid-cols-12 lg:items-start",
+        className,
+      )}
+    >
+      <div className="lg:col-span-7 xl:col-span-7 space-y-5 min-w-0">{main}</div>
+      {side ? (
+        <div className="lg:col-span-5 xl:col-span-5 space-y-5 min-w-0 lg:sticky lg:top-4 lg:self-start">
+          {side}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Standard page title + description + optional actions */
 export function PageHeader({
   title,
@@ -194,18 +239,21 @@ export function DashButton({
   href?: string;
 }) {
   const sizes = {
-    sm: "px-2.5 py-1.5 text-xs",
-    md: "px-3 py-2 text-sm",
-    lg: "px-4 py-2.5 text-sm",
+    sm: "px-3 py-1.5 text-xs rounded-lg",
+    md: "px-3.5 py-2 text-sm rounded-xl",
+    lg: "px-5 py-2.5 text-sm rounded-xl",
   };
   const variants = {
-    primary: "bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent",
-    secondary: "border border-border bg-background text-foreground hover:bg-secondary",
-    ghost: "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground",
+    primary:
+      "bg-primary text-primary-foreground hover:bg-primary/90 border border-transparent shadow-sm shadow-primary/15",
+    secondary:
+      "border border-border/70 bg-background/80 text-foreground hover:bg-secondary hover:border-border",
+    ghost:
+      "border border-transparent text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
     danger: "border border-destructive/40 text-destructive hover:bg-destructive/10",
   };
   const cls = cn(
-    "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors",
+    "inline-flex items-center justify-center gap-1.5 font-semibold transition-colors",
     "disabled:pointer-events-none disabled:opacity-50",
     sizes[size],
     variants[variant],

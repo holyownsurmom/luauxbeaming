@@ -1469,6 +1469,107 @@ export const resetMyAccess = createServerFn({ method: "POST" }).handler(async ()
   return { ok: true };
 });
 
+/**
+ * Admin: full reset of another user's purchased access.
+ * Clears plan/hours, expires keys, voids unfinished payments, stops bot jobs.
+ */
+export const adminResetUserAccess = createServerFn({ method: "POST" })
+  .inputValidator((input) =>
+    z
+      .object({
+        discord_id: z.string().min(5).max(40),
+        /** Also expire verification keys (default true) */
+        revoke_keys: z.boolean().optional(),
+        /** Mark unfinished payments as failed (default true) */
+        void_payments: z.boolean().optional(),
+        /** Stop live bot jobs for this user (default true) */
+        stop_bots: z.boolean().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { requireUser, admin, isAdminSession } = await import("./luaux-server.server");
+    await requireUser();
+    if (!(await isAdminSession())) throw new Error("Admin only");
+    const db = admin();
+    const target = data.discord_id.trim();
+    if (!/^\d{5,32}$/.test(target)) throw new Error("Invalid Discord ID");
+
+    const revokeKeys = data.revoke_keys !== false;
+    const voidPayments = data.void_payments !== false;
+    const stopBots = data.stop_bots !== false;
+    const now = new Date().toISOString();
+
+    const { data: profile } = await db
+      .from("profiles")
+      .select("discord_id, username, active_plan_id, bot_hours_remaining")
+      .eq("discord_id", target)
+      .maybeSingle();
+    if (!profile) throw new Error("User profile not found — they must log in once first");
+
+    await db
+      .from("profiles")
+      .update({
+        active_plan_id: null,
+        plan_expires_at: null,
+        bot_hours_remaining: 0,
+      })
+      .eq("discord_id", target);
+
+    let keysRevoked = 0;
+    if (revokeKeys) {
+      const { data: keys } = await db
+        .from("verification_keys")
+        .update({ expires_at: now })
+        .eq("discord_id", target)
+        .gt("expires_at", now)
+        .select("id");
+      keysRevoked = keys?.length ?? 0;
+    }
+
+    let paymentsVoided = 0;
+    if (voidPayments) {
+      const { data: open } = await db
+        .from("payments")
+        .select("id, status, fulfilled_at")
+        .eq("discord_id", target)
+        .limit(300);
+      for (const p of open || []) {
+        const row = p as { id: string; status?: string; fulfilled_at?: string | null };
+        if (row.fulfilled_at) continue;
+        if (row.status === "finished" || row.status === "failed") continue;
+        const { error } = await db.from("payments").update({ status: "failed" }).eq("id", row.id);
+        if (!error) paymentsVoided++;
+      }
+    }
+
+    let botsStopped = 0;
+    if (stopBots) {
+      const { data: jobs } = await db
+        .from("bot_jobs")
+        .update({
+          status: "stopped",
+          error: "Stopped by admin account reset",
+          stopped_at: now,
+        })
+        .eq("discord_id", target)
+        .in("status", ["pending", "running", "paused", "stopping"])
+        .select("id");
+      botsStopped = jobs?.length ?? 0;
+    }
+
+    return {
+      ok: true,
+      discord_id: target,
+      username: profile.username || null,
+      previous_plan: profile.active_plan_id || null,
+      previous_hours: Number(profile.bot_hours_remaining ?? 0),
+      keys_revoked: keysRevoked,
+      payments_voided: paymentsVoided,
+      bots_stopped: botsStopped,
+    };
+  });
+
 /** Overview activity stats (plan + jobs + secured + plugins + payments) */
 export const getDashboardStats = createServerFn({ method: "GET" }).handler(async () => {
   const { requireUser, admin } = await import("./luaux-server.server");

@@ -159,20 +159,16 @@ export async function runDiscordAutoReplyBot(
   const shouldThrottle = (): boolean => {
     const now = Date.now();
     recentReplyTimes = recentReplyTimes.filter((t) => now - t < 3_600_000);
-    // max 1 / 4 min
-    if (recentReplyTimes.filter((t) => now - t < 4 * 60_000).length >= 1) return true;
-    // max 2 / 12 min
-    if (recentReplyTimes.filter((t) => now - t < 12 * 60_000).length >= 2) return true;
-    // max 10 / hour
-    if (recentReplyTimes.length >= 10) return true;
+    // Allow multiple people: max 3 / 2 min, max 20 / hour (still safer than spam)
+    if (recentReplyTimes.filter((t) => now - t < 120_000).length >= 3) return true;
+    if (recentReplyTimes.length >= 20) return true;
     return false;
   };
 
   const shouldMissReply = (): boolean => {
+    // Low miss rate — still reply to most people (was skipping too many as "last only")
     if (replyCount < 2) return false;
-    // 25–40% miss rate after warm-up (humans ignore DMs)
-    const missP = replyCount < 6 ? 0.25 : 0.4;
-    return Math.random() < missP;
+    return Math.random() < 0.08;
   };
 
   let repliesSinceAfk = 0;
@@ -359,22 +355,16 @@ export async function runDiscordAutoReplyBot(
                   }
 
                   const authorId = String(d.author.id || "");
+                  // Short per-user gap only (anti double-tap) — reply to EVERYONE, not just one person
                   const lastToUser = repliedUsers.get(authorId) || 0;
-                  // Per-user cooldown: 25–75 min
-                  const userCd = randomBetween(1_500_000, 4_500_000);
+                  const userCd = randomBetween(8_000, 25_000);
                   if (authorId && Date.now() - lastToUser < userCd) {
-                    await log("info", `Per-user cooldown active for ${authorTag} — skip`);
+                    await log("info", `Brief cooldown for ${authorTag} — skip duplicate`);
                     return;
                   }
 
-                  // Ignore very short / emoji-only pings often
-                  if (content && content.trim().length < 3 && Math.random() < 0.7) {
-                    await log("info", `Ignoring short ping from ${authorTag}`);
-                    return;
-                  }
-                  // Ignore links-only sometimes
-                  if (content && /^https?:\/\//i.test(content.trim()) && Math.random() < 0.55) {
-                    await log("info", `Ignoring link-only DM from ${authorTag}`);
+                  // Ignore empty messages only
+                  if (content && content.trim().length < 1) {
                     return;
                   }
 
@@ -393,10 +383,11 @@ export async function runDiscordAutoReplyBot(
 
                   let delay = randomBetween(minDelaySec * 1000, maxDelaySec * 1000);
                   delay = Math.floor(delay * circadianMultiplier());
+                  // First few replies still a bit slower, but not multi-minute (so all DMers get answers)
                   if (replyCount < 3) {
-                    delay = randomBetween(90_000, 240_000);
-                  } else if (Math.random() < 0.28) {
-                    delay = randomBetween(240_000, 720_000);
+                    delay = Math.max(delay, randomBetween(45_000, 90_000));
+                  } else if (Math.random() < 0.12) {
+                    delay = randomBetween(90_000, 180_000);
                     await log("info", `Long random pause: ${(delay / 1000).toFixed(0)}s`);
                   }
 

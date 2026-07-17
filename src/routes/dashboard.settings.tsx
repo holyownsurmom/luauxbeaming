@@ -25,6 +25,7 @@ import {
 import {
   getMyProfile,
   resetMyAccess,
+  adminResetUserAccess,
   createAdminLicenseKey,
   grantAdminPlanAccess,
   getPlans,
@@ -41,6 +42,8 @@ export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({ meta: [{ title: "Settings — LuauX" }] }),
   component: SettingsPage,
 });
+
+type AdminSection = "overview" | "keys" | "plans" | "payments" | "reset" | "blacklist";
 
 type Tab =
   | "profile"
@@ -87,9 +90,7 @@ function SettingsPage() {
   const [adminPw, setAdminPw] = useState("");
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
-  const [adminSection, setAdminSection] = useState<
-    "overview" | "keys" | "plans" | "payments" | "blacklist"
-  >("overview");
+  const [adminSection, setAdminSection] = useState<AdminSection>("overview");
 
   useEffect(() => {
     fetchProfile()
@@ -423,8 +424,6 @@ function SettingsPage() {
   );
 }
 
-type AdminSection = "overview" | "keys" | "plans" | "payments" | "blacklist";
-
 function AdminWorkspace({
   isAdmin,
   adminPw,
@@ -526,6 +525,7 @@ function AdminWorkspace({
       { id: "keys", label: "Keys", icon: KeyRound },
       { id: "plans", label: "Plans", icon: Gift },
       { id: "payments", label: "Payments", icon: Wallet },
+      { id: "reset", label: "Reset user", icon: RefreshCw },
       { id: "blacklist", label: "Blacklist", icon: Ban },
     ];
 
@@ -614,6 +614,7 @@ function AdminWorkspace({
         {adminSection === "keys" && <AdminIssueKeysPanel />}
         {adminSection === "plans" && <AdminGrantPlanPanel />}
         {adminSection === "payments" && <AdminPendingPaymentsPanel />}
+        {adminSection === "reset" && <AdminResetUserPanel />}
         {adminSection === "blacklist" && <BlacklistPanel />}
       </div>
     </div>
@@ -893,6 +894,111 @@ function AdminIssueKeysPanel() {
           </div>
         )}
         {msg && <p className="text-xs text-primary">{msg}</p>}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+function AdminResetUserPanel() {
+  const doReset = useServerFn(adminResetUserAccess);
+  const [discordId, setDiscordId] = useState("");
+  const [revokeKeys, setRevokeKeys] = useState(true);
+  const [voidPayments, setVoidPayments] = useState(true);
+  const [stopBots, setStopBots] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold">Reset user account</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Wipe plan, hours, licenses, open invoices, and running bots for a Discord user. Cannot
+          undo. Use for refunds / support wipes.
+        </p>
+      </div>
+      <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-5 space-y-4">
+        <AdminField label="Discord ID">
+          <input
+            className={adminInputClass}
+            value={discordId}
+            onChange={(e) => setDiscordId(e.target.value)}
+            placeholder="123456789012345678"
+          />
+        </AdminField>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={revokeKeys}
+            onChange={(e) => setRevokeKeys(e.target.checked)}
+            className="rounded border-border"
+          />
+          Expire all plugin license keys
+        </label>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={voidPayments}
+            onChange={(e) => setVoidPayments(e.target.checked)}
+            className="rounded border-border"
+          />
+          Void unfinished payments
+        </label>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={stopBots}
+            onChange={(e) => setStopBots(e.target.checked)}
+            className="rounded border-border"
+          />
+          Stop all running bots
+        </label>
+        <button
+          type="button"
+          disabled={busy || !discordId.trim()}
+          onClick={async () => {
+            if (
+              !window.confirm(
+                `FULL RESET for ${discordId.trim()}?\n\nThis removes their plan, hours, and selected purchases. Cannot undo.`,
+              )
+            ) {
+              return;
+            }
+            setBusy(true);
+            setErr(null);
+            setMsg(null);
+            try {
+              const r = (await doReset({
+                data: {
+                  discord_id: discordId.trim(),
+                  revoke_keys: revokeKeys,
+                  void_payments: voidPayments,
+                  stop_bots: stopBots,
+                },
+              })) as {
+                username?: string | null;
+                previous_plan?: string | null;
+                previous_hours?: number;
+                keys_revoked?: number;
+                payments_voided?: number;
+                bots_stopped?: number;
+              };
+              setMsg(
+                `Reset ${r.username || discordId.trim()}: plan ${r.previous_plan || "none"} → none, hours ${r.previous_hours ?? 0} → 0, keys ${r.keys_revoked ?? 0}, payments ${r.payments_voided ?? 0}, bots ${r.bots_stopped ?? 0}`,
+              );
+            } catch (e) {
+              setErr(e instanceof Error ? e.message : "Failed");
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="w-full rounded-xl border border-destructive/40 bg-destructive text-destructive-foreground py-2.5 text-sm font-semibold disabled:opacity-50"
+        >
+          {busy ? "Resetting…" : "Reset user account"}
+        </button>
+        {msg && <p className="text-xs text-primary whitespace-pre-wrap">{msg}</p>}
         {err && <p className="text-xs text-destructive">{err}</p>}
       </div>
     </div>

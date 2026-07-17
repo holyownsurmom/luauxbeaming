@@ -533,8 +533,9 @@ export async function runMcBot(
     3,
     Math.min(120, Number(config.autoReplyCooldownSec) || 8),
   ) * 1000;
-  /** last auto-reply time per player (lowercase) */
-  const lastAutoReplyAt = new Map<string, number>();
+  /** Only auto-reply to the most recent DM sender (last whisper wins) */
+  let lastDmFrom: string | null = null;
+  let lastDmReplyAt = 0;
   /** dedupe whisper+message double delivery of the same private msg */
   let lastInboundPmKey = "";
   let lastInboundPmAt = 0;
@@ -1039,7 +1040,8 @@ export async function runMcBot(
       const who = String(username || "").trim();
       if (!who) return;
       const self = String(bot.username || "").toLowerCase();
-      if (who.toLowerCase() === self) return;
+      const whoKey = who.toLowerCase();
+      if (whoKey === self) return;
       if (isJobPaused(jobId)) return;
       if (!autoReplyPool.length) return;
       const body = String(message || "").trim();
@@ -1049,34 +1051,36 @@ export async function runMcBot(
 
       const now = Date.now();
       // Same PM often arrives on both whisper + message — only handle once
-      const inboundKey = `${who.toLowerCase()}|${body}`;
+      const inboundKey = `${whoKey}|${body}`;
       if (inboundKey === lastInboundPmKey && now - lastInboundPmAt < 4000) return;
       lastInboundPmKey = inboundKey;
       lastInboundPmAt = now;
 
-      const coolKey = who.toLowerCase();
-      const last = lastAutoReplyAt.get(coolKey) || 0;
-      if (now - last < autoReplyCooldownMs) return;
-      lastAutoReplyAt.set(coolKey, now);
-      if (lastAutoReplyAt.size > 200) {
-        const oldest = [...lastAutoReplyAt.entries()].sort((a, b) => a[1] - b[1])[0];
-        if (oldest) lastAutoReplyAt.delete(oldest[0]);
-      }
+      // Last-DM-only: switch target to this whisperer; older DMs no longer get replies
+      lastDmFrom = whoKey;
+      if (now - lastDmReplyAt < autoReplyCooldownMs) return;
+      lastDmReplyAt = now;
 
       const base = pickRandom(autoReplyPool);
       const replyText = variateMessage(base).slice(0, 200);
       if (!replyText.trim()) return;
+      // /r and /reply always target the last private message on most servers
       const cmd = `/${autoReplyCmd} ${replyText}`;
       const delay = randomBetween(800, 2800);
+      const expectedFrom = whoKey;
       setTimeout(() => {
         if (stopped || abortSignal.aborted || currentBot !== bot) return;
         if (isJobPaused(jobId)) return;
+        // Someone else DMed more recently — only reply to last DM
+        if (lastDmFrom !== expectedFrom) {
+          log("info", `Skip auto-reply to ${who} — newer DM from ${lastDmFrom}`).catch(() => {});
+          return;
+        }
         try {
           bot.chat(cmd);
-          log("bot", `[${source}→${who}] ${cmd}`).catch(() => {});
+          log("bot", `[${source}→${who} last-dm] ${cmd}`).catch(() => {});
         } catch (e) {
-          // Allow retry after failure
-          lastAutoReplyAt.delete(coolKey);
+          lastDmReplyAt = 0;
           log("error", `Auto-reply failed: ${e instanceof Error ? e.message : String(e)}`).catch(
             () => {},
           );

@@ -1002,9 +1002,10 @@ function BotsPage() {
                 Auto-reply to whispers / DMs
               </label>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                When someone messages the bot, it answers with{" "}
-                <span className="font-mono text-foreground/80">/{mcConfig.autoReplyCmd}</span>{" "}
-                (cooldown per player). Uses reply lines below, or chat messages if empty.
+                Replies only to the <strong>last DM / whisper</strong> with{" "}
+                <span className="font-mono text-foreground/80">/{mcConfig.autoReplyCmd}</span>.
+                Older DMs are ignored until they message again. Uses reply lines below, or chat
+                messages if empty.
               </p>
               {mcConfig.autoReply && (
                 <>
